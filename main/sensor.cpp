@@ -182,9 +182,7 @@ float getTAS() { return tas; };
 float getTE() { return TE; };
 
 //JLD
-float Tfilter=5.0; // complementary filter period 5 seconds
-float SamplingPeriod=0.1; // sampling period 10Hz
-float fc = Tfilter/(Tfilter+SamplingPeriod); // complementary filter constant
+float SamplingPeriod=0.1; // sampling period for pseudo tas (imu/pneumatic) complementary filter (0.1s = 10Hz)
 float gearth=9.81; // earth gravity
 float ptas=0.0; // pseudo tas, hybrid imu/pneumatic
 //JLD
@@ -420,19 +418,21 @@ void readBMP(void *pvParameters){
 
 		//JLD
 		// compute pseudo tas: ptas.
-		// Using complement filter to combine linear body acceleration, aligned with air trajectory, and pneumatic unfiltered tas: tasraw
+		// Using complementary filter to combine linear body acceleration, aligned with air trajectory, and pneumatic unfiltered tas: tasraw
 		// Linear air trajectory acceleration: AcclinTAS
 		// linear body accel AcclinX, AcclinZ (flight is supposed to be symetrical and y accels are ignored)
 		// TODO need to compute accurate AOA! function above, getAOA(), for test purpose only
-		float imupitch = IMU::getPitchRad();
-		float AcclinX = (accelG[2] + sin(imupitch)) * gearth; // linear acceleration pointing forward, with -accelG[2] being x body accel/G pointing forward 
-		float AcclinZ = (-accelG[0] + cos(imupitch)) * gearth; // linear acceleration pointing up, with -accelG[0] being is z body accel/G pointing up
-		float aoa = getAOA(ias);
-		float AcclinTAS = AcclinX * cos(aoa) - AcclinZ * sin(aoa); // project body x ans z linear accelerations on air trajectory axis
-		ptas = fc * (ptas + 3.6*AcclinTAS*SamplingPeriod) + (1.0-fc)*tasraw; // ptas and rawtas in km/h
+		float Tfilter = te_comp_adjust.get();  // complementary filter period selection. Filter adjustment in second
+		float fc = Tfilter/(Tfilter+SamplingPeriod); // complementary filter constant based on filter period and sample period
+		float imupitch = IMU::getPitchRad();  // read pitch from IMU
+		float AcclinX = (accelG[2] + sin(imupitch)) * gearth; // linear acceleration (raw corrected from gravity) pointing forward, with accelG[2] being x body accel/G pointing forward 
+		float AcclinZ = (-accelG[0] + cos(imupitch)) * gearth; // linear acceleration (raw corrected from gravity) pointing up, with -accelG[0] being is z body accel/G pointing up
+		float aoa = getAOA(ias); // rough AOA estimate TODO create glider spcific AOA function
+		float AcclinTAS = AcclinX * cos(aoa) - AcclinZ * sin(aoa); // project body x and z linear accelerations on air trajectory axis
+		ptas = fc * (ptas + AcclinTAS*SamplingPeriod) + (1.0-fc)*tasraw/3.6; // complementary filter. ptas in m/s and tasraw in km/h
+		TE = bmpVario.readTE( tasraw/3.6, ptas );  // 10x per second, convert tasraw to m/s
 		//JLD
-
-		TE = bmpVario.readTE( ptas );  // 10x per second
+		
 		xSemaphoreGive(xMutex);
 		// ESP_LOGI(FNAME,"count %d ccp %d", count, ccp );
 		if( !(count % ccp) ) {

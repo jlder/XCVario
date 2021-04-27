@@ -584,18 +584,19 @@ void SetupMenu::setup( )
 		cmtoma->addEntry( "ENABLE");
 		s2fse->addMenu( cmtoma );
 
-
+		// JLD
 		SetupMenu * elco = new SetupMenu( "Electronic Compensation" );
 		vae->addMenu( elco );
 		SetupMenuSelect * enac = new SetupMenuSelect( "eCompensation", false, 0 , false, &te_comp_enable );
-		enac->setHelp(PROGMEM"Enable/Disable electronic TE compensation option; Enable only when TE pressure is connected to ST (static) pressure");
+		enac->setHelp(PROGMEM"Enable/Disable TE electronic vario option; Requires accurate static probe connected to ST (static) pressure port");
 		enac->addEntry( "DISABLE");
 		enac->addEntry( "ENABLE");
 		elco->addMenu( enac );
-
-		SetupMenuValFloat * elca = new SetupMenuValFloat( "Adjustment", 0, "%",	-100, 100, 0.1, 0, false, &te_comp_adjust );
-		elca->setHelp(PROGMEM"Adjustment option for electronic compensation in %. This affects in % the energy altitude calculated from airspeed");
+		
+		SetupMenuValFloat * elca = new SetupMenuValFloat( "Adjustment", 0, "S",	0, 10, 0.5, 0, false, &te_comp_adjust );
+		elca->setHelp(PROGMEM"Adjustment for TE filtering in seconds. This affects both TE pneumatic and TE electronic vario");
 		elco->addMenu( elca );
+		// JLD
 
 		// Audio
 		SetupMenu * ad = new SetupMenu( "Audio" );

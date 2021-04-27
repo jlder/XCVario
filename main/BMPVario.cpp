@@ -38,7 +38,7 @@ void BMPVario::setup() {
 }
 
 
-double BMPVario::readTE( float tas ) {
+double BMPVario::readTE( float tasmps, float ptasmps ) {
 	if ( _test )     // we are in testmode, just return what has been set
 		return _TEF;
 	bool success;
@@ -48,15 +48,23 @@ double BMPVario::readTE( float tas ) {
 		_currentAlt = _sensorBARO->readAltitude(_qnh, success );
 		if( !success )
 			_currentAlt = lastAltitude;  // ignore readout when failed
-		float mps = tas / 3.6;  // m/s
-		float ealt = (((  (mps*mps)/19.62) * (1+(te_comp_adjust.get()/100.0) )));  // Ekin ~ h = v²/2g 
-		_currentAlt += ealt;
-		ESP_LOGD(FNAME,"Energiehöhe @%0.1f km/h: %0.1f", tas, ealt);
+		// JLD
+		//  TE electronic vario calculation using ptasmps which is filtered in function of electronic filter: te_comp_adjust: 0= no compensation  x= time during which wind gradient and turbulence are filtered
+		float ealt = (ptasmps*ptasmps)/19.62;  // altitude variation from kinetic energy ~ h = ptas²/2g
+		_currentAlt += ealt; // add kenetic altitude correction to altitude from static port
+		// JLD
+		ESP_LOGD(FNAME,"Energiehöhe @%0.1f km/h: %0.1f", tasmps*3.6, ealt);
 	}
 	else{
 		_currentAlt = _sensorTE->readAltitude(_qnh, success );
 		if( !success )
 			_currentAlt = lastAltitude;  // ignore readout when failed
+		// JLD
+		// implement electronic compensation to reduce effect from wind gradients and turbulences
+		// compensation adjustment is function of te_comp_adjust: 0= no compensation  x= time during which wind gradient and turbulence are filtered
+		float ealt = ((ptasmps*ptasmps) - (tasmps*tasmps)) /19.62; // kinetic energy difference between filtered tas and raw tas, this should correspond to wind gradient and turbulence altitude contribution. Dh = (ptasmps² - tasmps²) / 2 g
+		_currentAlt += ealt; // add kinetic altitude correction to altitude from TE port
+		// JLD
 	}
 	// ESP_LOGI(FNAME,"TE alt: %4.3f m", _currentAlt );
 
