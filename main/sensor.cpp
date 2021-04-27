@@ -422,14 +422,16 @@ void readBMP(void *pvParameters){
 		// Linear air trajectory acceleration: AcclinTAS
 		// linear body accel AcclinX, AcclinZ (flight is supposed to be symetrical and y accels are ignored)
 		// TODO need to compute accurate AOA! function above, getAOA(), for test purpose only
-		float Tfilter = te_comp_adjust.get();  // complementary filter period selection. Filter adjustment in second
-		float fc = Tfilter/(Tfilter+SamplingPeriod); // complementary filter constant based on filter period and sample period
+		float Tfilter = te_comp_adjust.get();  // complementary filter period selection. Filter adjustment in second. 0= no compensation  x= time during which wind gradient and turbulence are filtered
+		float fc = Tfilter/(Tfilter+SamplingPeriod); // complementary filter constant based on filter period and sampling period
 		float imupitch = IMU::getPitchRad();  // read pitch from IMU
 		float AcclinX = (accelG[2] + sin(imupitch)) * gearth; // linear acceleration (raw corrected from gravity) pointing forward, with accelG[2] being x body accel/G pointing forward 
 		float AcclinZ = (-accelG[0] + cos(imupitch)) * gearth; // linear acceleration (raw corrected from gravity) pointing up, with -accelG[0] being is z body accel/G pointing up
 		float aoa = getAOA(ias); // rough AOA estimate TODO create glider spcific AOA function
 		float AcclinTAS = AcclinX * cos(aoa) - AcclinZ * sin(aoa); // project body x and z linear accelerations on air trajectory axis
 		ptas = fc * (ptas + AcclinTAS*SamplingPeriod) + (1.0-fc)*tasraw/3.6; // complementary filter. ptas in m/s and tasraw in km/h
+		if( ptas < 0.0 ) ptas = 0;
+		
 		TE = bmpVario.readTE( tasraw/3.6, ptas );  // 10x per second, convert tasraw to m/s
 		//JLD
 		
