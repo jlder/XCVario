@@ -49,10 +49,9 @@ double BMPVario::readTE( float tas ) {
 		if( !success )
 			_currentAlt = lastAltitude;  // ignore readout when failed
 		float mps = tas / 3.6;  // m/s
-		float cw  = myS2F->cw( mps );
-		float ealt = (((  (mps*mps)/19.62) * (1+(te_comp_adjust.get()/100.0) ))) * ( 1 - cw );  // Ekin ~ h = v²/2g  * adjust * (1-cw)
+		float ealt = (((  (mps*mps)/19.62) * (1+(te_comp_adjust.get()/100.0) )));  // Ekin ~ h = v²/2g 
 		_currentAlt += ealt;
-		ESP_LOGD(FNAME,"Energiehöhe @%0.1f km/h: %0.1f cw: %f", tas, ealt, cw );
+		ESP_LOGD(FNAME,"Energiehöhe @%0.1f km/h: %0.1f", tas, ealt);
 	}
 	else{
 		_currentAlt = _sensorTE->readAltitude(_qnh, success );
