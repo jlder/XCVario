@@ -205,12 +205,12 @@ void Protocols::sendNMEA( proto_t proto, char* str, float baro, float dp, float 
 				Z.ZZ:   acceleration in Z-Axis,
 		 *CHK = standard NMEA checksum
 		 */
-		sprintf(str,"$PXCV,%3.1f,%1.1f,%d,%1.2f,%d,%2.1f,%4.1f,%4.1f,%.1f", te, Units::Vario2ms(mc), bugs, (aballast+100)/100.0, cruise, std::roundf(temp*10.f)/10.f, QNH.get(), baro, dp );
+		sprintf(str,"$PXCV,%3.1f,%1.1f,%d,%1.2f,%d,%2.1f,%.3f,%.3f,%.3f", te, Units::Vario2ms(mc), bugs, (aballast+100)/100.0, cruise, std::roundf(temp*10.f)/10.f, QNH.get(), baro, dp );
 		int append_idx = strlen(str);
 		if( haveMPU && attitude_indicator.get() ){
 			float roll = IMU::getRoll();
 			float pitch = IMU::getPitch();
-			sprintf(str+append_idx,",%3.1f,%3.1f,%1.2f,%1.2f,%1.2f", roll, pitch, acc_x, acc_y, acc_z );
+			sprintf(str+append_idx,",%3.1f,%3.1f,%1.4f,%1.4f,%1.4f", roll, pitch, acc_x, acc_y, acc_z );
 
 		}else{
 			sprintf(str+append_idx,",,,,,");
