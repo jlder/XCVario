@@ -428,32 +428,33 @@ void readBMP(void *pvParameters){
 		xSemaphoreGive(xMutex);
 		doAudio();
 
-		if( !Flarm::bincom && ((count % 2) == 0 ) ){
+		if( !Flarm::bincom ){
 			xSemaphoreTake(xMutex,portMAX_DELAY );
-			// reduce also messages from 10 per second to 5 per second to reduce load in XCSoar
+
 			char lb[150];
-
-			if( nmea_protocol.get() == BORGELT ) {
-				OV.sendNMEA( P_BORGELT, lb, baroP, dynamicP, TE, temperature, ias, tas, MC.get(), bugs.get(), ballast.get(), Switch::cruiseMode(), altSTD, validTemperature  );
-				OV.sendNMEA( P_GENERIC, lb, baroP, dynamicP, TE, temperature, ias, tas, MC.get(), bugs.get(), ballast.get(), Switch::cruiseMode(), altSTD, validTemperature  );
-			}
-			else if( nmea_protocol.get() == OPENVARIO ){
-				OV.sendNMEA( P_OPENVARIO, lb, baroP, dynamicP, TE, temperature, ias, tas, MC.get(), bugs.get(), ballast.get(), Switch::cruiseMode(), alt, validTemperature  );
-			}
-			else if( nmea_protocol.get() == CAMBRIDGE ){
-				OV.sendNMEA( P_CAMBRIDGE, lb, baroP, dynamicP, TE, temperature, ias, tas, MC.get(), bugs.get(), ballast.get(), Switch::cruiseMode(), alt, validTemperature  );
-			}
-			else if( nmea_protocol.get() == XCVARIO ) {
-				OV.sendNMEA( P_XCVARIO, lb, baroP, dynamicP, TE, temperature, ias, tas, MC.get(), bugs.get(), ballast.get(), Switch::cruiseMode(), alt, validTemperature,
+			if( nmea_protocol.get() == FLIGHT_TEST ) {
+				OV.sendNMEA( P_FLIGHT_TEST, lb, baroP, dynamicP, TE, temperature, ias, tas, MC.get(), bugs.get(), ballast.get(), Switch::cruiseMode(), alt, validTemperature,
 						-accelG[2], accelG[1],accelG[0], gyroDPS.x, gyroDPS.y, gyroDPS.z );
-			}
-			else if( nmea_protocol.get() == XCVARIO_DEVEL ) {
-				OV.sendNMEA( P_XCVARIO_DEVEL, lb, baroP, dynamicP, TE, temperature, ias, tas, MC.get(), bugs.get(), ballast.get(), Switch::cruiseMode(), alt, validTemperature,
+			} 
+			else if( (count % 2) == 0 ) {
+				// reduce also messages from 10 per second to 5 per second to reduce load in XCSoar
+				if( nmea_protocol.get() == BORGELT ) {
+					OV.sendNMEA( P_BORGELT, lb, baroP, dynamicP, TE, temperature, ias, tas, MC.get(), bugs.get(), ballast.get(), Switch::cruiseMode(), altSTD, validTemperature  );
+					OV.sendNMEA( P_GENERIC, lb, baroP, dynamicP, TE, temperature, ias, tas, MC.get(), bugs.get(), ballast.get(), Switch::cruiseMode(), altSTD, validTemperature  );
+				}
+				else if( nmea_protocol.get() == OPENVARIO ){
+					OV.sendNMEA( P_OPENVARIO, lb, baroP, dynamicP, TE, temperature, ias, tas, MC.get(), bugs.get(), ballast.get(), Switch::cruiseMode(), alt, validTemperature  );
+				}
+				else if( nmea_protocol.get() == CAMBRIDGE ){
+					OV.sendNMEA( P_CAMBRIDGE, lb, baroP, dynamicP, TE, temperature, ias, tas, MC.get(), bugs.get(), ballast.get(), Switch::cruiseMode(), alt, validTemperature  );
+				}
+				else if( nmea_protocol.get() == XCVARIO ) {
+					OV.sendNMEA( P_XCVARIO, lb, baroP, dynamicP, TE, temperature, ias, tas, MC.get(), bugs.get(), ballast.get(), Switch::cruiseMode(), alt, validTemperature,
 						-accelG[2], accelG[1],accelG[0], gyroDPS.x, gyroDPS.y, gyroDPS.z );
+				}
+				else
+					ESP_LOGE(FNAME,"Protocol %d not supported error", nmea_protocol.get() );
 			}
-			else
-				ESP_LOGE(FNAME,"Protocol %d not supported error", nmea_protocol.get() );
-
 			vTaskDelay(2/portTICK_PERIOD_MS);
 			xSemaphoreGive(xMutex);
 		}
@@ -585,8 +586,8 @@ void sensor(void *args){
 		topDown = true;
 	}
 
-	if( nmea_protocol.get() == XCVARIO_DEVEL )
-		nmea_protocol.set( XCVARIO );
+//	if( nmea_protocol.get() == XCVARIO_DEVEL )
+//		nmea_protocol.set( XCVARIO );
 
 	AverageVario::begin();
 	Flap::initSensor();

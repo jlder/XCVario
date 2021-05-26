@@ -182,10 +182,22 @@ void Protocols::sendNmeaHDT( float heading ) {
 
 void Protocols::sendNMEA( proto_t proto, char* str, float baro, float dp, float te, float temp, float ias, float tas,
 		float mc, int bugs, float aballast, bool cruise, float alt, bool validTemp, float acc_x, float acc_y, float acc_z, float gx, float gy, float gz  ){
+	
 	if( !validTemp )
 		temp=0;
-
-	if( proto == P_XCVARIO ){
+	
+	float roll = 0;
+	float pitch = 0;
+	int cs;
+	int i;
+	
+	if( proto == P_FLIGHT_TEST ){
+		roll = IMU::getRoll();
+		pitch = IMU::getPitch();
+		float timertime = esp_timer_get_time()/1000000.0; // time in second
+		sprintf(str,"$JLD,%.6f,%3.1f,%2.1f,%.3f,%.3f,%.3f,%3.1f,%3.1f,%1.4f,%1.4f,%1.4f,%1.4f,%1.4f,%1.4f", timertime, te, std::roundf(temp*10.f)/10.f, QNH.get(), baro, dp, roll, pitch, acc_x, acc_y, acc_z, gz, gy, gx );
+	}
+	else if( proto == P_XCVARIO ){
 		/*
 				Sentence has following format:
 				$PXCV,
@@ -319,8 +331,8 @@ void Protocols::sendNMEA( proto_t proto, char* str, float baro, float dp, float 
 	else {
 		ESP_LOGW(FNAME,"Not supported protocol %d", nmea_protocol.get() );
 	}
-	int cs = calcNMEACheckSum(&str[1]);
-	int i = strlen(str);
+	cs = calcNMEACheckSum(&str[1]);
+	i = strlen(str);
 	sprintf( &str[i], "*%02X\r\n", cs );
 	Router::sendXCV(str);
 }

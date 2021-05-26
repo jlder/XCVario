@@ -1415,7 +1415,7 @@ void SetupMenu::setup( )
 		nmea->addEntry( "Borgelt");
 		nmea->addEntry( "Cambridge");
 		nmea->addEntry( "XCVario");
-
+		nmea->addEntry( "FlightTest");
 	}
 	SetupMenu::display();
 }
