@@ -134,13 +134,13 @@ void Protocols::sendNMEA( proto_t proto, char* str, float baro, float dp, float 
 		Y.YYYY:			acceleration in Y-Axis in G,
 		Z.ZZZZ:			acceleration in Z-Axis in G,
 		T..T.TTTTTT:	gyro time in second with micro second resolution (before IMU measurement)
-		XXX.X:			rotation X-Axis °/s,
-		YYY.Y:			rotation Y-Axis °/s,
-		ZZZ.Z:			rotation Z-Axis °/s,
+		XXX.XX:			rotation X-Axis °/s,
+		YYY.YY:			rotation Y-Axis °/s,
+		ZZZ.ZW:			rotation Z-Axis °/s,
 		T..T.TTTTTT:	static time in second with micro second resolution (before static measurement)
-		PPPP.P:			static pressure hPa
+		PPPP.PPP:			static pressure hPa
 		T..T.TTTTTT:	TE time in second with micro second resolution (before TE measurement)
-		PPPP.P:			TE pressure hPa
+		PPPP.PPP:			TE pressure hPa
 		T..T.TTTTTT:	Dyn time in second with micro second resolution (before dynamic measurement)		
 		PPPP.P:			Dynamic Pa
 		XX.X:				Outside Air Temperature °C
@@ -153,7 +153,7 @@ void Protocols::sendNMEA( proto_t proto, char* str, float baro, float dp, float 
 		VV.VV:			GNSS speed z or down
 		 */
 
-		sprintf(str,"$XCVFT,%.6f,%1.4f,%1.4f,%1.4f,%.6f,%3.1f,%3.1f,%3.1f,%.6f,%3.1f,%.6f,%3.1f,%.6f,%3.1f,%2.1f,%1d,%.3f,%4.1f,%2.2f,%2.2f,%2.2f,%2.2f",
+		sprintf(str,"$XCVFT,%.6f,%1.4f,%1.4f,%1.4f,%.6f,%3.2f,%3.2f,%3.2f,%.6f,%4.3f,%.6f,%4.3f,%.6f,%3.1f,%2.1f,%1d,%.3f,%4.1f,%2.2f,%2.2f,%2.2f,%2.2f",
 				accelTime, acc_x, acc_y, acc_z , gyroTime, gx, gy, gz, statTime, statP, teTime, teP, dynTime, dynP,  OATemp, fix, gnsstime ,gnssaltitude, gnssgroundspeed, gnssspeedx, gnssspeedy, gnssspeedz);
 
 	} else if( proto == P_XCVARIO ){
