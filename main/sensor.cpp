@@ -587,8 +587,8 @@ void readSensors(void *pvParameters){
 		// broadcast raw sensor data
 		if( nmea_protocol.get() == XCVARIOFT ) {
 			OV.sendNMEA( P_XCVARIOFT, lb, baroP, dynamicP, te_vario.get(), OAT.get(), ias.get(), tas, MC.get(), bugs.get(), ballast.get(), cruise_mode.get(), altitude.get(), validTemperature,
-					-accelG[2], accelG[1],accelG[0], gyroDPS.x, gyroDPS.y, gyroDPS.z, accelTime, gyroTime, statP, statTime, teP, teTime, dynP, dynTime, OATemp,
-					chosenGnss->fix, chosenGnss->time, chosenGnss->coordinates.altitude, chosenGnss->speed.ground, chosenGnss->speed.x, chosenGnss->speed.y, chosenGnss->speed.z );
+					accelG[2], accelG[1],accelG[0], -gyroDPS.z, -gyroDPS.y, -gyroDPS.x, accelTime, gyroTime, statP, statTime, teP, teTime, dynP, dynTime, OATemp,
+					chosenGnss->fix, chosenGnss->time, chosenGnss->coordinates.altitude, chosenGnss->speed.ground, chosenGnss->speed.x, chosenGnss->speed.y, -chosenGnss->speed.z );
 		}
 		xSemaphoreGive(xMutex);		
 
