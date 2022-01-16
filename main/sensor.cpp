@@ -977,6 +977,13 @@ void sensor(void *args){
 			MPU.setAccelOffset(ab);
 			MPU.setGyroOffset(gb);
 		}
+		
+		// WIP clear accels offsets for external calibration purpose
+		ab.x = 0;
+		ab.y = 0;
+		ab.z = 0;
+		MPU.setAccelOffset(ab);		
+		
 		delay( 50 );
 		mpud::raw_axes_t accelRaw;
 		float accel = 0;
