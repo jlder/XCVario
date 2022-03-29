@@ -144,6 +144,7 @@ void Protocols::sendNMEA( proto_t proto, char* str, float baro, float dp, float 
 		T..T.TTTTTT:	Dyn time in second with micro second resolution (before dynamic measurement)		
 		PPPP.P:			Dynamic Pa
 		XX.X:				Outside Air Temperature °C
+		XX.X:				MPU temperature °C
 		X:					fix 0 to 5   3=3D   4= 3D diff
 		T..T.TTT:		GNSS time in second with mili second resolution (corresponds to satellite data acquisition time)
 		AAAA.A:			GNSS altitude in meter
@@ -153,8 +154,8 @@ void Protocols::sendNMEA( proto_t proto, char* str, float baro, float dp, float 
 		VV.VV:			GNSS speed z or down
 		 */
 
-		sprintf(str,"$XCVFT,%.6f,%1.4f,%1.4f,%1.4f,%.6f,%3.1f,%3.1f,%3.1f,%.6f,%3.1f,%.6f,%3.1f,%.6f,%3.1f,%2.1f,%1d,%.3f,%4.1f,%2.2f,%2.2f,%2.2f,%2.2f",
-				accelTime, acc_x, acc_y, acc_z , gyroTime, gx, gy, gz, statTime, statP, teTime, teP, dynTime, dynP,  OATemp, fix, gnsstime ,gnssaltitude, gnssgroundspeed, gnssspeedx, gnssspeedy, gnssspeedz);
+		sprintf(str,"$XCVFT,%.6f,%1.4f,%1.4f,%1.4f,%.6f,%3.1f,%3.1f,%3.1f,%.6f,%3.1f,%.6f,%3.1f,%.6f,%3.1f,%2.1f,%2.1f,%1d,%.3f,%4.1f,%2.2f,%2.2f,%2.2f,%2.2f",
+				accelTime, acc_x, acc_y, acc_z , gyroTime, gx, gy, gz, statTime, statP, teTime, teP, dynTime, dynP,  OATemp, MPUtempcel, fix, gnsstime ,gnssaltitude, gnssgroundspeed, gnssspeedx, gnssspeedy, gnssspeedz);
 
 	} else if( proto == P_XCVARIO ){
 		/*
