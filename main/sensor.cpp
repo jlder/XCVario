@@ -973,10 +973,10 @@ void sensor(void *args){
 		haveMPU = true;
 		ESP_LOGI( FNAME,"MPU initialize");
 		MPU.initialize();  // this will initialize the chip and set default configurations
-		MPU.setSampleRate(100);  // in (Hz)
+		MPU.setSampleRate(168);  // in (Hz)
 		MPU.setAccelFullScale(mpud::ACCEL_FS_8G);
 		MPU.setGyroFullScale(mpud::GYRO_FS_500DPS);
-		MPU.setDigitalLowPassFilter(mpud::DLPF_20HZ);  // smoother data
+		MPU.setDigitalLowPassFilter(mpud::DLPF_42HZ);  // smoother data
 
 		mpud::raw_axes_t gb = gyro_bias.get();
 		mpud::raw_axes_t ab = accl_bias.get();
