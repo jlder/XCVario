@@ -545,64 +545,70 @@ void readSensors(void *pvParameters){
 		TickType_t xLastWakeTime = xTaskGetTickCount();
 
 		xSemaphoreTake(xMutex,portMAX_DELAY );	
-
 		// get accels and gyros raw data
 		if( haveMPU )
 			grabMPU();
 
-		bool ok=false;
-		float p = 0;
+		if( nmea_protocol.get() == XCVARIOFT )
+			OV.sendNmeaIMU(accelTime,-accelG[2],accelG[1],accelG[0],gyroTime,gyroDPS.x,gyroDPS.y, gyroDPS.z); 
+		xSemaphoreGive(xMutex);	
 
-		// get raw static pressure
-		p = baroSensor->readPressure(ok);
-		if ( ok ) {
-			statP = p;
-			statTime = esp_timer_get_time()/1000000.0; // time in second
-			baroP = p;
-		}
 
-		// get raw te pressure
-		p = teSensor->readPressure(ok);
+		if ((count1 % 4 ) == 0) {
+		
+			xSemaphoreTake(xMutex,portMAX_DELAY );
+			
+			bool ok=false;
+			float p = 0;
 
-		if ( ok ) {
-			teP = p;
-			teTime = esp_timer_get_time()/1000000.0; // time in second
-		}
+			// get raw static pressure
+			p = baroSensor->readPressure(ok);
+			if ( ok ) {
+				statP = p;
+				statTime = esp_timer_get_time()/1000000.0; // time in second
+				baroP = p;
+			}
 
-		// get raw dynamic pressure
-		if( asSensor )
-			p = asSensor->readPascal(0, ok);
-		if( ok ) {
-			dynP = p;
-			dynTime = esp_timer_get_time()/1000000.0; // time in second
-			dynamicP = 0;
-			if (p > 60 )
-				dynamicP = p;
-		}
+			// get raw te pressure
+			p = teSensor->readPressure(ok);
 
-		float T=OAT.get();
-		if( !validTemperature ) {
-			T= 15 - ( (altitude.get()/100) * 0.65 );
-			// ESP_LOGW(FNAME,"T invalid, using 15 deg");
-		}
-		OATemp = T;
+			if ( ok ) {
+				teP = p;
+				teTime = esp_timer_get_time()/1000000.0; // time in second
+			}
 
-		// GNSS data from S1 interface
-		const gnss_data_t *gnss1 = s1UbloxGnssDecoder.getGNSSData(1);
-		// GNSS data from S2 interface
-		const gnss_data_t *gnss2 = s2UbloxGnssDecoder.getGNSSData(2);
+			// get raw dynamic pressure
+			if( asSensor )
+				p = asSensor->readPascal(0, ok);
+			if( ok ) {
+				dynP = p;
+				dynTime = esp_timer_get_time()/1000000.0; // time in second
+				dynamicP = 0;
+				if (p > 60 )
+					dynamicP = p;
+			}
+			
+			// get OAT
+			float T=OAT.get();
+			if( !validTemperature ) {
+				T= 15 - ( (altitude.get()/100) * 0.65 );
+				// ESP_LOGW(FNAME,"T invalid, using 15 deg");
+			}
+			OATemp = T;
 
-		const gnss_data_t *chosenGnss = (gnss2->fix >= gnss1->fix) ? gnss2 : gnss1;
+			// GNSS data from S1 interface
+			const gnss_data_t *gnss1 = s1UbloxGnssDecoder.getGNSSData(1);
+			// GNSS data from S2 interface
+			const gnss_data_t *gnss2 = s2UbloxGnssDecoder.getGNSSData(2);
+			// select gnss with better fix
+			const gnss_data_t *chosenGnss = (gnss2->fix >= gnss1->fix) ? gnss2 : gnss1;
 
-		// broadcast raw sensor data
-		if( nmea_protocol.get() == XCVARIOFT ) {
-			OV.sendNMEA( P_XCVARIOFT, lb, baroP, dynamicP, te_vario.get(), OAT.get(), ias.get(), tas, MC.get(), bugs.get(), ballast.get(), cruise_mode.get(), altitude.get(), validTemperature,
-					-accelG[2], accelG[1],accelG[0], gyroDPS.x, gyroDPS.y, gyroDPS.z, accelTime, gyroTime, statP, statTime, teP, teTime, dynP, dynTime, OATemp, MPUtempcel,
-					chosenGnss->fix, chosenGnss->time, chosenGnss->coordinates.altitude, chosenGnss->speed.ground, chosenGnss->speed.x, chosenGnss->speed.y, chosenGnss->speed.z );
-		}
-		xSemaphoreGive(xMutex);		
-
-		if ((count1 % 2 ) == 0) {
+			// broadcast raw sensor data
+			if( nmea_protocol.get() == XCVARIOFT )
+				OV.sendNmeaSEN( statTime, statP, teTime, teP, dynTime, dynP, OATemp, MPUtempcel,
+									chosenGnss->fix, chosenGnss->time, chosenGnss->coordinates.altitude, chosenGnss->speed.ground, 
+									chosenGnss->speed.x, chosenGnss->speed.y, chosenGnss->speed.z );
+			xSemaphoreGive(xMutex);
 			
 			count++;
 			float iasraw = Atmosphere::pascal2kmh( dynamicP );
@@ -735,7 +741,7 @@ void readSensors(void *pvParameters){
 		esp_task_wdt_reset();
 		if( uxTaskGetStackHighWaterMark( bpid ) < 512 )
 			ESP_LOGW(FNAME,"Warning sensor task stack low: %d bytes", uxTaskGetStackHighWaterMark( bpid ) );
-		vTaskDelayUntil(&xLastWakeTime, 50/portTICK_PERIOD_MS);
+		vTaskDelayUntil(&xLastWakeTime, 25/portTICK_PERIOD_MS);
 
 	}
 }
