@@ -549,18 +549,17 @@ void readSensors(void *pvParameters){
 		if( haveMPU )
 			grabMPU();
 
-		if( nmea_protocol.get() == XCVARIOFT )
+		if( nmea_protocol.get() == XCVARIOFT ) {
 			OV.sendNmeaIMU(accelTime,-accelG[2],accelG[1],accelG[0],gyroTime,gyroDPS.x,gyroDPS.y, gyroDPS.z); 
+		}
 		xSemaphoreGive(xMutex);	
-
 
 		if ((count1 % 4 ) == 0) {
 		
-			xSemaphoreTake(xMutex,portMAX_DELAY );
-			
 			bool ok=false;
 			float p = 0;
 
+			xSemaphoreTake(xMutex,portMAX_DELAY );
 			// get raw static pressure
 			p = baroSensor->readPressure(ok);
 			if ( ok ) {
@@ -604,10 +603,12 @@ void readSensors(void *pvParameters){
 			const gnss_data_t *chosenGnss = (gnss2->fix >= gnss1->fix) ? gnss2 : gnss1;
 
 			// broadcast raw sensor data
-			if( nmea_protocol.get() == XCVARIOFT )
+			if( nmea_protocol.get() == XCVARIOFT ) {
+
 				OV.sendNmeaSEN( statTime, statP, teTime, teP, dynTime, dynP, OATemp, MPUtempcel,
-									chosenGnss->fix, chosenGnss->time, chosenGnss->coordinates.altitude, chosenGnss->speed.ground, 
+									chosenGnss->fix, chosenGnss->numSV, chosenGnss->time, chosenGnss->coordinates.altitude, chosenGnss->speed.ground, 
 									chosenGnss->speed.x, chosenGnss->speed.y, chosenGnss->speed.z );
+			}
 			xSemaphoreGive(xMutex);
 			
 			count++;

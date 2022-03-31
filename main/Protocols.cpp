@@ -152,6 +152,7 @@ Sensor data
 		XX.X:				Outside Air Temperature °C,
 		XX.X:				MPU temperature °C,
 		X:					fix 0 to 5   3=3D   4= 3D diff,
+		XX:					numSV number of satelites used, 
 		T..T.TTT:		GNSS time in second with mili second resolution (corresponds to satellite data acquisition time),
 		AAAA.A:			GNSS altitude in meter,
 		VV.VV:			GNSS ground speed m/s,
@@ -160,10 +161,10 @@ Sensor data
 		VV.VV:			GNSS speed z or down,
 		*hh<CR><LF>		checksum
  */
-void Protocols::sendNmeaSEN( float statP, float statTime, float teP, float teTime, float dynP, float dynTime, float OATemp, float MPUtempcel,
-		int fix, float gnsstime, float gnssaltitude, float gnssgroundspeed, float gnssspeedx, float gnssspeedy, float gnssspeedz ) {
-	char str[120];
-	sprintf(str,"$XCVSEN,%.6f,%3.2f,%.6f,%3.2f,%.6f,%3.2f,%2.1f,%2.1f,%1d,%.3f,%4.1f,%2.2f,%2.2f,%2.2f,%2.2f",statTime, statP, teTime, teP, dynTime, dynP,  OATemp, MPUtempcel, fix, gnsstime ,gnssaltitude, gnssgroundspeed, gnssspeedx, gnssspeedy, gnssspeedz);
+void Protocols::sendNmeaSEN( float statTime, float statP, float teTime, float teP, float dynTime, float dynP, float OATemp, float MPUtempcel,
+		int fix, int numSV, float gnsstime, float gnssaltitude, float gnssgroundspeed, float gnssspeedx, float gnssspeedy, float gnssspeedz ) {
+	char str[135];
+	sprintf(str,"$XCVSEN,%.6f,%3.2f,%.6f,%3.2f,%.6f,%3.2f,%2.1f,%2.1f,%1d,%2d,%.3f,%4.1f,%2.2f,%2.2f,%2.2f,%2.2f",statTime, statP, teTime, teP, dynTime, dynP,  OATemp, MPUtempcel, fix, numSV, gnsstime ,gnssaltitude, gnssgroundspeed, gnssspeedx, gnssspeedy, gnssspeedz);
 	int cs = calcNMEACheckSum(&str[1]);
 	int i = strlen(str);
 	sprintf( &str[i], "*%02X\r\n", cs );
