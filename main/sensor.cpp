@@ -147,8 +147,9 @@ Compass *compass;
 
 BTSender btsender;
 
-static bool	IMUstream = false; // triggers IMU data stream
-static bool SENstream = false; // triggers sensors data stream
+bool	IMUstream = false; // triggers IMU data stream
+bool SENstream = false; // triggers sensors data stream
+
 static float accelTime; // time stamp for accels
 static float gyroTime;  // time stamp for gyros
 static float statTime; // time stamp for statP

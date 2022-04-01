@@ -31,9 +31,6 @@
 
 S2F * Protocols::_s2f = 0;
 
-extern bool	IMUstream = false; // triggers IMU data stream
-extern bool SENstream = false; // triggers sensors data stream
-
 Protocols::Protocols(S2F * s2f) {
 	_s2f = s2f;
 }
@@ -508,22 +505,26 @@ void Protocols::parseNMEA( const char *str ){
 			ESP_LOGI(FNAME,"Flarm::bincom %d", Flarm::bincom  );
 		}
 	}
-	else if( strncmp( str, "$z,", 3 ) == 0 ) {
+	else if( !strncmp( str, "$z,", 3 ) ) {
 		if (str[3] == '0') {
 			IMUstream = false;
 			SENstream = false;
+			ESP_LOGI(FNAME,"BT RX: Matched a $z,0 command, IMU=0, SEN=0"); 
 		}
 		else if (str[3] == '1') {
 			IMUstream = true;
 			SENstream = false;
+			ESP_LOGI(FNAME,"BT RX: Matched a $z,1 command, IMU=1, SEN=0"); 
 		}
 		else if (str[3] == '2') {
 			IMUstream = false;
 			SENstream = true;
+			ESP_LOGI(FNAME,"BT RX: Matched a $z,2 command, IMU=0, SEN=1"); 
 		}
 		else if (str[3] == '3') {
 			IMUstream = true;
 			SENstream = true;
+			ESP_LOGI(FNAME,"BT RX: Matched a $z,3 command, IMU=1, SEN=1"); 
 		}
 	}
 }
