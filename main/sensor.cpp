@@ -147,6 +147,8 @@ Compass *compass;
 
 BTSender btsender;
 
+static bool	IMUstream = false; // triggers IMU data stream
+static bool SENstream = false; // triggers sensors data stream
 static float accelTime; // time stamp for accels
 static float gyroTime;  // time stamp for gyros
 static float statTime; // time stamp for statP
@@ -549,7 +551,7 @@ void readSensors(void *pvParameters){
 		if( haveMPU )
 			grabMPU();
 
-		if( nmea_protocol.get() == XCVARIOFT ) {
+		if( IMUstream ) {
 			OV.sendNmeaIMU(accelTime,-accelG[2],accelG[1],accelG[0],gyroTime,gyroDPS.x,gyroDPS.y, gyroDPS.z); 
 		}
 		xSemaphoreGive(xMutex);	
@@ -595,16 +597,16 @@ void readSensors(void *pvParameters){
 			}
 			OATemp = T;
 
-			// GNSS data from S1 interface
-			const gnss_data_t *gnss1 = s1UbloxGnssDecoder.getGNSSData(1);
-			// GNSS data from S2 interface
-			const gnss_data_t *gnss2 = s2UbloxGnssDecoder.getGNSSData(2);
-			// select gnss with better fix
-			const gnss_data_t *chosenGnss = (gnss2->fix >= gnss1->fix) ? gnss2 : gnss1;
+
 
 			// broadcast raw sensor data
-			if( nmea_protocol.get() == XCVARIOFT ) {
-
+			if( SENstream ) {
+				// GNSS data from S1 interface
+				const gnss_data_t *gnss1 = s1UbloxGnssDecoder.getGNSSData(1);
+				// GNSS data from S2 interface
+				const gnss_data_t *gnss2 = s2UbloxGnssDecoder.getGNSSData(2);
+				// select gnss with better fix
+				const gnss_data_t *chosenGnss = (gnss2->fix >= gnss1->fix) ? gnss2 : gnss1;
 				OV.sendNmeaSEN( statTime, statP, teTime, teP, dynTime, dynP, OATemp, MPUtempcel,
 									chosenGnss->fix, chosenGnss->numSV, chosenGnss->time, chosenGnss->coordinates.altitude, chosenGnss->speed.ground, 
 									chosenGnss->speed.x, chosenGnss->speed.y, chosenGnss->speed.z );
