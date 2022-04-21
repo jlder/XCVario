@@ -152,6 +152,7 @@ BTSender btsender;
 #define SENrate 4 // Sensor data stream rate x 25ms. 0 not allowed
 #define GBIASrate 400 // Gyro bias stream rate x 25ms. 400 = 10 seconds
 #define GBIASupdt 24000 // Gyro bias update in XCVario x 25ms. 24000 = 600 seconds = 10 minutes
+
 bool IMUstream = false; // IMU FT stream
 bool SENstream = false; // Sensors FT stream
 bool GBIASstream = false;// Gyro Bias FT stream
@@ -563,10 +564,6 @@ void grabMPU(void *pvParameters){
 		}
 		if ( biassolution && ( needfirstbias || GBIASstream || (nbsamples > GBIASupdt) )) { // if a bias solution exists and need a first bias or lowpass has accumulated > 24000 samples ~10 minutes or stream GBIAS data
 			currentGyroBias = newGyroBias;
-			processbias = false;
-			needfirstbias = false;
-			biassolution = false;
-			nbsamples = 0;
 			currentGyroBiasDPS = mpud::gyroDegPerSec(currentGyroBias, GYRO_FS);
 			if (GBIASstream) {
 				/*
@@ -582,9 +579,15 @@ void grabMPU(void *pvParameters){
 				sprintf(str,"$GBIAS,%.6f,%2.1f,%3.2f,%3.2f,%3.2f\r\n", dynTime, MPUtempcel, -currentGyroBiasDPS.z, -currentGyroBiasDPS.y, -currentGyroBiasDPS.x );
 				Router::sendXCV(str);
 			}
-			if ( !(GBIASstream || IMUstream || SENstream) ) {
-				gyro_bias.set( currentGyroBias );
-			}
+			gyro_bias.set( currentGyroBias );
+			processbias = false;
+			needfirstbias = false;
+			biassolution = false;
+			nbsamples = 0;			
+			// FLIGHT TEST
+			// For FT only force IMU and SEN streams right after bias identification
+			IMUstream = true;
+			SENstream = true;
 		}		
 
 		 /*
