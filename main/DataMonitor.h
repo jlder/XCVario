@@ -26,6 +26,7 @@ public:
 	void up( int count ) {};
 	void down( int count ) {};
 	void longPress();
+	void escape() {};
 	int maxChar( const char *s, int pos, bool binary=false );
 	void begin(AdaptUGC *theUcg) { ucg = theUcg; };
 	bool active() { return mon_started; };
@@ -44,3 +45,5 @@ private:
 	int tx_total;
 	static xSemaphoreHandle mutex;
 };
+
+extern DataMonitor DM;

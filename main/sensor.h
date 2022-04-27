@@ -16,6 +16,7 @@
 #include "DataMonitor.h"
 #include "AdaptUGC.h"
 #include "canbus.h"
+#include "CenterAid.h"
 
 // Display 4 Wire SPI and Display CS
 #define RESET_Display  GPIO_NUM_5       // Reset pin for Display
@@ -29,10 +30,12 @@ extern CANbus* CAN;
 extern StraightWind theWind;
 extern xSemaphoreHandle xMutex;
 extern int active_screen;
+extern CenterAid *centeraid;
 
 extern bool haveMPU;
 extern bool ahrsKeyValid;
 extern SetupMenu  *Menu;
+extern xSemaphoreHandle display_mutex;
 
 extern e_wireless_type wireless;
 
@@ -76,6 +79,10 @@ extern Compass *compass;
 
 class AdaptUGC;
 extern AdaptUGC *MYUCG;
+
+extern bool IMUstream;
+extern bool SENstream;
+extern bool GBIASstream;
 
 
 #endif

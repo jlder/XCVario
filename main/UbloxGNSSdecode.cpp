@@ -31,6 +31,11 @@ void UbloxGnssDecoder::processNavPvtFrame( char *ubx_frame, int port ) {
 	GNSS_DATA[port].speed.z = payload->velD * 0.001f;
 	GNSS_DATA[port].date = payload->day;
 	GNSS_DATA[port].time = payload->iTOW * 0.001f;
+<<<<<<< HEAD
 	//ESP_LOGI(FNAME,"GPS epoch: %d, lat:%f, lon:%f ", payload->iTOW, GNSS_DATA[port].coordinates.latitude, GNSS_DATA[port].coordinates.longitude );
+=======
+	GNSS_DATA[port].numSV = payload->numSV;
+	ESP_LOGI(FNAME,"GPS epoch: %d, lat:%f, lon:%f ", payload->iTOW, GNSS_DATA[port].coordinates.latitude, GNSS_DATA[port].coordinates.longitude );
+>>>>>>> branch 'master-flight-test' of https://github.com/jlder/XCVario
 }
 

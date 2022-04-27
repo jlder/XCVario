@@ -85,15 +85,15 @@ void flap_act() {
     }
 }
 
-SetupNG<float>          MC( "MacCready", 0.5, true, SYNC_BIDIR, PERSISTENT, 0, UNIT_VARIO  );
+SetupNG<float>          MC(  "MacCready", 0.5, true, SYNC_BIDIR, PERSISTENT, change_mc, UNIT_VARIO );
 SetupNG<float>  		QNH( "QNH", 1013.25, true, SYNC_BIDIR, PERSISTENT, 0, UNIT_QNH );
 SetupNG<float> 			polar_wingload( "POLAR_WINGLOAD", 34.40, true, SYNC_FROM_MASTER, PERSISTENT, change_ballast );
-SetupNG<float> 			polar_speed1( "POLAR_SPEED1",   80, true, SYNC_FROM_MASTER, PERSISTENT );
-SetupNG<float> 			polar_sink1( "POLAR_SINK1",    -0.66, true, SYNC_FROM_MASTER, PERSISTENT );
-SetupNG<float> 			polar_speed2( "POLAR_SPEED2",   125, true, SYNC_FROM_MASTER, PERSISTENT );
-SetupNG<float> 			polar_sink2( "POLAR_SINK2",    -0.97, true, SYNC_FROM_MASTER, PERSISTENT );
-SetupNG<float> 			polar_speed3( "POLAR_SPEED3",   175, true, SYNC_FROM_MASTER, PERSISTENT );
-SetupNG<float> 			polar_sink3( "POLAR_SINK3",    -2.24, true, SYNC_FROM_MASTER, PERSISTENT );
+SetupNG<float> 			polar_speed1( "POLAR_SPEED1",   80, true, SYNC_FROM_MASTER, PERSISTENT, modifyPolar );
+SetupNG<float> 			polar_sink1( "POLAR_SINK1",    -0.66, true, SYNC_FROM_MASTER, PERSISTENT, modifyPolar );
+SetupNG<float> 			polar_speed2( "POLAR_SPEED2",   125, true, SYNC_FROM_MASTER, PERSISTENT, modifyPolar );
+SetupNG<float> 			polar_sink2( "POLAR_SINK2",    -0.97, true, SYNC_FROM_MASTER, PERSISTENT, modifyPolar );
+SetupNG<float> 			polar_speed3( "POLAR_SPEED3",   175, true, SYNC_FROM_MASTER, PERSISTENT, modifyPolar );
+SetupNG<float> 			polar_sink3( "POLAR_SINK3",    -2.24, true, SYNC_FROM_MASTER, PERSISTENT, modifyPolar );
 SetupNG<float> 			polar_max_ballast( "POLAR_MAX_BAL",  160, true, SYNC_FROM_MASTER, PERSISTENT, change_ballast );
 SetupNG<float> 			polar_wingarea( "POLAR_WINGAREA", 10.5, true, SYNC_FROM_MASTER, PERSISTENT, change_ballast );
 
@@ -108,7 +108,7 @@ SetupNG<float>  		deadband( "DEADBAND", 0.3, true, SYNC_FROM_MASTER, PERSISTENT,
 SetupNG<float>  		deadband_neg("DEADBAND_NEG" , -0.3, true, SYNC_FROM_MASTER, PERSISTENT, 0, UNIT_VARIO );
 SetupNG<float>  		range( "VARIO_RANGE", 5.0, true, SYNC_FROM_MASTER, PERSISTENT, 0, UNIT_VARIO );
 SetupNG<int>			log_scale( "LOG_SCALE", 0 );
-SetupNG<float>  		ballast( "BALLAST" , 0.0, true, SYNC_NONE, VOLATILE, change_ballast );  // ballast increase from reference weight in %
+SetupNG<float>  		ballast( "BALLAST" , 0.0, true, SYNC_NONE, VOLATILE, 0 );  // ballast increase from reference weight in %
 SetupNG<float>  		ballast_kg( "BAL_KG" , 0.0, true, SYNC_BIDIR, PERSISTENT, change_ballast );
 SetupNG<float>			empty_weight( "EMPTY_WGT", 250, true, SYNC_BIDIR, PERSISTENT, change_ballast );
 SetupNG<float>			crew_weight( "CREW_WGT", 80, true, SYNC_BIDIR, PERSISTENT, change_ballast );
@@ -132,6 +132,7 @@ SetupNG<float>  		te_vario( "TEVA", 0.0, true, SYNC_FROM_MASTER, VOLATILE );
 SetupNG<float>  		s2f_speed( "S2F_SPEED", 100.0, true, SYNC_FROM_MASTER, PERSISTENT, 0, UNIT_SPEED );
 SetupNG<float>  		s2f_hysteresis( "S2F_HYST", 5.0, true, SYNC_FROM_MASTER, PERSISTENT, 0, UNIT_SPEED  );
 SetupNG<float>  		s2f_flap_pos( "S2F_FLAP", 1, true, SYNC_FROM_MASTER, PERSISTENT, 0 );
+SetupNG<float>  		s2f_gyro_deg( "S2F_GYRO", 12, true, SYNC_FROM_MASTER, PERSISTENT, 0 );
 
 SetupNG<float> 			audio_volume("AUD_VOL", 10, true, SYNC_BIDIR, VOLATILE, change_volume );
 SetupNG<int>  			audio_variable_frequency( "AUD_VAFQ", 0);
@@ -188,16 +189,23 @@ SetupNG<int>  			rot_default( "ROTARY_DEFAULT", 0 );
 SetupNG<int>  			serial1_speed( "SERIAL2_SPEED", 3 );   // tag will stay SERIAL2 from historical reason
 SetupNG<int>  			serial1_pins_twisted( "SERIAL2_PINS", 0 );
 SetupNG<int>  			serial1_rxloop( "SERIAL2_RXLOOP", 0 );
-SetupNG<int>  			serial1_tx( "SERIAL2_TX", RT_WIRELESS );      // Just BT device = XCSoar to control FLARM
+SetupNG<int>  			serial1_tx( "SERIAL2_TX", (1UL << RT_XCVARIO) | (1UL << RT_WIRELESS) );   //  Default Wireless and local XCVario for Flarm Warnings, bincom
+SetupNG<int>  			rt_s1_xcv( "S2_TX_XCV", 1, false, SYNC_NONE, VOLATILE  );
+SetupNG<int>  			rt_s1_wl( "S2_TX_WL", 1, false, SYNC_NONE, VOLATILE );
+SetupNG<int>  			rt_s1_s2( "S2_TX_S2", 0, false, SYNC_NONE, VOLATILE );
+SetupNG<int>  			rt_s1_can( "S2_TX_CAN", 0, false, SYNC_NONE, VOLATILE );
 SetupNG<int>  			serial1_tx_inverted( "SERIAL2_TX_INV", RS232_INVERTED );
 SetupNG<int>  			serial1_rx_inverted( "SERIAL2_RX_INV", RS232_INVERTED );
-SetupNG<int>  			serial1_tx_enable( "SER1_TX_ENA", RT_XCVARIO );
+SetupNG<int>  			serial1_tx_enable( "SER1_TX_ENA", 1 );
 SetupNG<int>  			serial2_speed( "SERIAL1_SPEED", 3 );
 SetupNG<int>  			serial2_pins_twisted( "SERIAL1_PINS", 0 );
-SetupNG<int>  			serial2_tx( "SERIAL1_TX", RT_XCVARIO );     //  BT device and XCVario, Serial2 is foreseen for Protocols or Kobo
+SetupNG<int>  			serial2_tx( "SERIAL1_TX", (1UL << RT_XCVARIO) | (1UL << RT_WIRELESS) );     //  BT device and XCVario, Serial2 is foreseen for Protocols or Kobo
+SetupNG<int>  			rt_s2_xcv( "S1_TX_XCV", 1, false, SYNC_NONE, VOLATILE );
+SetupNG<int>  			rt_s2_wl( "S1_TX_WL", 0, false, SYNC_NONE, VOLATILE );
+SetupNG<int>  			rt_s2_can( "S1_TX_CAN", 0,false, SYNC_NONE, VOLATILE );
 SetupNG<int>  			serial2_tx_inverted( "SERIAL1_TX_INV", RS232_INVERTED );
 SetupNG<int>  			serial2_rx_inverted( "SERIAL1_RX_INV", RS232_INVERTED );
-SetupNG<int>  			serial2_tx_enable( "SER2_TX_ENA", RT_XCVARIO );
+SetupNG<int>  			serial2_tx_enable( "SER2_TX_ENA", 1 );
 SetupNG<int>  			software_update( "SOFTWARE_UPDATE", 0 );
 SetupNG<int>  			battery_display( "BAT_DISPLAY", 0 );
 SetupNG<int>  			airspeed_mode( "AIRSPEED_MODE", MODE_IAS );
@@ -213,6 +221,7 @@ SetupNG<int>		    student_mode( "STUD_MOD", 0 );
 SetupNG<float>		    password( "PASSWORD", 0 );
 SetupNG<int>		    autozero( "AUTOZERO", 0 );
 SetupNG<int>		    attitude_indicator("AHRS", 1 );
+SetupNG<int>		    ahrs_rpyl_dataset("RPYL", 0 );
 SetupNG<int>		    ahrs_autozero("AHRSAZ", 0 );
 SetupNG<float>		    ahrs_gyro_factor("AHRSGF", 90 );
 SetupNG<int>		    display_style("DISPLAY_STYLE", 1 );
@@ -290,7 +299,9 @@ SetupNG<int>			netto_mode("NETMOD", NETTO_RELATIVE );  // regard polar sink
 SetupNG<float>			v_max("VMAX", 270, true, SYNC_FROM_MASTER, PERSISTENT, 0, UNIT_SPEED  );
 SetupNG<int>			gload_mode("GLMOD", GLOAD_OFF );
 SetupNG<float>			gload_pos_thresh("GLOADPT", 4 );
-SetupNG<float>			gload_neg_thresh("GLOADNT", -2 );
+SetupNG<float>			gload_neg_thresh("GLOADNT", -3 );
+SetupNG<float>			gload_pos_limit_low("GLOADPLL", 3 );
+SetupNG<float>			gload_neg_limit_low("GLOADNLL", -2 );
 SetupNG<float>			gload_pos_limit("GLOADPL", 5 );
 SetupNG<float>			gload_neg_limit("GLOADNL", -3 );
 SetupNG<float>			gload_pos_max("GLOADPM", 1 );
@@ -300,14 +311,20 @@ SetupNG<int>        	compass_dev_auto("COMPASS_DEV", 0 );
 SetupNG<float>       	max_circle_wind_diff("CI_WINDDM", 60.0 );
 SetupNG<float>       	circle_wind_lowpass("CI_WINDLOW", 5 );
 SetupNG<int> 			can_speed( "CANSPEED", CAN_SPEED_OFF );
-SetupNG<int> 			can_tx( "CANTX", RT_XCVARIO );
+SetupNG<int> 			rt_can_xcv( "CANTX_XC", 0 );
+SetupNG<int> 			rt_xcv_wl( "WLTX_XC", 1 );
+SetupNG<int> 			rt_wl_can( "WLTX_CAN", 0 );
 SetupNG<int> 			can_mode( "CANMOD", CAN_MODE_STANDALONE );
 SetupNG<float> 			master_xcvario( "MSXCV", 0 );
 SetupNG<int> 			master_xcvario_lock( "MSXCVL", 0 );
 SetupNG<int> 			menu_long_press("MENU_LONG", 0 );
 SetupNG<int> 			menu_screens("MENU_SCR", 0 );
+SetupNG<int> 			screen_gmeter("SCR_GMET", 0, false, SYNC_NONE, VOLATILE );
+SetupNG<int> 			screen_flarm("SCR_FLARM", 0, false, SYNC_NONE, VOLATILE );
+SetupNG<int> 			screen_centeraid("SCR_CA", 0, false, SYNC_NONE  );
 SetupNG<int> 			data_monitor("DATAMON", MON_OFF, true, SYNC_NONE, VOLATILE  );
 SetupNG<t_bitfield_compass>  calibration_bits("CALBIT", { 0,0,0,0,0,0 } );
+SetupNG<int> 			gear_warning("GEARWA", 0 );
 
 mpud::raw_axes_t zero_bias;
 SetupNG<mpud::raw_axes_t>	gyro_bias("GYRO_BIAS", zero_bias );

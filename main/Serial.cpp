@@ -99,7 +99,7 @@ void Serial::serialHandler(void *pvParameters)
 			continue;
 		}
 		// Define expected event bits. They can come from the Uart RX ISR or from the Serial TX router queue.
-		EventBits_t bitsToWaitFor = cfg->tx_req | cfg->rx_nl | cfg->rx_char;
+		EventBits_t bitsToWaitFor = cfg->tx_req | cfg->rx_char;
 
 		// We do wait for events from Uart RX, router TX side or timeout
 		EventBits_t ebits = xEventGroupWaitBits( rxTxNotifier, bitsToWaitFor, pdTRUE, pdFALSE, ticksToWait );
@@ -107,11 +107,7 @@ void Serial::serialHandler(void *pvParameters)
 			// Timeout occurred, that is used to reset the watchdog.
 			continue;
 		}
-#if 0
-		ESP_LOGI( FNAME, "%s: EVTO=%dms, bincom=%d, EventBits=%X, RXA=%d, NLC=%d",
-				cfg->name, ticksToWait, Flarm::bincom, ebits, cfg->uart->available(), cfg->uart->getNlCounter() );
-#endif
-
+		// ESP_LOGI( FNAME, "%s: EVTO=%dms, bincom=%d, EventBits=%X, RXA=%d, NLC=%d", cfg->name, ticksToWait, Flarm::bincom, ebits, cfg->uart->available(), cfg->uart->getNlCounter() );
 		// TX part, check if there is data for Serial Interface to send
 		if( ebits & cfg->tx_req && cfg->uart->availableForWrite() ) {
 			// ESP_LOGI(FNAME,"S%d: TX and available", cfg->uart->number() );
@@ -196,18 +192,19 @@ bool Serial::selfTest(int num){
 	}
 	char recv[50];
 	memset(recv,0,50);
+	delay( 30 );
 	int numread = 0;
 	for( int i=1; i<10; i++ ){
 		int avail = mySerial->available();
+		ESP_LOGI(FNAME,"Serial RX bytes avail: %d", avail );
 		if( avail >= tx ){
-			if( avail > tx )
-				avail = tx+1;
+			if( avail > 50 )
+				avail = 50;
 			numread = mySerial->read( recv, avail );
 			ESP_LOGI(FNAME,"Serial RX bytes read: %d %s", numread, recv );
 			break;
 		}
 		delay( 30 );
-		ESP_LOGI(FNAME,"Serial bytes avail: %d", numread );
 	}
 	_selfTest = false;
 	std::string r( recv );
@@ -302,9 +299,9 @@ void Serial::taskStart(){
 	bool serial2 = (serial2_speed.get() != 0 && hardwareRevision.get() >= 3);
 
 	if( serial1 ){
-		xTaskCreatePinnedToCore(&serialHandler, "serialHandler1", 4096, &S1, 11, &S1.pid, 0);  // stay below compass task
+		xTaskCreatePinnedToCore(&serialHandler, "serialHandler1", 4096, &S1, 21, &S1.pid, 0);  // stay below canbus
 	}
 	if( serial2 ){
-		xTaskCreatePinnedToCore(&serialHandler, "serialHandler2", 4096, &S2, 10, &S2.pid, 0);  // stay below compass task and task for S1
+		xTaskCreatePinnedToCore(&serialHandler, "serialHandler2", 4096, &S2, 21, &S2.pid, 0);  // stay below canbus
 	}
 }

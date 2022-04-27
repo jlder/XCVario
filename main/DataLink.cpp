@@ -8,6 +8,7 @@
 #include "SString.h"
 #include "Serial.h"
 #include "Flarm.h"
+#include "DataMonitor.h"
 
 // UBX SYNC
 const uint8_t UBX_SYNC1 = 0xb5;
@@ -22,8 +23,10 @@ const uint8_t NMEA_START2 = '!';
 const uint8_t NMEA_MIN = 0x20;
 const uint8_t NMEA_MAX = 0x7e;
 // NMEA End of Line
-const uint8_t NMEA_CR = '\r';
-const uint8_t NMEA_LF = '\n';
+const uint8_t NMEA_CR = '\r';  // 13 0d
+const uint8_t NMEA_LF = '\n';  // 10 0a
+
+const uint8_t FB_START_FRAME = 0x73;
 
 DataLink::DataLink(){
 	state = GET_NMEA_UBX_SYNC;
@@ -33,11 +36,12 @@ DataLink::DataLink(){
 	chkBuf = 0;
 	nmeaFound = false;
 	ubxFound = false;
+	len = 0;
 }
 
-void DataLink::process( char *packet, int len, int port ) {
+void DataLink::process( const char *packet, int len, int port ) {
 	// process every frame byte through state machine
-	// ESP_LOGI(FNAME,"S%d: RX len: %d bytes", port, len );
+	// ESP_LOGI(FNAME,"Port %d: RX len: %d bytes", port, len );
 	// ESP_LOG_BUFFER_HEXDUMP(FNAME,packet, len, ESP_LOG_INFO);
 	ubxFound = false;
 	nmeaFound = false;
@@ -46,7 +50,7 @@ void DataLink::process( char *packet, int len, int port ) {
 		routeSerialData(packet, len, port, false );
 	}else{
 		for (int i = 0; i < len; i++) {
-			parse_NMEA_UBX(packet[i], port);
+			parse_NMEA_UBX(packet[i], port, i == len-1);
 		}
 	}
 }
@@ -56,16 +60,47 @@ void DataLink::addChk(const char c) {
 	chkB += chkA;
 }
 
-void DataLink::routeSerialData( char *data, int len, int port, bool nmea ){
+void DataLink::routeSerialData( const char *data, int len, int port, bool nmea ){
 	SString tx;
 	tx.set( data, len );
-	if( port == 1 ){
+	if( port == 1 ){      // S1
 		Router::forwardMsg( tx, s1_rx_q, nmea );
 		Router::routeS1();
 	}
-	else if( port == 2 ){
+	else if( port == 2 ){  // S2
 		Router::forwardMsg( tx, s2_rx_q, nmea  );
 		Router::routeS2();
+	}
+	else if( port == 3 ){  // CAN
+		Router::forwardMsg( tx, can_rx_q, nmea  );
+		Router::routeCAN();
+		DM.monitorString( MON_CAN, DIR_RX, tx.c_str(), false );
+		// ESP_LOG_BUFFER_HEXDUMP(FNAME, tx.c_str(), tx.length(), ESP_LOG_INFO);
+	}
+	else if( port == 7 ){  // Bluetooth
+		Router::forwardMsg( tx, bt_rx_q, nmea  );
+		Router::routeBT();
+		// ESP_LOG_BUFFER_HEXDUMP(FNAME, tx.c_str(), tx.length(), ESP_LOG_INFO);
+	}
+	else if( port == 8880 ){  // WiFi / XCVario
+		Router::forwardMsg( tx, wl_vario_rx_q, nmea  );
+		Router::routeWLAN();
+		// ESP_LOG_BUFFER_HEXDUMP(FNAME, tx.c_str(), tx.length(), ESP_LOG_INFO);
+	}
+	else if( port == 8881 ){  // WiFi / Flarm
+		Router::forwardMsg( tx, wl_flarm_rx_q, nmea  );
+		Router::routeWLAN();
+		// ESP_LOG_BUFFER_HEXDUMP(FNAME, tx.c_str(), tx.length(), ESP_LOG_INFO);
+	}
+	else if( port == 8882 ){  // WiFi / Aux
+		Router::forwardMsg( tx, wl_aux_rx_q, nmea  );
+		Router::routeWLAN();
+		// ESP_LOG_BUFFER_HEXDUMP(FNAME, tx.c_str(), tx.length(), ESP_LOG_INFO);
+	}
+	else if( port == 8884 ){  // WiFi / Aux
+		Router::forwardMsg( tx, can_rx_q, nmea  );
+		Router::routeCAN();
+		// ESP_LOG_BUFFER_HEXDUMP(FNAME, tx.c_str(), tx.length(), ESP_LOG_INFO);
 	}
 }
 
@@ -76,7 +111,7 @@ void DataLink::processNMEA( char * buffer, int len, int port ){
 	routeSerialData(buffer, len, port, true );
 }
 
-void DataLink::parse_NMEA_UBX( char c, int port ){
+void DataLink::parse_NMEA_UBX( char c, int port, bool last ){
 	// ESP_LOGI(FNAME, "Port S%1d: char=%c pos=%d  state=%d", port, c, pos, state );
 	switch(state) {
 	case GET_NMEA_UBX_SYNC:
@@ -96,12 +131,45 @@ void DataLink::parse_NMEA_UBX( char c, int port ){
 			state = GET_UBX_SYNC2;
 			// ESP_LOGI(FNAME, "Port S%1d: UBX Start at %d", port, pos );
 			break;
+		case FB_START_FRAME:
+			chkA = 0;
+			pos = 0;
+			len = 0;
+			state = GET_FB_LEN1;
+			framebuffer[pos] = c;
+			pos++;
+			break;
 		}
 		break;
 
+		case GET_FB_LEN1:
+			chkA = c;
+			state = GET_FB_LEN2;
+			framebuffer[pos] = c;
+			pos++;
+			break;
+
+		case  GET_FB_LEN2:
+			len = (chkA + (unsigned char)c*256 );
+			ESP_LOGI(FNAME, "got length from flarm bincom: %d", len );
+			state = GET_FB_DATA;
+			framebuffer[pos] = c;
+			pos++;
+			break;
+
+		case GET_FB_DATA:
+			framebuffer[pos] = c;
+			pos++;
+			if( pos > len ){
+				routeSerialData(framebuffer, len+1, port, true );
+				state = GET_NMEA_UBX_SYNC;
+			}
+			break;
+
 		case GET_NMEA_STREAM:
 			if ((c < NMEA_MIN || c > NMEA_MAX) && (c != NMEA_CR && c != NMEA_LF)) {
-				ESP_LOGE(FNAME, "Port S%1d: Invalid NMEA character, restart", port);
+				ESP_LOGE(FNAME, "Port S%1d: Invalid NMEA character %x, restart, pos: %d, state: %d", port, (int)c, pos, state );
+				ESP_LOG_BUFFER_HEXDUMP(FNAME, framebuffer, pos+1, ESP_LOG_INFO);
 				state = GET_NMEA_UBX_SYNC;
 				break;
 			}
@@ -112,8 +180,8 @@ void DataLink::parse_NMEA_UBX( char c, int port ){
 			}
 			framebuffer[pos] = c;
 			pos++;
-			if (c == NMEA_LF) {
-				framebuffer[pos] = 0;  // TBD, really needed, s.set() may cover this
+			if ( (c == NMEA_LF) || (last && (c == NMEA_CR) ) ) { // catch case when CR is last char, e.g. commands from BT
+				framebuffer[pos] = 0;  // framebuffer is zero terminated
 				processNMEA( framebuffer, pos, port );
 				state = GET_NMEA_UBX_SYNC;
 				pos = 0;

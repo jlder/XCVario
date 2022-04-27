@@ -18,8 +18,11 @@
 #include "Flarm.h"
 #include "BluetoothSerial.h"
 #include "DataMonitor.h"
+#include "DataLink.h"
 
 static TaskHandle_t pid = nullptr;
+
+DataLink *dlb;
 
 bool BTSender::selfTest(){
 	ESP_LOGI(FNAME,"SerialBT::selfTest");
@@ -62,23 +65,21 @@ void BTSender::progress(){
 		ESP_LOGI(FNAME,"SerialBT not initialized");
 		return;
 	}
-	if (SerialBT->available() ) {
-		int avail = SerialBT->available();
-		SString rx;
-		char *buf = (char*)malloc( avail+1 );
-
-		for( int i=0; i<avail; i++ ){
-			char byte = (char)SerialBT->read();
-			buf[i] = byte;
-		}
-		rx.set( buf, avail );
-		// ESP_LOGI(FNAME,">BT RX: %d bytes", avail );
-		// ESP_LOG_BUFFER_HEXDUMP(FNAME,rx.c_str(),avail, ESP_LOG_INFO);
-		Router::forwardMsg( rx, bt_rx_q );
-		free( buf );
-		DM.monitorString( MON_BLUETOOTH, DIR_RX, rx.c_str() );
+	char buf[256];
+	int pos = 0;
+	while(SerialBT->available() && (pos < 256) ) {
+		char byte = (char)SerialBT->read();
+		buf[pos] = byte;
+		pos++;
 	}
-
+	if( pos ){
+		SString rx;
+		rx.set( buf, pos );
+		dlb->process( buf, pos, 7 );
+		DM.monitorString( MON_BLUETOOTH, DIR_RX, rx.c_str() );
+		// ESP_LOGI(FNAME,">BT RX: %d bytes", pos );
+		// ESP_LOG_BUFFER_HEXDUMP(FNAME,rx.c_str(),pos, ESP_LOG_INFO);
+	}
 	if( SerialBT->hasClient() ) {
 		SString msg;
 		if ( Router::pullMsg( bt_tx_q, msg ) ){
@@ -94,9 +95,10 @@ void BTSender::begin(){
 	ESP_LOGI(FNAME,"BTSender::begin()" );
 	if( wireless == WL_BLUETOOTH ) {
 		ESP_LOGI(FNAME,"BT on, create BT master object" );
+		dlb = new DataLink();
 		SerialBT = new BluetoothSerial();
 		SerialBT->begin( SetupCommon::getID() );
-		xTaskCreatePinnedToCore(&btTask, "btTask", 4096, NULL, 15, &pid, 0);  // stay below compass task
+		xTaskCreatePinnedToCore(&btTask, "btTask", 4096, NULL, 23, &pid, 0);  // stay below compass task
 	}
 }
 
