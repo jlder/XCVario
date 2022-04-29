@@ -445,17 +445,22 @@ void Protocols::parseNMEA( const char *str ){
 		else if (str[3] == '1') {
 			IMUstream = true; // IMU stream
 			SENstream = false;
+			GBIASstream = false;			
 		}
 		else if (str[3] == '2') {
 			IMUstream = false; // SEN stream
 			SENstream = true;
+			GBIASstream = false;			
 		}
 		else if (str[3] == '3') {
 			IMUstream = true; // IMU and SEN stream
 			SENstream = true;
+			GBIASstream = false;			
 		}
 		else if (str[3] == '4') {
-			GBIASstream = true; // gyros bias stream
+			IMUstream = false; // gyros bias stream
+			SENstream = false;			
+			GBIASstream = true; 
 		}		
 	}
 }
