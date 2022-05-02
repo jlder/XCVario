@@ -151,6 +151,7 @@ mpud::float_axes_t gyroDPS;
 mpud::float_axes_t gyroISUNED; // gyro in standard units rad/s with NED reference
 mpud::float_axes_t accelG_Prev;
 mpud::float_axes_t gyroDPS_Prev;
+mpud::float_axes_t accelAVG;
 
 // Magnetic sensor / compass
 Compass *compass;
@@ -167,6 +168,7 @@ BTSender btsender;
 bool IMUstream = false; // IMU FT stream
 bool SENstream = false; // Sensors FT stream
 bool GBIASstream = false;// Gyro Bias FT stream
+bool ACCELcalib = false; // Accel calibration stream
 
 static mpud::raw_axes_t accelRaw;     // holds accel x, y, z axes as int16
 static mpud::raw_axes_t gyroRaw;      // holds gyro x, y, z axes as int16
@@ -639,6 +641,22 @@ void grabMPU(void *pvParameters){
 			if ( haveMPU && IMUstream && !(mtick % IMUrate) ) {
 				sprintf(str,"$IMU,%.6f,%1.4f,%1.4f,%1.4f,%.6f,%3.4f,%3.4f,%3.4f,%3.4f,%3.4f,%3.4f\r\n",accelTime, accelISUNED.x, accelISUNED.y, accelISUNED.z , gyroTime, gyroISUNED.x, gyroISUNED.y, gyroISUNED.z, currentGyroBiasISUNED.x, currentGyroBiasISUNED.y, currentGyroBiasISUNED.z );
 				Router::sendXCV(str);
+			}
+			if ( haveMPU && ACCELcalib ) {
+				if ( (mtick % 20) == 0 ) {
+					accelAVG.x = accelAVG.x / 20;
+					accelAVG.y = accelAVG.y / 20;
+					accelAVG.z = accelAVG.z / 20;			
+					sprintf(str,"$ACCCAL,%06.3f,%06.3f,%06.3f\r\n", accelAVG.x, accelAVG.y, accelAVG.z);
+					Router::sendXCV(str);
+					accelAVG.x = accelISUNED.x;
+					accelAVG.y = accelISUNED.y;
+					accelAVG.z = accelISUNED.z;				
+				} else {
+					accelAVG.x = accelAVG.x + accelISUNED.x;
+					accelAVG.y = accelAVG.y + accelISUNED.y;
+					accelAVG.z = accelAVG.z + accelISUNED.z;
+				}
 			}
 		}
 					

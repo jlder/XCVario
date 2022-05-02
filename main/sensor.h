@@ -83,6 +83,7 @@ extern AdaptUGC *MYUCG;
 extern bool IMUstream;
 extern bool SENstream;
 extern bool GBIASstream;
+extern bool ACCELcalib;
 
 
 #endif
