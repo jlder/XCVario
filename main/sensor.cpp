@@ -93,6 +93,10 @@ BMP:
 
 #define MGRPS 360
 
+#define GRAVITY 9.807
+
+#define DegToRad (M_PI / 180)
+
 MCP3221 *MCP=0;
 DS18B20  ds18b20( GPIO_NUM_23 );  // GPIO_NUM_23 standard, alternative  GPIO_NUM_17
 
@@ -137,12 +141,17 @@ I2C_t& i2c_0 = i2c0;  // i2c0 or i2c1
 MPU_t MPU;         // create an object
 esp_err_t err;				   // holds mpu reading status
 mpud::float_axes_t accelG;
+mpud::float_axes_t accelISUNED; // accel in standard units m/s² with NED reference
 mpud::float_axes_t gyroRawDPS;
 mpud::float_axes_t currentGyroBiasDPS;
+mpud::float_axes_t currentGyroBiasISUNED; // gyro bias in standard units rad/s with NED reference
+mpud::float_axes_t newGyroBias;
 mpud::float_axes_t newGyroBiasDPS;
 mpud::float_axes_t gyroDPS;
+mpud::float_axes_t gyroISUNED; // gyro in standard units rad/s with NED reference
 mpud::float_axes_t accelG_Prev;
 mpud::float_axes_t gyroDPS_Prev;
+mpud::float_axes_t accelAVG;
 
 // Magnetic sensor / compass
 Compass *compass;
@@ -150,18 +159,22 @@ BTSender btsender;
 
 #define IMUrate 1 // IMU data stream rate x 25ms. 0 not allowed
 #define SENrate 4 // Sensor data stream rate x 25ms. 0 not allowed
-#define GBIASrate 400 // Gyro bias stream rate x 25ms. 400 = 10 seconds
-#define GBIASupdt 24000 // Gyro bias update in XCVario x 25ms. 24000 = 600 seconds = 10 minutes
+#define STILLSPEED 20 // glider considered at rest if speed below 20 km/h
+#define STILLMAXGYRO .01 // glider considered at rest if sum of rotations is below 10 mrad/s
+#define STILLMAXACCEL .1 // glider considered at rest if z accel is below .1 m/s²
+#define AVGSAMPLES 320 // 320 samples ( 8 seconds at 25 ms rate) averaged for bias estimation
+#define GBIASupdt 12000 // Gyro bias update in XCVario x 25ms  12000 = 300 seconds = 5 minutes
 
 bool IMUstream = false; // IMU FT stream
 bool SENstream = false; // Sensors FT stream
 bool GBIASstream = false;// Gyro Bias FT stream
+bool ACCELcalib = false; // Accel calibration stream
 
 static mpud::raw_axes_t accelRaw;     // holds accel x, y, z axes as int16
 static mpud::raw_axes_t gyroRaw;      // holds gyro x, y, z axes as int16
 static mpud::raw_axes_t gyroCorr;      // holds gyro x, y, z axes as int16
 static mpud::raw_axes_t currentGyroBias; // holds gyro biais x, y, z axes as int16
-static mpud::raw_axes_t newGyroBias; // holds gyro biais x, y, z axes as int16
+
 static float accelTime; // time stamp for accels
 static float gyroTime;  // time stamp for gyros
 static float statTime; // time stamp for statP
@@ -413,111 +426,7 @@ void audioTask(void *pvParameters){
 }
 
 void grabMPU(void *pvParameters){
-/*
-	mpud::raw_axes_t accelRaw;     // holds x, y, z axes as int16
-	mpud::raw_axes_t gyroRaw;      // holds x, y, z axes as int16
-<<<<<<< HEAD
-	esp_err_t err = MPU.acceleration(&accelRaw);  // fetch raw data from the registers
-	if( err != ESP_OK )
-		ESP_LOGE(FNAME, "accel I2C error, X:%+.2f Y:%+.2f Z:%+.2f", -accelG[2], accelG[1], accelG[0] );
-	err |= MPU.rotation(&gyroRaw);       // fetch raw data from the registers
-	if( err != ESP_OK )
-		ESP_LOGE(FNAME, "gyro I2C error, X:%+.2f Y:%+.2f Z:%+.2f",  gyroDPS.x, gyroDPS.y, gyroDPS.z );
-	accelG = mpud::accelGravity(accelRaw, mpud::ACCEL_FS_8G);  // raw data to gravity
-	gyroDPS = mpud::gyroDegPerSec(gyroRaw, mpud::GYRO_FS_500DPS);  // raw data to º/s
-	// ESP_LOGI(FNAME, "accel X: %+.2f Y:%+.2f Z:%+.2f  gyro X: %+.2f Y:%+.2f Z:%+.2f ABx:%d ABy:%d, ABz=%d\n", -accelG[2], accelG[1], accelG[0] ,  gyroDPS.x, gyroDPS.y, gyroDPS.z, accl_bias.get().x, accl_bias.get().y, accl_bias.get().z );
-	bool goodAccl = true;
-	if( abs( accelG.x - accelG_Prev.x ) > 1 || abs( accelG.y - accelG_Prev.y ) > 1 || abs( accelG.z - accelG_Prev.z ) > 1 ) {
-		MPU.acceleration(&accelRaw);
-		accelG = mpud::accelGravity(accelRaw, mpud::ACCEL_FS_8G);
-		if( abs( accelG.x - accelG_Prev.x ) > 1 || abs( accelG.y - accelG_Prev.y ) > 1 || abs( accelG.z - accelG_Prev.z ) > 1 ){
-			goodAccl = false;
-			ESP_LOGE(FNAME, "accelaration change > g in 0.2 S:  X:%+.2f Y:%+.2f Z:%+.2f", -accelG[2], accelG[1], accelG[0] );
-		}
-	}
-	bool goodGyro = true;
-	if( abs( gyroDPS.x - gyroDPS_Prev.x ) > MGRPS || abs( gyroDPS.y - gyroDPS_Prev.y ) > MGRPS || abs( gyroDPS.z - gyroDPS_Prev.z ) > MGRPS ) {
-		// ESP_LOGE(FNAME, "gyro sensor out of bounds: X:%+.2f Y:%+.2f Z:%+.2f",  gyroDPS.x, gyroDPS.y, gyroDPS.z );
-		// ESP_LOGE(FNAME, "%04x %04x %04x", gyroRaw.x, gyroRaw.y, gyroRaw.z );
-		MPU.rotation(&gyroRaw);
-		gyroDPS = mpud::gyroDegPerSec(gyroRaw, mpud::GYRO_FS_500DPS);
-		if( abs( gyroDPS.x - gyroDPS_Prev.x ) > MGRPS || abs( gyroDPS.y - gyroDPS_Prev.y ) > MGRPS || abs( gyroDPS.z - gyroDPS_Prev.z ) > MGRPS ) {
-			goodGyro = false;
-			ESP_LOGE(FNAME, "gyro angle >90 deg/s in 0.2 S: X:%+.2f Y:%+.2f Z:%+.2f",  gyroDPS.x, gyroDPS.y, gyroDPS.z );
-		}
-	}
-	if( err == ESP_OK && goodAccl && goodGyro ) {
-		IMU::read();
-	}
-	gyroDPS_Prev = gyroDPS;
-	accelG_Prev = accelG;
-}
- */
 
-static void grabMPU()
-{
-	mpud::raw_axes_t accelRaw;     // holds x, y, z axes as int16
-	mpud::raw_axes_t gyroRaw;      // holds x, y, z axes as int16
-	esp_err_t erracc = MPU.acceleration(&accelRaw);  // fetch raw accel data from the registers
-	if( err == ESP_OK ){
-		accelG = mpud::accelGravity(accelRaw, mpud::ACCEL_FS_8G);  // raw data to gravity
-=======
-	int mtick = 0;
-	
-	while (haveMPU) {
-		TickType_t xLastWakeTime_mpu =xTaskGetTickCount();
-	
-		esp_err_t err = MPU.acceleration(&accelRaw);  // fetch raw data from the registers
->>>>>>> branch 'master-flight-test' of https://github.com/jlder/XCVario
-		accelTime = esp_timer_get_time()/1000000.0; // time in second
-<<<<<<< HEAD
-	}
-	esp_err_t errgyr = MPU.rotation(&gyroRaw);       // fetch raw gyro data from the registers
-	if( err == ESP_OK ){
-		gyroDPS = mpud::gyroDegPerSec(gyroRaw, mpud::GYRO_FS_500DPS);  // raw data to º/s
-=======
-		if( err != ESP_OK )
-			ESP_LOGE(FNAME, "accel I2C error, X:%+.2f Y:%+.2f Z:%+.2f", -accelG[2], accelG[1], accelG[0] );
-		err |= MPU.rotation(&gyroRaw);       // fetch raw data from the registers
->>>>>>> branch 'master-flight-test' of https://github.com/jlder/XCVario
-		gyroTime = esp_timer_get_time()/1000000.0; // time in second
-<<<<<<< HEAD
-	}
-		if( erracc == ESP_OK && errgyr == ESP_OK) {
-		IMU::read();
-	}
-=======
-		if( err != ESP_OK )
-			ESP_LOGE(FNAME, "gyro I2C error, X:%+.2f Y:%+.2f Z:%+.2f",  gyroDPS.x, gyroDPS.y, gyroDPS.z );
-		accelG = mpud::accelGravity(accelRaw, mpud::ACCEL_FS_8G);  // raw data to gravity
-		gyroDPS = mpud::gyroDegPerSec(gyroRaw, GYRO_FS);  // raw data to º/s
-		// ESP_LOGI(FNAME, "accel X: %+.2f Y:%+.2f Z:%+.2f  gyro X: %+.2f Y:%+.2f Z:%+.2f ABx:%d ABy:%d, ABz=%d\n", -accelG[2], accelG[1], accelG[0] ,  gyroDPS.x, gyroDPS.y, gyroDPS.z, accl_bias.get().x, accl_bias.get().y, accl_bias.get().z );
-		bool goodAccl = true;
-		if( abs( accelG.x - accelG_Prev.x ) > 1 || abs( accelG.y - accelG_Prev.y ) > 1 || abs( accelG.z - accelG_Prev.z ) > 1 ) {
-			MPU.acceleration(&accelRaw);
-			accelG = mpud::accelGravity(accelRaw, mpud::ACCEL_FS_8G);
-			if( abs( accelG.x - accelG_Prev.x ) > 1 || abs( accelG.y - accelG_Prev.y ) > 1 || abs( accelG.z - accelG_Prev.z ) > 1 ){
-				goodAccl = false;
-				ESP_LOGE(FNAME, "accelaration change > 1 g in 0.2 S:  X:%+.2f Y:%+.2f Z:%+.2f", -accelG[2], accelG[1], accelG[0] );
-			}
-		}
-		bool goodGyro = true;
-		if( abs( gyroDPS.x - gyroDPS_Prev.x ) > MGRPS || abs( gyroDPS.y - gyroDPS_Prev.y ) > MGRPS || abs( gyroDPS.z - gyroDPS_Prev.z ) > MGRPS ) {
-			// ESP_LOGE(FNAME, "gyro sensor out of bounds: X:%+.2f Y:%+.2f Z:%+.2f",  gyroDPS.x, gyroDPS.y, gyroDPS.z );
-			// ESP_LOGE(FNAME, "%04x %04x %04x", gyroRaw.x, gyroRaw.y, gyroRaw.z );
-			MPU.rotation(&gyroRaw);
-			gyroDPS = mpud::gyroDegPerSec(gyroRaw, GYRO_FS );
-			if( abs( gyroDPS.x - gyroDPS_Prev.x ) > MGRPS || abs( gyroDPS.y - gyroDPS_Prev.y ) > MGRPS || abs( gyroDPS.z - gyroDPS_Prev.z ) > MGRPS ) {
-				goodGyro = false;
-				ESP_LOGE(FNAME, "gyro angle >90 deg/s in 0.2 S: X:%+.2f Y:%+.2f Z:%+.2f",  gyroDPS.x, gyroDPS.y, gyroDPS.z );
-			}
-		}
-		if( err == ESP_OK && goodAccl && goodGyro ) {
-			IMU::read();
-		}
-		gyroDPS_Prev = gyroDPS;
-		accelG_Prev = accelG;
-*/
 	float gyrosum = 0;
 	float prevgyrosum = 0;
 	float prevaccelz = 0;
@@ -527,32 +436,105 @@ static void grabMPU()
 	int nbsamples = 0;
 	int mtick = 0; // counter to schedule tasks at specific time
 	currentGyroBias = gyro_bias.get(); // get stored gyro biais
-	currentGyroBiasDPS = mpud::gyroDegPerSec(currentGyroBias, GYRO_FS);	
 	char str[250];
 	
-	while (haveMPU) {
+	while (1) {
 		mtick++;
 		TickType_t xLastWakeTime_mpu =xTaskGetTickCount();
 
-		// get accel and gyro data
-		esp_err_t erracc = MPU.acceleration(&accelRaw);  // fetch raw accel data from the registers
-		if( erracc == ESP_OK ){
-			accelG = mpud::accelGravity(accelRaw, mpud::ACCEL_FS_8G);  // raw data to gravity
-			accelTime = esp_timer_get_time()/1000000.0; // time in second
-		}
-		esp_err_t errgyr = MPU.rotation(&gyroRaw); // fetch raw gyro data from the registers
-		if( errgyr == ESP_OK ){
-			gyroTime = esp_timer_get_time()/1000000.0; // time in second
-			gyroCorr.x = gyroRaw.x - currentGyroBias.x;
-			gyroCorr.y = gyroRaw.y - currentGyroBias.y;
-			gyroCorr.z = gyroRaw.z - currentGyroBias.z;
-			if ( !IMUstream ) 
-				gyroDPS = mpud::gyroDegPerSec(gyroCorr, GYRO_FS);  // when not streaming IMU data, use corrected data °/s
-			else
-				gyroDPS = mpud::gyroDegPerSec(gyroRaw, GYRO_FS);  // when streaming IMU data, use raw data º/s	
-		}
-		if( erracc == ESP_OK && errgyr == ESP_OK) {
-			IMU::read();
+		// get MPU data every IMUrate * 25 ms
+		if( haveMPU && ((mtick % IMUrate) == 0) ) {
+			// get accel and gyro data
+			esp_err_t erracc = MPU.acceleration(&accelRaw);  // fetch raw accel data from the registers
+			if( erracc == ESP_OK ){
+				accelTime = esp_timer_get_time()/1000000.0; // time in second
+				accelG = mpud::accelGravity(accelRaw, mpud::ACCEL_FS_8G);  // raw data to gravity
+				accelISUNED.x = - accelG.z * GRAVITY;
+				accelISUNED.y = - accelG.y * GRAVITY;
+				accelISUNED.z = - accelG.x * GRAVITY;
+			}
+			esp_err_t errgyr = MPU.rotation(&gyroRaw); // fetch raw gyro data from the registers
+			if( errgyr == ESP_OK ){
+				gyroTime = esp_timer_get_time()/1000000.0; // time in second
+				gyroCorr.x = gyroRaw.x - currentGyroBias.x;
+				gyroCorr.y = gyroRaw.y - currentGyroBias.y;
+				gyroCorr.z = gyroRaw.z - currentGyroBias.z;
+				gyroDPS = mpud::gyroDegPerSec(gyroCorr, GYRO_FS);
+				gyroISUNED.x = -gyroDPS.z * DegToRad;
+				gyroISUNED.y = -gyroDPS.y * DegToRad;
+				gyroISUNED.z = -gyroDPS.x * DegToRad;
+			}
+			if( erracc == ESP_OK && errgyr == ESP_OK) {
+				IMU::read();
+			}
+
+			// identify gyro bias
+			if( (Atmosphere::pascal2kmh(abs(dynP)) < STILLSPEED ) ) {	// if IAS is << below stall = STILLSPEED, MPU is probably not moving
+				gyrosum = abs(gyroISUNED.x) + abs(gyroISUNED.y) + abs( gyroISUNED.z); // monitor sum of rotations to detect possible movements
+				if( !processbias ) { // if first time in gyro bias identification, initialize prevgyrosum, prevaccelz and process variables
+					prevgyrosum = gyrosum;
+					prevaccelz = accelISUNED.z;
+					processbias = true;
+					nbsamples = 0;
+					newGyroBias.x = 0;
+					newGyroBias.y = 0;
+					newGyroBias.z = 0;
+				} else {
+					if ( (abs(gyrosum-prevgyrosum) < STILLMAXGYRO ) && (abs(accelISUNED.z-prevaccelz) < STILLMAXACCEL ) ) { // If variation of sum of gyros < 10 mrad/s and variation of accel z component < .1 m/s² MPU is considered static
+						// average bias over 320 samples : 8 seconds at 40 Hz sample rate
+						newGyroBias.x = newGyroBias.x + gyroRaw.x;
+						newGyroBias.y = newGyroBias.y + gyroRaw.y;
+						newGyroBias.z = newGyroBias.z + gyroRaw.z;
+						nbsamples++;
+						if( nbsamples >= AVGSAMPLES ) {
+							biassolution = true; // if processed at least AVGSAMPLES samples, bias is considered correct
+						}
+					} else { // MPU not static
+						processbias = false; // reinitialize bias identification process
+					}
+				}
+			}
+
+			// if a bias solution exists and need a first bias or streaming bias/IMU or MPU has moved (!processbias) and more than GBIASupdt samples accumulated
+			if ( biassolution && ( needfirstbias || GBIASstream || IMUstream || ((nbsamples > GBIASupdt) && !processbias) ) ) {
+				newGyroBias.x = newGyroBias.x / nbsamples;
+				newGyroBias.y = newGyroBias.y / nbsamples;
+				newGyroBias.z = newGyroBias.z / nbsamples;
+				currentGyroBias.x = (int16_t)(newGyroBias.x + .5);
+				currentGyroBias.y = (int16_t)(newGyroBias.y + .5);
+				currentGyroBias.z = (int16_t)(newGyroBias.z + .5);
+				currentGyroBiasDPS = mpud::gyroDegPerSec(currentGyroBias, GYRO_FS);
+				currentGyroBiasISUNED.x = -currentGyroBiasDPS.z * DegToRad;
+				currentGyroBiasISUNED.y = -currentGyroBiasDPS.y * DegToRad;
+				currentGyroBiasISUNED.z = -currentGyroBiasDPS.x * DegToRad;
+				if (GBIASstream ) { // stream gyro bias if gyro bias stream active or need first bias or MPU moved with enough samples for bias and long delay since last bias
+					/*
+					GBIAS data in ISU and NED orientation
+							$GBIAS,
+							T..T.TTTTTT:	time in second with micro second resolution,
+							XX.X:				MPU temp °C,
+							XXX.XXXX:			bias X-Axis rad/s,
+							YYY.YYYY:			bias Y-Axis rad/s,
+							ZZZ.ZZZZ:			bias Z-Axis rad/s,
+							<CR><LF>
+					*/
+					sprintf(str,"$GBIAS,%.6f,%2.1f,%3.4f,%3.4f,%3.4f\r\n", dynTime, MPUtempcel, currentGyroBiasISUNED.x, currentGyroBiasISUNED.y, currentGyroBiasISUNED.z );
+					Router::sendXCV(str);
+				}
+				if ( needfirstbias || (nbsamples > GBIASupdt) ) {
+					gyro_bias.set( currentGyroBias );
+				}
+				// TODO FLIGHT TEST ONLY to be removed
+				// For FT only, force IMU and SEN streams right after first bias identification
+				if ( needfirstbias ) {
+					IMUstream = true;
+					SENstream = true;
+				}
+				processbias = false;
+				needfirstbias = false;
+				biassolution = false;
+				nbsamples = 0;
+			}
 		}
 		
 		// get sensors data every SENrate * 25ms
@@ -596,74 +578,30 @@ static void grabMPU()
 				MPUtempcel = mpud::tempCelsius(MPUtempraw);
 		}
 
-		// identify gyro bias
-		if( (Atmosphere::pascal2kmh(abs(dynP)) < 20 ) ) {	// if IAS is << below stall ~20kmh MPU is probably not moving
-			gyrosum = abs(gyroDPS.x) + abs(gyroDPS.y) + abs( gyroDPS.z); // monitor sum of rotations to detect possible movements
-			if( !processbias ) { // if first time in gyro bias identification, initialize oldgyrosum, oldaccelz and process variables
-				prevgyrosum = gyrosum;
-				prevaccelz = accelG[0];
-				processbias = true;
-				nbsamples = 0;
-			} else {					
-				if ( (abs(gyrosum-prevgyrosum) < 0.5 ) && (abs(accelG[0]-prevaccelz) < .01 ) ) { // If variation of sum of gyros < .5°/s and variation of accel z component < .01 MPU is considered static
-					if ( nbsamples == 0 ) { // if first time in bias low pass, initialize bias.
-						newGyroBias.x = gyroRaw.x;
-						newGyroBias.y = gyroRaw.y;
-						newGyroBias.z = gyroRaw.z;
-					} else { // low pass on bias with 2s period @ 40 Hz sample rate
-						newGyroBias.x = ( 79 * newGyroBias.x + gyroRaw.x ) / 80;
-						newGyroBias.y = ( 79 * newGyroBias.y + gyroRaw.y ) / 80;
-						newGyroBias.z = ( 79 * newGyroBias.z + gyroRaw.z ) / 80;
-						if( nbsamples > 320 ) biassolution = true; // if low pass has processed at least 320 samples (8 seconds à 40 Hz), bias is considered correct
-					}
-					nbsamples++;
-				} else { // MPU not static
-					processbias = false; // reinitialize bias identification process
-				}
-			}
-		}
-		if ( biassolution && ( needfirstbias || GBIASstream || (nbsamples > GBIASupdt) )) { // if a bias solution exists and need a first bias or lowpass has accumulated > 24000 samples ~10 minutes or stream GBIAS data
-			currentGyroBias = newGyroBias;
-			currentGyroBiasDPS = mpud::gyroDegPerSec(currentGyroBias, GYRO_FS);
-			if (GBIASstream) {
-				/*
-				GBIAS data
-						$GBIAS,
-						T..T.TTTTTT:	time in second with micro second resolution,
-						XX.X:				MPU temp °C,
-						XXX.XX:			bias X-Axis °/s, 
-						YYY.YY:			bias Y-Axis °/s,
-						ZZZ.ZZ:			bias Z-Axis °/s,
-						<CR><LF>	
-				*/
-				sprintf(str,"$GBIAS,%.6f,%2.1f,%3.2f,%3.2f,%3.2f\r\n", dynTime, MPUtempcel, -currentGyroBiasDPS.z, -currentGyroBiasDPS.y, -currentGyroBiasDPS.x );
-				Router::sendXCV(str);
-			}
-			gyro_bias.set( currentGyroBias );
-			processbias = false;
-			needfirstbias = false;
-			biassolution = false;
-			nbsamples = 0;			
-			// FLIGHT TEST
-			// For FT only force IMU and SEN streams right after bias identification
-			IMUstream = true;
-			SENstream = true;
-		}		
+		// get GNSS data
+		// GNSS data from S1 interface
+		const gnss_data_t *gnss1 = s1UbloxGnssDecoder.getGNSSData(1);
+		// GNSS data from S2 interface
+		const gnss_data_t *gnss2 = s2UbloxGnssDecoder.getGNSSData(2);
+		// select gnss with better fix
+		const gnss_data_t *chosenGnss = (gnss2->fix >= gnss1->fix) ? gnss2 : gnss1;
 
-		 /*
-		IMU data
+		/*
+		Stream data to BT
+
+		IMU data in ISU and NED orientation
 				$IMU,
 				T..T.TTTTTT:	accel time in second with micro second resolution (before IMU measurement),
-				X.XXXX:			acceleration in X-Axis in G,
-				Y.YYYY:			acceleration in Y-Axis in G,
-				Z.ZZZZ:			acceleration in Z-Axis in G,
+				X.XXXX:			acceleration in X-Axis in m/s²,
+				Y.YYYY:			acceleration in Y-Axis in m/s²,
+				Z.ZZZZ:			acceleration in Z-Axis in m/s²,
 				T..T.TTTTTT:	gyro time in second with micro second resolution (before IMU measurement)
-				XXX.XX:			rotation X-Axis °/s,
-				YYY.YY:			rotation Y-Axis °/s,
-				ZZZ.ZZ:			rotation Z-Axis °/s,
-				XXX.XX:			gyro bias X-Axis °/s,
-				YYY.YY:			gyro bias Y-Axis °/s,
-				ZZZ.ZZ:			gyro bias Z-Axis °/s,				
+				XXX.XXXX:			rotation X-Axis rad/s,
+				YYY.YYYY:			rotation Y-Axis rad/s,
+				ZZZ.ZZZZ:			rotation Z-Axis rad/s,
+				XXX.XXXX:			gyro bias X-Axis rad/s,
+				YYY.YYYY:			gyro bias Y-Axis rad/s,
+				ZZZ.ZZZZ:			gyro bias Z-Axis rad/s,
 				<CR><LF>	
 
 		Sensor data
@@ -684,19 +622,12 @@ static void grabMPU()
 				VV.VV:			GNSS speed x or north,
 				VV.VV:			GNSS speed y or east,
 				VV.VV:			GNSS speed z or down,
-				*hh<CR><LF>		checksum
+				<CR><LF>
 		 */
 
-		// GNSS data from S1 interface
-		const gnss_data_t *gnss1 = s1UbloxGnssDecoder.getGNSSData(1);
-		// GNSS data from S2 interface
-		const gnss_data_t *gnss2 = s2UbloxGnssDecoder.getGNSSData(2);
-		// select gnss with better fix
-		const gnss_data_t *chosenGnss = (gnss2->fix >= gnss1->fix) ? gnss2 : gnss1;
-
-		if ( IMUstream && !(mtick % IMUrate) && SENstream && !(mtick % SENrate) ) {
-			sprintf(str,"$IMU,%.6f,%1.4f,%1.4f,%1.4f,%.6f,%3.2f,%3.2f,%3.2f,%3.2f,%3.2f,%3.2f\r\n$SEN,%.6f,%4.3f,%.6f,%4.3f,%.6f,%4.3f,%2.1f,%2.1f,%1d,%2d,%.3f,%4.1f,%2.2f,%2.2f,%2.2f,%2.2f\r\n",
-						accelTime, -accelG[2], accelG[1], accelG[0] , gyroTime, -gyroDPS.z, -gyroDPS.y, -gyroDPS.x, -currentGyroBiasDPS.z, -currentGyroBiasDPS.y, -currentGyroBiasDPS.x,
+		if ( haveMPU && IMUstream && !(mtick % IMUrate) && SENstream && !(mtick % SENrate) ) {
+			sprintf(str,"$IMU,%.6f,%1.4f,%1.4f,%1.4f,%.6f,%3.4f,%3.4f,%3.4f,%3.4f,%3.4f,%3.4f\r\n$SEN,%.6f,%4.3f,%.6f,%4.3f,%.6f,%4.3f,%2.1f,%2.1f,%1d,%2d,%.3f,%4.1f,%2.2f,%2.2f,%2.2f,%2.2f\r\n",
+						accelTime, accelISUNED.x, accelISUNED.y, accelISUNED.z , gyroTime, gyroISUNED.x, gyroISUNED.y, gyroISUNED.z, currentGyroBiasISUNED.x, currentGyroBiasISUNED.y, currentGyroBiasISUNED.z ,
 						statTime, statP, teTime, teP, dynTime, dynP,  OATemp, MPUtempcel, chosenGnss->fix, chosenGnss->numSV, chosenGnss->time,
 						chosenGnss->coordinates.altitude, chosenGnss->speed.ground, chosenGnss->speed.x, chosenGnss->speed.y, chosenGnss->speed.z);
 			Router::sendXCV(str);
@@ -707,9 +638,25 @@ static void grabMPU()
 							chosenGnss->coordinates.altitude, chosenGnss->speed.ground, chosenGnss->speed.x, chosenGnss->speed.y, chosenGnss->speed.z);
 				Router::sendXCV(str);
 			}
-			if ( IMUstream && !(mtick % IMUrate) ) {
-				sprintf(str,"$IMU,%.6f,%1.4f,%1.4f,%1.4f,%.6f,%3.2f,%3.2f,%3.2f,%3.2f,%3.2f,%3.2f\r\n",accelTime, -accelG[2], accelG[1], accelG[0] , gyroTime, -gyroDPS.z, -gyroDPS.y, -gyroDPS.x, -currentGyroBiasDPS.z, -currentGyroBiasDPS.y, -currentGyroBiasDPS.x);
+			if ( haveMPU && IMUstream && !(mtick % IMUrate) ) {
+				sprintf(str,"$IMU,%.6f,%1.4f,%1.4f,%1.4f,%.6f,%3.4f,%3.4f,%3.4f,%3.4f,%3.4f,%3.4f\r\n",accelTime, accelISUNED.x, accelISUNED.y, accelISUNED.z , gyroTime, gyroISUNED.x, gyroISUNED.y, gyroISUNED.z, currentGyroBiasISUNED.x, currentGyroBiasISUNED.y, currentGyroBiasISUNED.z );
 				Router::sendXCV(str);
+			}
+			if ( haveMPU && ACCELcalib ) {
+				if ( (mtick % 20) == 0 ) {
+					accelAVG.x = accelAVG.x / 20;
+					accelAVG.y = accelAVG.y / 20;
+					accelAVG.z = accelAVG.z / 20;
+					sprintf(str,"$ACCCAL,%06.3f,%06.3f,%06.3f\r\n", accelAVG.x, accelAVG.y, accelAVG.z);
+					Router::sendXCV(str);
+					accelAVG.x = accelISUNED.x;
+					accelAVG.y = accelISUNED.y;
+					accelAVG.z = accelISUNED.z;
+				} else {
+					accelAVG.x = accelAVG.x + accelISUNED.x;
+					accelAVG.y = accelAVG.y + accelISUNED.y;
+					accelAVG.z = accelAVG.z + accelISUNED.z;
+				}
 			}
 		}
 					
@@ -720,9 +667,7 @@ static void grabMPU()
 				 ESP_LOGW(FNAME,"Warning MPU and sensor task stack low: %d bytes", uxTaskGetStackHighWaterMark( mpid ) );
 		}
 	}		
->>>>>>> branch 'master-flight-test' of https://github.com/jlder/XCVario
 }
-
 
 static void lazyNvsCommit()
 {
@@ -825,71 +770,9 @@ void readSensors(void *pvParameters){
 	while (1)
 	{
 		TickType_t xLastWakeTime = xTaskGetTickCount();
-<<<<<<< HEAD
-
-		xSemaphoreTake(xMutex,portMAX_DELAY );	
-
-		// get accels and gyros raw data
-		if( haveMPU )
-			grabMPU();
-
-		bool ok=false;
-		float p = 0;
-
-		// get raw static pressure
-		p = baroSensor->readPressure(ok);
-		if ( ok ) {
-			statP = p;
-			statTime = esp_timer_get_time()/1000000.0; // time in second
-			baroP = p;
-		}
-
-		// get raw te pressure
-		p = teSensor->readPressure(ok);
-
-		if ( ok ) {
-			teP = p;
-			teTime = esp_timer_get_time()/1000000.0; // time in second
-		}
-
-		// get raw dynamic pressure
-		if( asSensor )
-			p = asSensor->readPascal(0, ok);
-		if( ok ) {
-			dynP = p;
-			dynTime = esp_timer_get_time()/1000000.0; // time in second
-			dynamicP = 0;
-			if (p > 60 )
-				dynamicP = p;
-		}
-
-		float T=OAT.get();
-		if( !validTemperature ) {
-			T= 15 - ( (altitude.get()/100) * 0.65 );
-			// ESP_LOGW(FNAME,"T invalid, using 15 deg");
-		}
-		OATemp = T;
-
-		// GNSS data from S1 interface
-		const gnss_data_t *gnss1 = s1UbloxGnssDecoder.getGNSSData(1);
-		// GNSS data from S2 interface
-		const gnss_data_t *gnss2 = s2UbloxGnssDecoder.getGNSSData(2);
-
-		const gnss_data_t *chosenGnss = (gnss2->fix >= gnss1->fix) ? gnss2 : gnss1;
-
-		// broadcast raw sensor data
-		if( nmea_protocol.get() == XCVARIOFT ) {
-			OV.sendNMEA( P_XCVARIOFT, lb, baroP, dynamicP, te_vario.get(), OAT.get(), ias.get(), tas, MC.get(), bugs.get(), ballast.get(), cruise_mode.get(), altitude.get(), validTemperature,
-					accelG[2], accelG[1],accelG[0], -gyroDPS.z, -gyroDPS.y, -gyroDPS.x, accelTime, gyroTime, statP, statTime, teP, teTime, dynP, dynTime, OATemp,
-					chosenGnss->fix, chosenGnss->time, chosenGnss->coordinates.altitude, chosenGnss->speed.ground, chosenGnss->speed.x, chosenGnss->speed.y, -chosenGnss->speed.z );
-		}
-		xSemaphoreGive(xMutex);		
-
-=======
 	
 		count++;
 		
->>>>>>> branch 'master-flight-test' of https://github.com/jlder/XCVario
 		float iasraw = Atmosphere::pascal2kmh( dynamicP );
 		// ESP_LOGI("FNAME","P: %f  IAS:%f", dynamicP, iasraw );		
 
@@ -1238,35 +1121,6 @@ void system_startup(void *args){
 		MPU.setGyroFullScale( GYRO_FS );
 		MPU.setDigitalLowPassFilter(mpud::DLPF_42HZ);  // smoother data
 
-<<<<<<< HEAD
-		mpud::raw_axes_t gb = gyro_bias.get();
-		mpud::raw_axes_t ab = accl_bias.get();
-
-		if( (gb.isZero() || ab.isZero()) || ahrs_autozero.get() ) {
-			ESP_LOGI( FNAME,"MPU computeOffsets");
-			ahrs_autozero.set(0);
-			MPU.computeOffsets( &ab, &gb );  // returns Offsets in 16G scale
-			gyro_bias.set( gb );
-			accl_bias.set( ab );
-			MPU.setGyroOffset(gb);
-			MPU.setAccelOffset(ab);
-			ESP_LOGI( FNAME,"MPU new offsets accl:%d/%d/%d gyro:%d/%d/%d ZERO:%d", ab.x, ab.y, ab.z, gb.x,gb.y,gb.z, gb.isZero() );
-			if( hardwareRevision.get() != 3 )
-				hardwareRevision.set(3);
-		}else
-		{
-			MPU.setAccelOffset(ab);
-			MPU.setGyroOffset(gb);
-		}
-		
-		// WIP clear accels offsets for external calibration purpose
-		ab.x = 0;
-		ab.y = 0;
-		ab.z = 0;
-		MPU.setAccelOffset(ab);		
-		
-=======
->>>>>>> branch 'master-flight-test' of https://github.com/jlder/XCVario
 		delay( 50 );
 
 // clear gyro and accel MPU offsets, just in case
