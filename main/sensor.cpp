@@ -493,6 +493,8 @@ void grabMPU(void *pvParameters){
 						processbias = false; // reinitialize bias identification process
 					}
 				}
+				prevgyrosum = gyrosum;
+				prevaccelz = accelISUNED.z;
 			}
 			
 			// if a bias solution exists and need a first bias or streaming bias/IMU or MPU has moved (!processbias) and more than GBIASupdt samples accumulated
@@ -526,7 +528,7 @@ void grabMPU(void *pvParameters){
 				}
 				// TODO FLIGHT TEST ONLY to be removed
 				// For FT only, force IMU and SEN streams right after first bias identification
-				if ( needfirstbias ) {
+				if ( needfirstbias || Atmosphere::pascal2kmh(abs(dynP)) > (2*STILLSPEED) ) {
 					IMUstream = true;
 					SENstream = true;			
 				}
