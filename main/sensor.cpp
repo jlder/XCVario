@@ -426,7 +426,9 @@ void audioTask(void *pvParameters){
 }
 
 void grabMPU(void *pvParameters){
-
+// grabMPU is being used because of legacy code but it does more than just grabing MPU data
+// grabMPU gets MPU data, converts them in NED frame in International System Units : m/s² for accels and rad/s for rotation rates.
+// a different name shall be used in final code.
 	float gyrosum = 0;
 	float prevgyrosum = 0;
 	float prevaccelz = 0;
@@ -444,22 +446,27 @@ void grabMPU(void *pvParameters){
 		
 		// get MPU data every IMUrate * 25 ms
 		if( haveMPU && ((mtick % IMUrate) == 0) ) {
-			// get accel and gyro data
+			// get accel raw data
 			esp_err_t erracc = MPU.acceleration(&accelRaw);  // fetch raw accel data from the registers
 			if( erracc == ESP_OK ){
+				// record time of accels measurement
 				accelTime = esp_timer_get_time()/1000000.0; // time in second
-				accelG = mpud::accelGravity(accelRaw, mpud::ACCEL_FS_8G);  // raw data to gravity
+				accelG = mpud::accelGravity(accelRaw, mpud::ACCEL_FS_8G);  // convert raw data to to 8G full scale
+				// convert accels coordinates to ISU : m/s²
 				accelISUNED.x = - accelG.z * GRAVITY;
 				accelISUNED.y = - accelG.y * GRAVITY;
 				accelISUNED.z = - accelG.x * GRAVITY;			
 			}
+			// get gyro raw data
 			esp_err_t errgyr = MPU.rotation(&gyroRaw); // fetch raw gyro data from the registers
 			if( errgyr == ESP_OK ){
+				// record time of gyro measurement
 				gyroTime = esp_timer_get_time()/1000000.0; // time in second
 				gyroCorr.x = gyroRaw.x - currentGyroBias.x;
 				gyroCorr.y = gyroRaw.y - currentGyroBias.y;
 				gyroCorr.z = gyroRaw.z - currentGyroBias.z;
-				gyroDPS = mpud::gyroDegPerSec(gyroCorr, GYRO_FS);
+				gyroDPS = mpud::gyroDegPerSec(gyroCorr, GYRO_FS); // convert raw gyro to Gyro_FS full scale
+				// convert gyro coordinates to ISU : rad/s
 				gyroISUNED.x = -gyroDPS.z * DegToRad;
 				gyroISUNED.y = -gyroDPS.y * DegToRad;
 				gyroISUNED.z = -gyroDPS.x * DegToRad;
@@ -479,9 +486,10 @@ void grabMPU(void *pvParameters){
 					newGyroBias.x = 0;
 					newGyroBias.y = 0;
 					newGyroBias.z = 0;				
-				} else {					
-					if ( (abs(gyrosum-prevgyrosum) < STILLMAXGYRO ) && (abs(accelISUNED.z-prevaccelz) < STILLMAXACCEL ) ) { // If variation of sum of gyros < 10 mrad/s and variation of accel z component < .1 m/s² MPU is considered static
-						// average bias over 320 samples : 8 seconds at 40 Hz sample rate
+				} else {
+					// Confirm MPU is stable by verifying that the variation of the sum of rotations is below a certain threshold and z accel variation is also below a threshold.
+					if ( (abs(gyrosum-prevgyrosum) < STILLMAXGYRO ) && (abs(accelISUNED.z-prevaccelz) < STILLMAXACCEL ) ) { // If variation of sum of gyros < STILLMAXGYRO (10 mrad/s) and variation of accel z component  is below STILLMAXACCEL (< .1 m/s²) MPU is considered static
+						// if MPU static, average gyros over 320 samples : 8 seconds at 40 Hz sample rate to get bias estimate
 						newGyroBias.x = newGyroBias.x + gyroRaw.x;
 						newGyroBias.y = newGyroBias.y + gyroRaw.y;
 						newGyroBias.z = newGyroBias.z + gyroRaw.z;
@@ -489,27 +497,36 @@ void grabMPU(void *pvParameters){
 						if( nbsamples >= AVGSAMPLES ) {
 							biassolution = true; // if processed at least AVGSAMPLES samples, bias is considered correct
 						}
-					} else { // MPU not static
+					} else { // if MPU is not static reinitialise bias process
 						processbias = false; // reinitialize bias identification process
 					}
 				}
+				// recard last gyros sum and z accel to later verify if there are variations
 				prevgyrosum = gyrosum;
 				prevaccelz = accelISUNED.z;
 			}
 			
-			// if a bias solution exists and need a first bias or streaming bias/IMU or MPU has moved (!processbias) and more than GBIASupdt samples accumulated
+			// if a bias solution exists and 
+			//( (XCVario justed started needing a first bias) 
+			// or (streaming bias is requried)
+			// or (streaming IMU is requried) 
+			// or (there are enough bias samples to update bias in Flash memory (i.e. more than GBIASupdt)
+			// or (MPU has moved (i.e. !processbias) )
 			if ( biassolution && ( needfirstbias || GBIASstream || IMUstream || ((nbsamples > GBIASupdt) && !processbias) ) ) { 
-				newGyroBias.x = newGyroBias.x / nbsamples;
+				// average gyros to estimate biasnewGyroBias.x = newGyroBias.x / nbsamples;
 				newGyroBias.y = newGyroBias.y / nbsamples;
 				newGyroBias.z = newGyroBias.z / nbsamples;
 				currentGyroBias.x = (int16_t)(newGyroBias.x + .5);
 				currentGyroBias.y = (int16_t)(newGyroBias.y + .5);
 				currentGyroBias.z = (int16_t)(newGyroBias.z + .5);			
-				currentGyroBiasDPS = mpud::gyroDegPerSec(currentGyroBias, GYRO_FS);
+				currentGyroBiasDPS = mpud::gyroDegPerSec(currentGyroBias, GYRO_FS); // convert gyro raw data to °/s
+				// convert gyro bias to rad/s
 				currentGyroBiasISUNED.x = -currentGyroBiasDPS.z * DegToRad;
 				currentGyroBiasISUNED.y = -currentGyroBiasDPS.y * DegToRad;
-				currentGyroBiasISUNED.z = -currentGyroBiasDPS.x * DegToRad;						
-				if (GBIASstream ) { // stream gyro bias if gyro bias stream active or need first bias or MPU moved with enough samples for bias and long delay since last bias
+				currentGyroBiasISUNED.z = -currentGyroBiasDPS.x * DegToRad;
+				
+				// stream gyro bias if gyro bias stream active
+				if (GBIASstream ) {  
 					/*
 					GBIAS data in ISU and NED orientation
 							$GBIAS,
@@ -523,11 +540,13 @@ void grabMPU(void *pvParameters){
 					sprintf(str,"$GBIAS,%.6f,%2.1f,%3.4f,%3.4f,%3.4f\r\n", dynTime, MPUtempcel, currentGyroBiasISUNED.x, currentGyroBiasISUNED.y, currentGyroBiasISUNED.z );
 					Router::sendXCV(str);
 				}
+				// if first bias are available or enough samples have been accululated to update bias in Flash memory
 				if ( needfirstbias || (nbsamples > GBIASupdt) ) {
 					gyro_bias.set( currentGyroBias );
 				}
-				// TODO FLIGHT TEST ONLY to be removed
+				// TODO FLIGHT TEST ONLY this should eventually be removed
 				// For FT only, force IMU and SEN streams right after first bias identification
+				// this is done as soon as first bias has been identified or when IAS is high enough to cover the case of XCVario restart in flight
 				if ( needfirstbias || Atmosphere::pascal2kmh(abs(dynP)) > (2*STILLSPEED) ) {
 					IMUstream = true;
 					SENstream = true;			
@@ -539,6 +558,7 @@ void grabMPU(void *pvParameters){
 			}			
 		}
 		
+		// get pneumatic data static, TE, dynamic pressure and OAT. 
 		// get sensors data every SENrate * 25ms
 		if ( (mtick % SENrate) == 0 ) {
 			bool ok=false;
@@ -580,10 +600,10 @@ void grabMPU(void *pvParameters){
 				MPUtempcel = mpud::tempCelsius(MPUtempraw);
 		}
 
-		// get GNSS data
-		// GNSS data from S1 interface
+		// get Ublox GNSS data
+		// when GNSS receiver is connected to S1 interface
 		const gnss_data_t *gnss1 = s1UbloxGnssDecoder.getGNSSData(1);
-		// GNSS data from S2 interface
+		// when GNSS receiver is connected to S2 interface
 		const gnss_data_t *gnss2 = s2UbloxGnssDecoder.getGNSSData(2);
 		// select gnss with better fix
 		const gnss_data_t *chosenGnss = (gnss2->fix >= gnss1->fix) ? gnss2 : gnss1;
@@ -626,7 +646,7 @@ void grabMPU(void *pvParameters){
 				VV.VV:			GNSS speed z or down,
 				<CR><LF>		
 		 */
-
+		// if there is an MPU, IMU stream has been requested, SEN and IMU clocks are true then both IMU and SEN frames should be sent
 		if ( haveMPU && IMUstream && !(mtick % IMUrate) && SENstream && !(mtick % SENrate) ) {
 			sprintf(str,"$IMU,%.6f,%1.4f,%1.4f,%1.4f,%.6f,%3.4f,%3.4f,%3.4f,%3.4f,%3.4f,%3.4f\r\n$SEN,%.6f,%4.3f,%.6f,%4.3f,%.6f,%4.3f,%2.1f,%2.1f,%1d,%2d,%.3f,%4.1f,%2.2f,%2.2f,%2.2f,%2.2f\r\n",
 						accelTime, accelISUNED.x, accelISUNED.y, accelISUNED.z , gyroTime, gyroISUNED.x, gyroISUNED.y, gyroISUNED.z, currentGyroBiasISUNED.x, currentGyroBiasISUNED.y, currentGyroBiasISUNED.z ,
@@ -634,27 +654,35 @@ void grabMPU(void *pvParameters){
 						chosenGnss->coordinates.altitude, chosenGnss->speed.ground, chosenGnss->speed.x, chosenGnss->speed.y, chosenGnss->speed.z);
 			Router::sendXCV(str);
 		} else {
+			// send only SEN frame
 			if ( SENstream && !(mtick % SENrate) ) {
 				sprintf(str,"$SEN,%.6f,%4.3f,%.6f,%4.3f,%.6f,%4.3f,%2.1f,%2.1f,%1d,%2d,%.3f,%4.1f,%2.2f,%2.2f,%2.2f,%2.2f\r\n",
 							statTime, statP, teTime, teP, dynTime, dynP,  OATemp, MPUtempcel, chosenGnss->fix, chosenGnss->numSV, chosenGnss->time,
 							chosenGnss->coordinates.altitude, chosenGnss->speed.ground, chosenGnss->speed.x, chosenGnss->speed.y, chosenGnss->speed.z);
 				Router::sendXCV(str);
 			}
+			// send only IMU frame
 			if ( haveMPU && IMUstream && !(mtick % IMUrate) ) {
 				sprintf(str,"$IMU,%.6f,%1.4f,%1.4f,%1.4f,%.6f,%3.4f,%3.4f,%3.4f,%3.4f,%3.4f,%3.4f\r\n",accelTime, accelISUNED.x, accelISUNED.y, accelISUNED.z , gyroTime, gyroISUNED.x, gyroISUNED.y, gyroISUNED.z, currentGyroBiasISUNED.x, currentGyroBiasISUNED.y, currentGyroBiasISUNED.z );
 				Router::sendXCV(str);
 			}
+			
+			// if tehre is an MPU and accels caibration data is requested
 			if ( haveMPU && ACCELcalib ) {
 				if ( (mtick % 20) == 0 ) {
+					// average accels over 20 samples
 					accelAVG.x = accelAVG.x / 20;
 					accelAVG.y = accelAVG.y / 20;
-					accelAVG.z = accelAVG.z / 20;			
+					accelAVG.z = accelAVG.z / 20;
+					// stream averaged accels
 					sprintf(str,"$ACCCAL,%06.3f,%06.3f,%06.3f\r\n", accelAVG.x, accelAVG.y, accelAVG.z);
 					Router::sendXCV(str);
+					// reinitialize accels accumulation
 					accelAVG.x = accelISUNED.x;
 					accelAVG.y = accelISUNED.y;
 					accelAVG.z = accelISUNED.z;				
 				} else {
+					// accumulate accel data to prepare average
 					accelAVG.x = accelAVG.x + accelISUNED.x;
 					accelAVG.y = accelAVG.y + accelISUNED.y;
 					accelAVG.z = accelAVG.z + accelISUNED.z;
