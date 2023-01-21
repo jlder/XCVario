@@ -513,7 +513,8 @@ void grabMPU(void *pvParameters){
 			// or (there are enough bias samples to update bias in Flash memory (i.e. more than GBIASupdt)
 			// or (MPU has moved (i.e. !processbias) )
 			if ( biassolution && ( needfirstbias || GBIASstream || IMUstream || ((nbsamples > GBIASupdt) && !processbias) ) ) { 
-				// average gyros to estimate biasnewGyroBias.x = newGyroBias.x / nbsamples;
+				// average gyros to estimate bias
+				newGyroBias.x = newGyroBias.x / nbsamples;
 				newGyroBias.y = newGyroBias.y / nbsamples;
 				newGyroBias.z = newGyroBias.z / nbsamples;
 				currentGyroBias.x = (int16_t)(newGyroBias.x + .5);
