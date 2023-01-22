@@ -60,6 +60,7 @@ Compass::Compass( const uint8_t addr, const uint8_t odr, const uint8_t range, co
 	fx=0;
 	fy=0;
 	fz=0;
+	i=0;
 }
 
 Compass::~Compass()
@@ -120,9 +121,12 @@ float Compass::getGyroHeading( bool *ok, bool addDecl ){
 void Compass::compassT(void* arg ){
 	while(1){
 		TickType_t lastWakeTime = xTaskGetTickCount();
-		if( compass != 0){
+		if( compass ){
 			if( !compass->calibrationIsRunning() ){
 				compass->progress();
+			}
+			else{
+				compass->calcCalibration();
 			}
 			vTaskDelayUntil(&lastWakeTime, 50/portTICK_PERIOD_MS);
 		}
@@ -159,7 +163,7 @@ void Compass:: progress(){
 void Compass::begin(){
 	Deviation::begin();
 	loadCalibration();
-	if( (compass_enable.get() == CS_I2C) || (compass_enable.get() == CS_I2C_NO_TILT) ){
+	if( compass_enable.get() == CS_I2C ){
 		i2c_0.begin(GPIO_NUM_4, GPIO_NUM_18, GPIO_PULLUP_DISABLE, GPIO_PULLUP_DISABLE, (int)(compass_i2c_cl.get()*1000) );
 		if( serial2_speed.get() )
 			serial2_speed.set(0);  // switch off serial interface, we can do only alternatively
@@ -169,7 +173,7 @@ void Compass::begin(){
 }
 
 void Compass::start(){
-	xTaskCreatePinnedToCore(&compassT, "compassT", 2600, NULL, 12, &ctid, 0);
+	xTaskCreatePinnedToCore(&compassT, "compassT", 2600, NULL, 11, &ctid, 0);
 }
 
 float Compass::filteredHeading( bool *okIn )
@@ -184,11 +188,14 @@ float Compass::rawHeading( bool *okIn )
 	return m_magn_heading;
 }
 
-float Compass::filteredTrueHeading( bool *okIn ){ // consider deviation table
-	float deviation_cur = getDeviation(  _heading_average );
-	float fth = Vector::normalizeDeg( _heading_average + deviation_cur );
+float Compass::filteredTrueHeading( bool *okIn, bool withDeviation ){ // consider deviation table
+	float fth = _heading_average;
+	if( withDeviation ){
+		float deviation_cur = getDeviation(  _heading_average );
+		fth = Vector::normalizeDeg( _heading_average + deviation_cur );
+	}
 	*okIn = m_headingValid;
-	// ESP_LOGI(FNAME,"filteredTrueHeading dev=%.1f head=%.1f hddev=%.1f ok=%d", deviation_cur, _heading_average, fth, *okIn   );
+	// ESP_LOGI(FNAME,"filteredTrueHeading head=%.1f hddev=%.1f ok=%d", _heading_average, fth, *okIn   );
 	return fth;
 }
 
@@ -196,10 +203,80 @@ float Compass::filteredTrueHeading( bool *okIn ){ // consider deviation table
 void Compass::setHeading( float h ) {
 	m_gyro_fused_heading = h;
 	m_magn_heading = h;
+	_heading_average = h;
 	m_headingValid=true;
 	_external_data=100;
-	ESP_LOGI( FNAME, "NEW external heading %.1f", h );
+	// ESP_LOGI( FNAME, "NEW external heading %.1f", h );
 };
+
+// calibration calculation in sync with data received in compass task
+void Compass::calcCalibration(){
+	i++;
+	float variance = 0.f;
+	t_float_axes var;
+	if( sensor ){
+		if( sensor->rawAxes( axes ) == false )
+		{
+			errors++;
+			if( errors > 100 ){
+				sensor->initialize();
+				errors = 0;
+			}
+			return;
+		}
+	}
+	raw.x = (*avgX)( axes.x );
+	raw.y = (*avgY)( axes.y );
+	raw.z = (*avgZ)( axes.z );
+	// Variance low pass filtered
+	var.x = axes.x - raw.x;
+	var.y = axes.y - raw.y;
+	var.z = axes.z - raw.z;
+	variance += ((var.x*var.x + var.y*var.y + var.z*var.z) - variance) / 50.f;
+	// ESP_LOGI( FNAME, "Mag Var: %7.3f", variance );
+
+	// ESP_LOGI( FNAME, "Mag Var X:%.2f Y:%.2f Z:%.2f", var.x, var.y, var.z  );
+	/* Find max/min peak values */
+	min.x = ( raw.x < min.x ) ? raw.x : min.x;
+	min.y = ( raw.y < min.y ) ? raw.y : min.y;
+	min.z = ( raw.z < min.z ) ? raw.z : min.z;
+	max.x = ( raw.x > max.x ) ? raw.x : max.x;
+	max.y = ( raw.y > max.y ) ? raw.y : max.y;
+	max.z = ( raw.z > max.z ) ? raw.z : max.z;
+
+	const int16_t minval = (32768/100)*1; // 1% full scale
+	if( abs(raw.x) < minval && abs(raw.y) < minval && variance < 200.f && raw.z > 2*minval  )
+		bits.zmax_green = true;
+	if( abs(raw.x) < minval && abs(raw.y) < minval && variance < 200.f && raw.z < -2*minval  )
+		bits.zmin_green = true;
+	if( abs(raw.x) < minval && abs(raw.z) < minval && variance < 200.f && raw.y > 2*minval  )
+		bits.ymax_green = true;
+	if( abs(raw.x) < minval && abs(raw.z) < minval && variance < 200.f && raw.y < -2*minval  )
+		bits.ymin_green = true;
+	if( abs(raw.y) < minval && abs(raw.z) < minval && variance < 200.f && raw.x > 2*minval  )
+		bits.xmax_green = true;
+	if( abs(raw.y) < minval && abs(raw.z) < minval && variance < 200.f && raw.x < -2*minval  )
+		bits.xmin_green = true;
+
+	if( i < 2 )
+		return;
+
+	// Calculate hard iron correction
+	// calculate average x, y, z magnetic bias.x in counts
+	bias.x = ( (float)max.x + min.x ) / 2;
+	bias.y = ( (float)max.y + min.y ) / 2;
+	bias.z = ( (float)max.z + min.z ) / 2;
+
+	// Calculate soft-iron scale factors
+	// calculate average x, y, z axis max chord length in counts
+	float xchord = ( (float)max.x - min.x );
+	float ychord = ( (float)max.y - min.y );
+	float zchord = ( (float)max.z - min.z );
+	float cord_avgerage = ( xchord + ychord + zchord ) / 3.;
+	scale.x = cord_avgerage / xchord;
+	scale.y = cord_avgerage / ychord;
+	scale.z = cord_avgerage / zchord;
+}
 
 
 /**
@@ -211,109 +288,53 @@ bool Compass::calibrate( bool (*reporter)( t_magn_axes raw, t_float_axes scale, 
 {
 	// reset all old calibration data
 	ESP_LOGI( FNAME, "calibrate/show magnetic sensor, only_show=%d ", only_show );
-	calibrationRunning = true;
-	if( !only_show )
-		resetCalibration();
-
-	ESP_LOGI( FNAME, "calibrate min-max xyz");
-	int i = 0;
-	t_magn_axes raw;
-	t_magn_axes min = { 20000,20000,20000 } ;
-	t_magn_axes max = { 0,0,0 };
-	t_bitfield_compass bits = { false, false, false, false, false, false };
 	if( !only_show ){
+		resetCalibration();
+		calibrationRunning = true;
+		min = { 20000,20000,20000 } ;
+		max = { 0,0,0 };
+		bits = { false, false, false, false, false, false };
+		raw = { 0,0,0 };
+		avgX = new Average<20, int16_t>;
+		avgY = new Average<20, int16_t>;
+		avgZ = new Average<20, int16_t>;
+		i=0;
 		while( true )
 		{
-			i++;
-			if( sensor->rawAxes( raw ) == false )
-			{
-				errors++;
-				if( errors > 10 ){
-					sensor->initialize();
-					errors = 0;
-				}
-				continue;
-			}
-			// ESP_LOGI( FNAME, "Mag Raw X:%d Y:%d Z:%d", raw.x, raw.y, raw.z  );
-			/* Find max/min peak values */
-			min.x = ( raw.x < min.x ) ? raw.x : min.x;
-			min.y = ( raw.y < min.y ) ? raw.y : min.y;
-			min.z = ( raw.z < min.z ) ? raw.z : min.z;
-			max.x = ( raw.x > max.x ) ? raw.x : max.x;
-			max.y = ( raw.y > max.y ) ? raw.y : max.z;
-			max.z = ( raw.z > max.z ) ? raw.z : max.z;
-
-			const int16_t minval = (32768/100)*1; // 1%
-			if( abs(raw.x) < minval && abs(raw.y) < minval && raw.z > 0  )
-				bits.zmax_green = true;
-			if( abs(raw.x) < minval && abs(raw.y) < minval && raw.z < 0  )
-				bits.zmin_green = true;
-			if( abs(raw.x) < minval && abs(raw.z) < minval && raw.y < 0  )
-				bits.ymin_green = true;
-			if( abs(raw.x) < minval && abs(raw.z) < minval && raw.y > 0  )
-				bits.ymax_green = true;
-			if( abs(raw.y) < minval && abs(raw.z) < minval && raw.x < 0  )
-				bits.xmin_green = true;
-			if( abs(raw.y) < minval && abs(raw.z) < minval && raw.x > 0  )
-				bits.xmax_green = true;
-
-			if( i < 2 )
-				continue;
-
-			// Calculate hard iron correction
-			// calculate average x, y, z magnetic bias.x in counts
-			bias.x = ( (float)max.x + min.x ) / 2;
-			bias.y = ( (float)max.y + min.y ) / 2;
-			bias.z = ( (float)max.z + min.z ) / 2;
-
-			// Calculate soft-iron scale factors
-			// calculate average x, y, z axis max chord length in counts
-			float xchord = ( (float)max.x - min.x ) / 2;
-			float ychord = ( (float)max.y - min.y ) / 2;
-			float zchord = ( (float)max.z - min.z ) / 2;
-			float cord_avgerage = ( xchord + ychord + zchord ) / 3.;
-			scale.x = cord_avgerage / xchord;
-			scale.y = cord_avgerage / ychord;
-			scale.z = cord_avgerage / zchord;
-
-			if( !(i%4) )
-			{
-				// Send a calibration report to the subscriber every 500ms
-				reporter( raw, scale, bias, bits, false );
-			}
+			// Send a calibration report to the subscriber
+			reporter( raw, scale, bias, bits, false );
 			if( ESPRotary::readSwitch() == true  )  // more responsive to query every loop
 				break;
+			delay(10);
 		}
+		calibrationRunning = false;
+		delay(100);
+		delete avgX;
+		delete avgY;
+		delete avgZ;
 	}else{
 		ESP_LOGI( FNAME, "Show Calibration");
 		t_bitfield_compass b = calibration_bits.get();
-		reporter( raw, scale, bias, b, true );
+		reporter( axes, scale, bias, b, true );
 		while( ESPRotary::readSwitch() == true  )
 			delay(100);
 	}
 	if( !only_show ){
-		ESP_LOGI( FNAME, "Read Cal-Samples=%d, OK=%d, NOK=%d",
-				i, i-errors, errors );
-
+		ESP_LOGI( FNAME, "Read Cal-Samples=%d, OK=%d, NOK=%d", i, i-errors, errors );
 		if( i < 2 )
 		{
 			// Too less samples to start calibration
 			ESP_LOGI( FNAME, "calibrate min-max xyz not enough samples");
-			calibrationRunning = false;
 			return false;
 		}
 		// save calibration
 		saveCalibration();
 		calibration_bits.set( bits );
 
-		ESP_LOGI( FNAME, "Compass: min.x=%d max.x=%d, min.y=%d max.y=%d, min.z=%d max.z=%d",
-				min.x, max.x, min.y, max.y, min.z, max.z );
-
 		ESP_LOGI( FNAME, "Compass hard-iron: bias.x=%.3f, bias.y=%.3f, bias.z=%.3f", bias.x, bias.y, bias.z );
 		ESP_LOGI( FNAME, "Compass soft-iron: scale.x=%.3f, scale.y=%.3f, scale.z=%.3f",	scale.x, scale.y, scale.x );
 		ESP_LOGI( FNAME, "calibration end" );
 	}
-	calibrationRunning = false;
 	return true;
 }
 
@@ -390,9 +411,10 @@ float Compass::cur_heading( bool *ok ) {
  */
 float Compass::heading( bool *ok )
 {
+	*ok = false;
+
 	if( calibrationRunning == true )
 	{
-		*ok = false;
 		// ESP_LOGI(FNAME,"Calibration running, return 0");
 		return 0.0;
 	}
@@ -400,15 +422,12 @@ float Compass::heading( bool *ok )
 	if( compass_calibrated.get() == 0 )
 	{
 		// No calibration data available, return error
-		*ok = false;
 		// ESP_LOGI(FNAME,"Not calibrated" );
 		return 0.0;
 	}
-	t_magn_axes raw;
 	// ESP_LOGI(FNAME,"QMC5883L::heading() errors:%d, N:%d", errors, N );
 	if( errors > 100 && errors % 100 )  // Holddown processing and throwing errors once sensor is gone
 	{
-		*ok = false;
 		errors++;
 		// ESP_LOGI(FNAME,"Errors overrun, return 0");
 		return 0.0;
@@ -416,15 +435,16 @@ float Compass::heading( bool *ok )
 	if( errors > 100 ){
 		if( !holddown ){
 			holddown = true;
-			ESP_LOGI(FNAME,"100 sensor read errors: Start Holddown");
+			ESP_LOGI(FNAME,"Permanent compass sensor read errors: Start Holddown");
 		}
 	}else{
 		if( holddown ){
 			holddown = false;
+			ESP_LOGI(FNAME,"Okay again compass sensor read");
 		}
 	}
-	bool state = sensor->rawAxes( raw );
-	// ESP_LOGI(FNAME,"state %d  x:%d y:%d z:%d", state, raw.x, raw.y, raw.z );
+	bool state = sensor->rawAxes( rawAxes );
+	// ESP_LOGI(FNAME,"state %d  x:%d y:%d z:%d", state, rawAxes.x, rawAxes.y, rawAxes.z );
 	if( !state )
 	{
 		errors++;
@@ -438,11 +458,9 @@ float Compass::heading( bool *ok )
 				if( sensor->initialize() != ESP_OK ) //  reinitialize once crashed, one retry
 					sensor->initialize();
 			}
-			*ok=false;
 			return 0.0;
 		}
 		if( errors > 100 ){  // survive 100 samples with constant heading if no valid reading
-			*ok = false;
 			return 0.0;
 		}
 		*ok = true;
@@ -455,30 +473,21 @@ float Compass::heading( bool *ok )
 	 * turned clockwise by 90 degrees the X-axis and the Y-axis are moved and
 	 * have to be handled in this way.
 	 */
-	// ESP_LOGI( FNAME, "heading: X:%d Y:%d Z:%d xs:%f ys:%f zs:%f", raw.x, raw.y, raw.z, scale.x, scale.y, scale.z);
+	// ESP_LOGI( FNAME, "heading: X:%d Y:%d Z:%d xs:%f ys:%f zs:%f", rawAxes.x, rawAxes.y, rawAxes.z, scale.x, scale.y, scale.z);
 
-	fy = -(double) ((float( raw.x ) - bias.x) * scale.x);
-	fx = -(double) ((float( raw.y ) - bias.y) * scale.y);  // mounting correction
-	fz = -(double) ((float( raw.z ) - bias.z) * scale.z);
+	fx = -(double) ((float( rawAxes.y ) - bias.y) * scale.y);  // mounting correction
+	fy = -(double) ((float( rawAxes.x ) - bias.x) * scale.x);
+	fz = -(double) ((float( rawAxes.z ) - bias.z) * scale.z);
+	// ESP_LOGI(FNAME, "raw x %d, y %d, z %d ", rawAxes.x, rawAxes.y, rawAxes.z);
 
 	vector_ijk gvr( 0,0,-1 );  // gravity vector direction, pointing down to ground: Z = -1
-	Quaternion q = Quaternion::AlignVectors( gravity_vector, gvr ) ; // create quaternion from gravity vector aligned to glider
+	Quaternion q = Quaternion::AlignVectors(gravity_vector, gvr) ; // create quaternion from gravity vector aligned to glider
 	vector_ijk mv( fx,fy,fz ); // magnetic vector, relative to glider from raw hall sensor x/y/z data
-	mv.normalize(); // normalize vector
-	vector_ijk mev = Quaternion::rotate_vector(mv,q);  // rotate quaternion by magnetic vector
-	mev.normalize();
-	// ESP_LOGI(FNAME,"mev.a %.2f °", mev.a * 180/M_PI );
-	vector_ijk frv( 1,0,0 ); // Fuselage reference vector, pointing in front to nose: X = 1
-	Quaternion q2 = Quaternion::AlignVectors( mev, frv );   // IMHO this is the right way to do it, results are correct
-	euler_angles ce = q2.to_euler_angles();                 //
-
-	if( compass_enable.get() == CS_CAN || compass_enable.get() == CS_I2C ){
-		_heading = -ce.yaw;  // As left turn means plus, euler angles come with 0° for north, -90° for east, -+180 degree for south and for 90° west
-		                     // compass rose goes vice versa, so east is 90° means we need to invert
-		//ESP_LOGI(FNAME,"tcy %03.2f tcx %03.2f  heading:%03.1f pi:%.1f ro:%.1f", tcy, tcx, _heading, pitch, roll );
-	}
-	else if ( compass_enable.get() == CS_I2C_NO_TILT )
-		_heading = -RAD_TO_DEG * atan2( fy, fx );
+	vector_ijk mev = q * mv;  // rotate magnetic vector
+	// ESP_LOGI(FNAME, "gravity a %.2f, b %.2f, c %.2f ", gravity_vector.a, gravity_vector.b, gravity_vector.c );
+	// ESP_LOGI(FNAME, "rot a %.2f, b %.2f, c %.2f, w %.2f - %.2f ", q.b, q.c, q.d, q.a, RAD_TO_DEG*q.getAngle() );
+	_heading = Compass_atan2( mev.b, mev.a );
+	// ESP_LOGI(FNAME,"compensated mag a %.2f, b %.2f, c %.2f h %.2f", mev.a, mev.b, mev.c, _heading);
 
 	_heading = Vector::normalizeDeg( _heading );  // normalize the +-180 degree model to 0..360°
 
@@ -486,7 +495,7 @@ float Compass::heading( bool *ok )
 #if 0
 	if( wind_logging.get() ){
 		char log[120];
-		sprintf( log, "$COMPASS;%d;%d;%d;%.1f;%.1f;%.1f;%d\n", raw.x, raw.y, raw.z, IMU::getPitch(), IMU::getRoll(),  _heading,  totalReadErrors );
+		sprintf( log, "$COMPASS;%d;%d;%d;%.1f;%.1f;%.1f;%d\n", rawAxes.x, rawAxes.y, rawAxes.z, IMU::getPitch(), IMU::getRoll(),  _heading,  totalReadErrors );
 		Router::sendXCV( log );
 	}
 #endif

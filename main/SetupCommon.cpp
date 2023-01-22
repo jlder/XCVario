@@ -30,17 +30,20 @@
 #include "Protocols.h"
 #include "ESPAudio.h"
 #include "SetupCommon.h"
+#include <iostream>
+#include <string>
+#include <sstream>
 
 bool SetupCommon::lazyCommit = true;
 QueueHandle_t SetupCommon::commitSema = nullptr;
 esp_timer_handle_t SetupCommon::_timer = nullptr;
 bool SetupCommon::_dirty = false;
-char SetupCommon::_ID[14];
+char SetupCommon::_ID[16] = { 0 };
+char SetupCommon::default_id[6] = { 0 };
 std::vector<SetupCommon *> *SetupCommon::instances = 0;
 
 
 SetupCommon::SetupCommon() {
-	memset( _ID, 0, sizeof( _ID ));
 	if( !instances )  // instantiate first
 		instances = new std::vector<SetupCommon *>;
 }
@@ -78,6 +81,67 @@ bool SetupCommon::syncEntry( int entry ){
         return (*instances)[entry]->sync();
     }
     return false;
+}
+
+
+void SetupCommon::giveConfigChanges( httpd_req *req, bool log_only ){
+	ESP_LOGI(FNAME,"giveConfigChanges");
+	char cfg[50];
+	for(int i = 0; i < instances->size(); i++ ) {
+		if( (*instances)[i]->isDefault() == false ){
+			char val[20];
+			if( (*instances)[i]->value_str( val ) ){
+				sprintf( cfg, "%s,%s\n", (*instances)[i]->key(), val );
+				ESP_LOGI(FNAME,"%s,%s", (*instances)[i]->key(), val );
+				if( !log_only )
+					httpd_resp_send_chunk( req, cfg, strlen(cfg) );
+			}
+		}
+	}
+	if( !log_only )
+		httpd_resp_send_chunk( req, cfg, 0 );
+}
+
+
+int SetupCommon::restoreConfigChanges( int len, char *data ){
+	ESP_LOGI(FNAME,"restoreConfigChanges len: %d \n %s", len, data );
+	std::istringstream fs;
+	fs.str( data );
+	std::string line;
+	int i=0;
+	int valid=0;
+	while( std::getline(fs, line, '\n') ) {
+		if( line.find( "xcvario-config" ) != std::string::npos ){
+			valid++;
+			ESP_LOGI(FNAME,"found xcvario-config, valid=%d", valid );
+		}
+		else if( line.find( "text/comma-separated-values" ) != std::string::npos ){
+			valid++;
+			ESP_LOGI(FNAME,"found text/comma-separated-values, valid=%d", valid );
+		}
+		else if( line.find( "text/csv" ) != std::string::npos ){
+			valid++;
+			ESP_LOGI(FNAME,"found text/csv, valid=%d", valid );
+		}
+		else if( line.find( "WebKitForm" ) != std::string::npos ){
+			valid++;
+			ESP_LOGI(FNAME,"found WebKitForm, valid=%d", valid );
+		}
+		else if( (line.length() > 1) && (valid >= 3) ){
+			printf( "%d, len:%d, %s\n", i, line.length(), line.c_str() );
+			std::string key = line.substr(0, line.find(','));
+			std::string value = line.substr(line.find(',')+1, line.length());
+			printf( "%d %s ", i, key.c_str()  );
+			SetupCommon * item = getMember( key.c_str() );
+			printf( ", typename: %c \n", item->typeName()  );
+			item->setValueStr( value.c_str() );
+			item->commit();
+			i++;
+		}
+	}
+	commitNow();
+	ESP_LOGI(FNAME,"return %d", i);
+	return i;
 }
 
 bool SetupCommon::factoryReset(){
@@ -152,6 +216,7 @@ bool SetupCommon::initSetup( bool& present ) {
 		}
 	}
 	last_volume = (int)default_volume.get();
+	giveConfigChanges( 0, true );
 
     if ( _timer == nullptr ) {
         // create event queue to connect to the timer callback
@@ -171,22 +236,44 @@ bool SetupCommon::initSetup( bool& present ) {
 	return ret;
 };
 
+
 char * SetupCommon::getID() {
-	if( strlen( _ID ) == 0 ) {
-		uint8_t mac[6];
-		unsigned long  crc = 0;
-		if ( esp_efuse_mac_get_default(mac) == ESP_OK ){
-			crc = mz_crc32(0L, mac, 6);
-		}
-		if( hardwareRevision.get() >= 3 ){
-			sprintf( _ID, "XCVario-%04d", int(crc % 10000) );
-		}
-		else{
-			sprintf( _ID, "iVario-%03d", int(crc % 1000));
-		}
+	char id[7] = { 0 };
+	strcpy( id, custom_wireless_id.get().id );
+	if( hardwareRevision.get() >= XCVARIO_21 ){
+		sprintf( _ID, "%s%s", getFixedID(), id );
+	}
+	else{
+		sprintf( _ID, "%s%s", getFixedID(), id );
 	}
 	return _ID;
 }
+
+// String from crc of MAC address to get a unique ID
+char * SetupCommon::getDefaultID() {
+	uint8_t mac[6];
+	unsigned long  crc = 0;
+	if ( esp_efuse_mac_get_default(mac) == ESP_OK ){
+		crc = mz_crc32(0L, mac, 6);
+	}
+	if( hardwareRevision.get() >= XCVARIO_21 ){
+		sprintf( default_id, "%04d", int(crc % 10000) );
+	}
+	else{
+		sprintf( default_id, "%03d", int(crc % 1000));
+	}
+	return default_id;
+}
+
+char * SetupCommon::getFixedID() {
+	if( hardwareRevision.get() >= XCVARIO_21 ){
+		return "XCVario-";
+	}
+	else{
+		return "iVario-";
+	}
+}
+
 
 bool SetupCommon::isMaster(){
 	bool ret = (wireless == WL_WLAN_MASTER) || ((can_speed.get() != CAN_SPEED_OFF) && (can_mode.get() == CAN_MODE_MASTER));

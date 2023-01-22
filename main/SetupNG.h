@@ -30,6 +30,7 @@
 #include <vector>
 #include "Compass.h"
 #include "SetupCommon.h"
+#include "WifiApp.h"
 
 
 /*
@@ -47,7 +48,7 @@ typedef enum display_type { UNIVERSAL, RAYSTAR_RFJ240L_40P, ST7789_2INCH_12P, IL
 typedef enum chopping_mode { NO_CHOP, VARIO_CHOP, S2F_CHOP, BOTH_CHOP } chopping_mode_t;
 typedef enum rs232linemode { RS232_NORMAL, RS232_INVERTED } rs232lm_t;
 typedef enum nmea_protocol  { OPENVARIO, BORGELT, CAMBRIDGE, XCVARIO, NMEA_OFF } nmea_proto_t;
-typedef enum airspeed_mode  { MODE_IAS, MODE_TAS } airspeed_mode_t;
+typedef enum airspeed_mode  { MODE_IAS, MODE_TAS, MODE_CAS, MODE_SLIP } airspeed_mode_t;
 typedef enum altitude_display_mode  { MODE_QNH, MODE_QFE } altitude_display_mode_t;
 typedef enum e_display_style  { DISPLAY_AIRLINER, DISPLAY_RETRO, DISPLAY_UL } display_style_t;
 typedef enum e_display_variant { DISPLAY_WHITE_ON_BLACK, DISPLAY_BLACK_ON_WHITE } display_variant_t;
@@ -63,20 +64,20 @@ typedef enum e_cruise_audio { AUDIO_S2F, AUDIO_VARIO } e_cruise_audio_2;
 typedef enum e_vario_mode { VARIO_BRUTTO, VARIO_NETTO, CRUISE_NETTO } e_vario_mode_t;
 typedef enum e_airspeed_sensor_type { PS_ABPMRR, PS_TE4525, PS_MP3V5004, PS_NONE } e_airspeed_sensor_type_t;
 typedef enum e_netto_mode { NETTO_NORMAL, NETTO_RELATIVE } e_netto_mode_t;
-typedef enum e_hardware_rev { HW_UNKNOWN=0, HW_LONG_VARIO=1, HW_XCVARIO_20=2, HW_XCVARIO_21=3 } e_hardware_rev_t;
 typedef enum e_gload_mode { GLOAD_OFF=0, GLOAD_DYNAMIC=1, GLOAD_ALWAYS_ON=2 } e_gload_mode_t;
 typedef enum e_windanalyser_mode { WA_OFF=0, WA_STRAIGHT=1, WA_CIRCLING=2, WA_BOTH=3 } e_windanalyser_mode_t;
 typedef enum e_battery_display { BAT_PERCENTAGE, BAT_VOLTAGE, BAT_VOLTAGE_BIG } e_battery_display_t;
 typedef enum e_wind_display { WD_NONE, WD_DIGITS, WD_ARROW, WD_BOTH, WD_COMPASS } e_wind_display_t;
 typedef enum e_wind_reference { WR_NORTH, WR_HEADING, WR_GPS_COURSE } e_wind_reference_t;
+typedef enum e_wind_logging { WLOG_DISABLE, WLOG_WIND, WLOG_GYRO_MAG, WLOG_BOTH } e_wind_logging_t;
 typedef enum e_unit_type{ UNIT_NONE, UNIT_TEMPERATURE, UNIT_ALT, UNIT_SPEED, UNIT_VARIO, UNIT_QNH } e_unit_type_t;
 typedef enum e_temperature_unit { T_CELCIUS, T_FAHRENHEIT, T_KELVIN } e_temperature_unit_t;
 typedef enum e_alt_unit { ALT_UNIT_METER, ALT_UNIT_FT, ALT_UNIT_FL } e_alt_unit_t;
 typedef enum e_speed_unit { SPEED_UNIT_KMH, SPEED_UNIT_MPH, SPEED_UNIT_KNOTS } e_speed_unit_t;
 typedef enum e_vario_unit { VARIO_UNIT_MS, VARIO_UNIT_FPM, VARIO_UNIT_KNOTS } e_vario_unit_t;
 typedef enum e_qnh_unit { QNH_HPA, QNH_INHG } e_qnh_unit_t;
-typedef enum e_compasss_sensor_type { CS_DISABLE, CS_I2C, CS_I2C_NO_TILT, CS_CAN } e_compasss_sensor_type_t;
-typedef enum e_alt_quantisation { ALT_QUANT_DISABLE, ALT_QUANT_1, ALT_QUANT_5, ALT_QUANT_10, ALT_QUANT_20 } e_alt_quantisation_t;
+typedef enum e_compasss_sensor_type { CS_DISABLE=0, CS_I2C=1, CS_CAN=3 } e_compasss_sensor_type_t;
+typedef enum e_alt_quantisation { ALT_QUANT_DISABLE, ALT_QUANT_2, ALT_QUANT_5, ALT_QUANT_10, ALT_QUANT_20 } e_alt_quantisation_t;
 
 typedef enum e_sync { SYNC_NONE, SYNC_FROM_MASTER, SYNC_FROM_CLIENT, SYNC_BIDIR } e_sync_t;       // determines if data is synched from/to client. BIDIR means sync at commit from both sides
 typedef enum e_reset { RESET_NO, RESET_YES } e_reset_t;   // determines if data is reset to defaults on factory reset
@@ -89,7 +90,15 @@ typedef enum e_s2f_arrow_color { AC_WHITE_WHITE, AC_BLUE_BLUE, AC_GREEN_RED } e_
 typedef enum e_vario_needle_color { VN_COLOR_WHITE, VN_COLOR_ORANGE, VN_COLOR_RED }  e_vario_needle_color_t;
 typedef enum e_data_monitor { MON_OFF, MON_BLUETOOTH, MON_WIFI_8880, MON_WIFI_8881, MON_WIFI_8882, MON_S1, MON_S2, MON_CAN  }  e_data_monitor_t;
 typedef enum e_display_orientation { DISPLAY_NORMAL, DISPLAY_TOPDOWN } e_display_orientation_t;
-typedef enum e_gear_warning_io { GW_OFF, GW_FLAP_SENSOR, GW_S2_RS232_RX }  e_gear_warning_io_t;
+typedef enum e_gear_warning_io { GW_OFF, GW_FLAP_SENSOR, GW_S2_RS232_RX, GW_FLAP_SENSOR_INV, GW_S2_RS232_RX_INV }  e_gear_warning_io_t;
+typedef enum e_data_mon_mode { MON_MOD_ASCII, MON_MOD_BINARY } e_data_mon_mode_t;
+typedef enum e_hardware_rev { 	HW_UNKNOWN=0,
+								HW_LONG_VARIO=1,
+								XCVARIO_20=2,  // 1 RS232
+								XCVARIO_21=3,  // 2 RS232, AHRS
+								XCVARIO_22=4,  // 2 RS232, AHRS, CAN Bus,
+								XCVARIO_23=5   // 2 RS232, AHRS, CAN Bus, AHRS temperature control
+} e_hardware_rev_t;        // XCVario-Num = hardware revision + 18
 
 const int baud[] = { 0, 4800, 9600, 19200, 38400, 57600, 115200 };
 void change_bal();
@@ -102,7 +111,6 @@ typedef struct setup_flags{
 	uint8_t _unit  :3;
 } t_setup_flags;
 
-
 template<typename T>
 class SetupNG: public SetupCommon
 {
@@ -112,6 +120,10 @@ public:
 			return 'F';
 		else if( typeid( T ) == typeid( int ) )
 			return 'I';
+		else if( typeid( T ) == typeid( t_bitfield_compass ) )
+			return 'B';
+		else if( typeid( T ) == typeid( mpud::raw_axes_t ) )
+			return 'A';
 		return 'U';
 	}
 	SetupNG( const char * akey,
@@ -137,6 +149,38 @@ public:
 		_action = action;
 	}
 
+	virtual void setValueStr( const char * val ){
+		if( flags._volatile != VOLATILE ){
+			if( typeid( T ) == typeid( float ) ){
+				float t;
+				sscanf( val,"%f", &t );
+				memcpy((char *)&_value, &t, sizeof(t) );
+			}
+			else if( typeid( T ) == typeid( int ) ){
+				int t;
+				sscanf( val,"%d", &t );
+				memcpy((char *)&_value, &t, sizeof(t) );
+			}
+			else if( typeid( T ) == typeid( t_bitfield_compass ) ){
+				int temp;
+				t_bitfield_compass t;
+				if (sscanf(val ,"%u", &temp) == 1 && temp < 256) {
+					unsigned char c=temp;
+					memcpy((char *)&_value, &c, sizeof(t) );
+				}
+			}
+			else if( typeid( T ) == typeid( mpud::raw_axes_t ) ){
+				mpud::raw_axes_t t;
+				int x,y,z;
+				sscanf( val,"%d/%d/%d", &x, &y, &z );
+				t.x = x;
+				t.y = y;
+				t.z = z;
+				memcpy((char *)&_value, &t, sizeof(t) );
+			}
+		}
+	}
+
 	inline T* getPtr() {
 		return &_value;
 	}
@@ -151,6 +195,36 @@ public:
 	}
 	virtual T getGui() const { return get(); } // tb. overloaded for blackboard
 	virtual const char* unit() const { return ""; } // tb. overloaded for blackboard
+
+	virtual bool value_str(char *str){
+		if( flags._volatile != VOLATILE ){
+			if( typeid( T ) == typeid( float ) ){
+				float t;
+				memcpy(&t, &_value, sizeof(t) );
+				sprintf( str,"%f", t );
+				return true;
+			}
+			else if( typeid( T ) == typeid( int ) ){
+				int t;
+				memcpy(&t, &_value, sizeof(t) );
+				sprintf( str,"%d", t );
+				return true;
+			}
+			else if( typeid( T ) == typeid( t_bitfield_compass ) ){
+				t_bitfield_compass t;
+				memcpy((char*)&t, &_value, sizeof(t) );
+				sprintf( str,"%u", *(char*)&t );
+				return true;
+			}
+			else if( typeid( T ) == typeid( mpud::raw_axes_t ) ){
+				mpud::raw_axes_t t;
+				memcpy((char*)&t, &_value, sizeof(t) );
+				sprintf( str, "%d/%d/%d", t.x, t.y, t.z );
+				return true;
+			}
+		}
+		return false;
+	}
 
 	bool set( T aval, bool dosync=true, bool doAct=true ) {
 		if( _value == aval ){
@@ -215,7 +289,9 @@ public:
 		if( !open(h) ) {
 			return false;
 		}
-		ESP_LOGI(FNAME,"NVS commit(key:%s , addr:%08x, len:%d, nvs_handle: %04x)", _key, (unsigned int)(&_value), sizeof( _value ), h);
+		char val[30];
+		value_str(val);
+		ESP_LOGI(FNAME,"NVS commit(key:%s, val: %s addr:%08x, len:%d, nvs_handle: %04x)", _key, val, (unsigned int)(&_value), sizeof( _value ), h);
 		esp_err_t err = nvs_set_blob(h, _key, (void *)(&_value), sizeof( _value ));
 		if(err != ESP_OK) {
 			ESP_LOGE(FNAME,"NVS set blob error %d", err );
@@ -256,7 +332,7 @@ public:
 
 	virtual bool init() {
 		if( flags._volatile != PERSISTENT ){
-			ESP_LOGI(FNAME,"NVS volatile set default");
+			// ESP_LOGI(FNAME,"NVS volatile set default");
 			set( _default );
 			return true;
 		}
@@ -289,7 +365,7 @@ public:
 					commit(false);
 				}
 				else {
-					ESP_LOGI(FNAME,"NVS key %s exists len: %d", _key, required_size );
+					// ESP_LOGI(FNAME,"NVS key %s exists len: %d", _key, required_size );
 				}
 			}
 		}
@@ -320,6 +396,13 @@ public:
 		return flags._reset;
 	}
 
+	virtual bool isDefault() {
+		if( _default == _value )
+			return true;
+		else
+			return false;
+	}
+
     inline T getDefault() const { return _default; }
 	inline uint8_t getSync() { return flags._sync; }
 
@@ -330,6 +413,9 @@ private:
 	t_setup_flags flags;
 	void (* _action)();
 };
+
+
+
 
 extern SetupNG<float> 		QNH;
 extern SetupNG<float> 		polar_wingload;
@@ -362,7 +448,7 @@ extern SetupNG<float>		gross_weight;
 extern SetupNG<float>  		s2f_speed;
 
 extern SetupNG<int>  		audio_variable_frequency;
-extern SetupNG<int>  		audio_mode;
+extern SetupNG<int>  		s2f_switch_mode;
 extern SetupNG<int>  		chopping_mode;
 extern SetupNG<int>  		chopping_style;
 extern SetupNG<int>  		amplifier_shutdown;
@@ -387,8 +473,10 @@ extern SetupNG<float>  		bat_full_volt;
 extern SetupNG<float>  		core_climb_period;
 extern SetupNG<float>  		core_climb_min;
 extern SetupNG<float>  		core_climb_history;
+extern SetupNG<float>  		mean_climb_major_change;
 extern SetupNG<float>  		elevation;
 extern SetupNG<float>  		audio_volume;
+extern SetupNG<int>  		audio_split_vol;
 extern SetupNG<float>  		default_volume;
 extern SetupNG<float>  		frequency_response;
 extern SetupNG<float>  		max_volume;
@@ -402,6 +490,7 @@ extern SetupNG<float>  		OAT;
 extern SetupNG<float>  		OAT;   // outside temperature
 extern SetupNG<float>  		swind_dir;   // straight wind direction
 extern SetupNG<float>  		swind_speed;
+extern SetupNG<float>  		swind_sideslip_lim;
 extern SetupNG<float>  		cwind_dir;   // cirling wind direction
 extern SetupNG<float>  		cwind_speed;
 extern SetupNG<float>  		mag_hdm;
@@ -471,6 +560,7 @@ extern SetupNG<int>		    display_variant;
 extern SetupNG<int>		    s2f_switch_type;
 extern SetupNG<mpud::raw_axes_t> gyro_bias;
 extern SetupNG<mpud::raw_axes_t> accl_bias;
+extern SetupNG<float>       mpu_temperature;
 extern SetupNG<int>		    hardwareRevision;
 extern SetupNG<int>		    ahrs_licence_dig1;
 extern SetupNG<int>		    ahrs_licence_dig2;
@@ -544,6 +634,7 @@ extern SetupNG<float>		gload_pos_limit;
 extern SetupNG<float>		gload_neg_limit;
 extern SetupNG<float>		gload_pos_max;
 extern SetupNG<float>		gload_neg_max;
+extern SetupNG<float>		airspeed_max;
 extern SetupNG<int> 		wind_enable;
 extern SetupNG<int> 		wind_logging;
 extern SetupNG<float> 		wind_as_min;
@@ -555,8 +646,12 @@ extern SetupNG<float>       wind_dev_filter;
 extern SetupNG<int> 		wind_display;
 extern SetupNG<int> 		wind_reference;
 extern SetupNG<float> 		wind_max_deviation;
+extern SetupNG<float>		wind_straight_course_tolerance;
+extern SetupNG<float> 		wind_straight_speed_tolerance;
 extern SetupNG<float>       max_circle_wind_diff;
 extern SetupNG<float>       circle_wind_lowpass;
+extern SetupNG<float>      	max_circle_wind_delta_deg;
+extern SetupNG<float>      	max_circle_wind_delta_speed;
 extern SetupNG<int> 		can_speed;
 extern SetupNG<int> 		rt_can_xcv;
 extern SetupNG<int> 		rt_xcv_wl;
@@ -570,8 +665,10 @@ extern SetupNG<int> 		screen_gmeter;
 extern SetupNG<int> 		screen_flarm;
 extern SetupNG<int> 		screen_centeraid;
 extern SetupNG<int> 		data_monitor;
+extern SetupNG<int> 		data_monitor_mode;
 extern SetupNG<t_bitfield_compass> 	calibration_bits;
 extern SetupNG<int> 		gear_warning;
+extern SetupNG<t_wireless_id>  custom_wireless_id;
 
 extern uint8_t g_col_background;
 extern uint8_t g_col_highlight;

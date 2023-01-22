@@ -50,7 +50,7 @@ typedef struct bitfield_compass{
 	   	return( String(xmax_green) + " " + String(xmin_green) +
 	   			String(ymax_green) + " " + String(ymin_green) +
 				String(zmax_green) + " " + String(zmin_green) );
-	 };
+	};
 }t_bitfield_compass;
 
 class Compass: public Deviation
@@ -73,6 +73,7 @@ public:
 	// sensor related interface
 	bool haveSensor();
 	bool overflowFlag();
+	bool externalData() { return( _external_data > 0); }
 
 	// Heading related methods
 	float cur_heading( bool *ok );
@@ -80,8 +81,9 @@ public:
 	float rawX() { return fx; };
 	float rawY() { return fy; };
 	float rawZ() { return fz; };
+	t_magn_axes getRawAxes() { return rawAxes; };
 	float filteredHeading( bool *okIn );
-	float filteredTrueHeading( bool *okIn );
+	float filteredTrueHeading( bool *okIn, bool withDeviation=true );
 	void setGyroHeading( float hd );
 	float getGyroHeading( bool *ok, bool addDeclination=true );
 	inline bool headingValid() {	return m_headingValid;	}
@@ -95,6 +97,7 @@ public:
 	bool calibrationIsRunning() {  return calibrationRunning; }
 	// Returns total number of read errors
 	int getReadError(){ return totalReadErrors; };
+	void calcCalibration();
 
 private:
 	// Calculates tilt compensated heading in degrees of 0...359. The ok flag is set to true if fine, else false
@@ -139,4 +142,14 @@ private:
 	double fx;
 	double fy;
 	double fz;
+	t_magn_axes rawAxes;
+	t_magn_axes raw;
+	t_magn_axes axes;
+	t_bitfield_compass bits;
+	t_magn_axes min;
+	t_magn_axes max;
+	Average<20, int16_t> *avgX = 0;
+	Average<20, int16_t> *avgY = 0;
+	Average<20, int16_t> *avgZ = 0;
+	int i;
 };

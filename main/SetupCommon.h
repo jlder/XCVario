@@ -25,6 +25,8 @@
 #include <iostream>
 #include <vector>
 #include "SetupNG.h"
+#include <esp_http_server.h>
+
 
 class SetupCommon {
 public:
@@ -34,19 +36,28 @@ public:
 	// virtual methods to be implemented in derived class
 	virtual bool init() = 0;
 	virtual bool erase() = 0;
+	virtual bool commit( bool sync=true) = 0;
+	virtual void setValueStr( const char * val ) = 0;
 	virtual bool mustReset() = 0;
+	virtual bool isDefault() = 0;
+	virtual bool value_str(char *str) = 0;
 	virtual const char* key() = 0;
 	virtual char typeName() = 0;
 	virtual bool sync() = 0;
 	virtual uint8_t getSync() = 0;
+	// virtual char* showSetting( bool nondefault=true ) = 0;
 
 	static bool initSetup( bool &present );  // returns false if FLASH was completely blank
 	static char *getID();
+	static char *getDefaultID();
+	static char *getFixedID();
 	static void sendSetup( uint8_t sync, const char * key, char type, void *value, int len, bool ack=false );
 	static SetupCommon * getMember( const char * key );
 	static bool syncEntry( int entry );
 	static int numEntries();
 	static bool factoryReset();
+	static void giveConfigChanges( httpd_req *req, bool log_only=false );
+	static int restoreConfigChanges( int len, char *data );
 
 	// housekeeping supporters
 	static bool isMaster();
@@ -72,6 +83,7 @@ private:
 	static void timeout(QueueHandle_t arg);
     static esp_timer_handle_t _timer;
     static bool _dirty;
-	static char _ID[14];
+	static char _ID[16];
+	static char default_id[6];
 };
 

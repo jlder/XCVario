@@ -13,13 +13,14 @@
 
 const char * SetupMenuSelect::getEntry() const
 {
-	ESP_LOGI(FNAME,"getEntry() select:%d", _select );
+	// ESP_LOGI(FNAME,"getEntry() select:%d", _select );
 	return _values[ _select ];
 }
 
 const char *SetupMenuSelect::value() {
-	if( _nvs )
-		_select = _nvs->get();
+	if( _nvs ){
+		_select = _nvs->get() > _numval-1 ? _numval-1 : _nvs->get();
+	}
 	return getEntry();
 }
 
@@ -58,7 +59,7 @@ int SetupMenuSelect::getSelect() {
 
 void SetupMenuSelect::addEntryList( const char ent[][4], int size )
 {
-	ESP_LOGI(FNAME,"addEntryList() char ent[][4]");
+	// ESP_LOGI(FNAME,"addEntryList() char ent[][4]");
 	for( int i=0; i<size; i++ ) {
 		_values.push_back( (char *)ent[i] ); _numval++;
 #ifdef DEBUG_MAX_ENTRIES
@@ -101,7 +102,7 @@ SetupMenuSelect::SetupMenuSelect( const char* title, bool restart, int (*action)
 	bits._save = save;
 	if( anvs ) {
 		_nvs = anvs;
-		ESP_LOGI(FNAME,"_nvs->key(): %s val: %d", _nvs->key(), (int)(_nvs->get()) );
+		// ESP_LOGI(FNAME,"_nvs->key(): %s val: %d", _nvs->key(), (int)(_nvs->get()) );
 		_select = (int16_t)(*(int *)(_nvs->getPtr()));
 		_select_save = (int16_t)_nvs->get();
 	}
@@ -113,7 +114,7 @@ SetupMenuSelect::~SetupMenuSelect()
 }
 
 void SetupMenuSelect::display( int mode ){
-	if( (selected != this) || !inSetup  )
+	if( (selected != this) || !gflags.inSetup  )
 		return;
 	ESP_LOGI(FNAME,"display() pressed:%d title:%s action: %x hl:%d", pressed, _title, (int)(_action), highlight );
 	clear();
@@ -160,7 +161,7 @@ void SetupMenuSelect::display( int mode ){
 }
 
 void SetupMenuSelect::down(int count){
-	if( (selected != this) || !inSetup )
+	if( (selected != this) || !gflags.inSetup )
 		return;
 	if( _numval > 9 ){
 		xSemaphoreTake(spiMutex,portMAX_DELAY );
@@ -187,7 +188,7 @@ void SetupMenuSelect::down(int count){
 }
 
 void SetupMenuSelect::up(int count){
-	if( (selected != this) || !inSetup )
+	if( (selected != this) || !gflags.inSetup )
 		return;
 	if( _numval > 9 )
 	{

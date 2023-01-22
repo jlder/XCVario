@@ -33,9 +33,11 @@ bool ESPRotary::longPressed = false;
 static TaskHandle_t pid = NULL;
 
 void ESPRotary::attach(RotaryObserver *obs) {
+	// ESP_LOGI(FNAME,"Attach obs: %p", obs );
 	observers.push_back(obs);
 }
 void ESPRotary::detach(RotaryObserver *obs) {
+	// ESP_LOGI(FNAME,"Detach obs: %p", obs );
 	auto it = std::find(observers.begin(), observers.end(), obs);
 	if ( it != observers.end() ) {
 		observers.erase(it);
@@ -59,6 +61,8 @@ void ESPRotary::begin(gpio_num_t aclk, gpio_num_t adt, gpio_num_t asw ) {
 	sw = asw;
 
 	gpio_set_direction(sw,GPIO_MODE_INPUT);
+	gpio_set_direction(dt,GPIO_MODE_INPUT);
+	gpio_set_direction(clk,GPIO_MODE_INPUT);
 	gpio_pullup_en(sw); // Rotary Encoder Button
 	gpio_pullup_en(dt);
 	gpio_pullup_en(clk);
@@ -108,7 +112,7 @@ void ESPRotary::begin(gpio_num_t aclk, gpio_num_t adt, gpio_num_t asw ) {
 	pcnt_counter_clear(PCNT_UNIT_1);
 	pcnt_counter_resume(PCNT_UNIT_1);
 
-	xTaskCreatePinnedToCore(&ESPRotary::informObservers, "informObservers", 4096, NULL, 18, &pid, 0);
+	xTaskCreatePinnedToCore(&ESPRotary::informObservers, "informObservers", 4096, NULL, 14, &pid, 0);
 }
 
 int16_t old_cnt = 0;
@@ -217,7 +221,7 @@ void ESPRotary::informObservers( void * args )
 			int diff = (r_enc_count+r_enc2_count) - old_cnt;
 			diff = diff / ( rotary_inc.get()+1 );
 			// ESP_LOGI(FNAME,"Rotary diff %d", diff );
-			if( hardwareRevision.get() >= 3 ) {
+			if( hardwareRevision.get() >= XCVARIO_21 ) {
 				if( rotary_dir_21.get() == 1 ) // reverse default for 2021 series
 					diff = -diff;
 			}

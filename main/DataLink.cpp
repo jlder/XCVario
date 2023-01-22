@@ -30,6 +30,10 @@ const uint8_t FB_START_FRAME = 0x73;
 
 const uint8_t KRT2_STX_START = 0x02;
 
+const uint8_t BECKER_START_FRAME = 0xA5;
+const uint8_t BECKER_PROTID      = 0x14;
+
+
 
 DataLink::DataLink(){
 	state = GET_NMEA_UBX_SYNC;
@@ -53,7 +57,7 @@ void DataLink::process( const char *packet, int len, int port ) {
 		routeSerialData(packet, len, port, false );
 	}else{
 		for (int i = 0; i < len; i++) {
-			parse_NMEA_UBX(packet[i], port, i == len-1);
+			parse_NMEA_UBX(packet[i], port );
 		}
 	}
 }
@@ -77,9 +81,9 @@ void DataLink::routeSerialData( const char *data, uint32_t len, int port, bool n
 		Router::routeS2();
 	}
 	else if( port == 3 ){  // CAN
-		Router::forwardMsg( tx, can_rx_q, nmea  );
+		Router::forwardMsg( tx, can_rx_q, nmea );
 		Router::routeCAN();
-		DM.monitorString( MON_CAN, DIR_RX, tx.c_str(), false );
+		DM.monitorString( MON_CAN, DIR_RX, tx.c_str(), len);
 		// ESP_LOG_BUFFER_HEXDUMP(FNAME, tx.c_str(), tx.length(), ESP_LOG_INFO);
 	}
 	else if( port == 7 ){  // Bluetooth
@@ -116,7 +120,7 @@ void DataLink::processNMEA( char * buffer, int len, int port ){
 	routeSerialData(buffer, len, port, true );
 }
 
-void DataLink::parse_NMEA_UBX( char c, int port, bool last ){
+void DataLink::parse_NMEA_UBX( char c, int port ){
 	// ESP_LOGI(FNAME, "Port S%1d: char=%c pos=%d  state=%d", port, c, pos, state );
 	switch(state) {
 	case GET_NMEA_UBX_SYNC:
@@ -151,8 +155,49 @@ void DataLink::parse_NMEA_UBX( char c, int port, bool last ){
 			framebuffer[pos] = c;
 			pos++;
 			break;
+		case BECKER_START_FRAME:
+			pos = 0;
+			len = 0;
+			framebuffer[pos] = c;
+			pos++;
+			state = GET_BECKER_PROTID;
 		}
 		break;
+
+		case GET_BECKER_PROTID:
+			if( c == BECKER_PROTID ){
+			   framebuffer[pos] = c;
+			   pos++;
+			   state = GET_BECKER_LEN;
+			}else{
+				state = GET_NMEA_UBX_SYNC;
+				pos = 0;
+			}
+			break;
+
+		case GET_BECKER_LEN:
+			framebuffer[pos] = c;
+			len = c;
+			if( len < 64 ){ // we support up to 64 bytes of msg length what should be far enough
+			   pos++;
+			   state = GET_BECKER_DATA;
+			}else
+			{
+				state = GET_NMEA_UBX_SYNC;
+				pos = 0;
+			}
+			break;
+
+		case GET_BECKER_DATA:
+			framebuffer[pos] = c;
+			pos++;
+			if( pos > len+5 ){  // including 3 bytes header/protid/len and 2 bytes CRC
+				framebuffer[pos] = 0;
+				routeSerialData(framebuffer, pos+1, port, true );
+				state = GET_NMEA_UBX_SYNC;
+				pos = 0;
+			}
+			break;
 
 		case GET_KRT2_STX:
 			framebuffer[pos] = c;
@@ -176,11 +221,11 @@ void DataLink::parse_NMEA_UBX( char c, int port, bool last ){
 		case  GET_FB_LEN2:
 			len = (chkA + (unsigned char)c*256 );
 			if( len > 512 ){
-				ESP_LOGI(FNAME, "Odd length from flarm bincom: %d: restart", len );
+				ESP_LOGW(FNAME, "Odd length from flarm bincom: %d: restart", len );
 				state = GET_NMEA_UBX_SYNC;
 				break;
 			}
-			ESP_LOGI(FNAME, "got length from flarm bincom: %d", len );
+			// ESP_LOGI(FNAME, "got length from flarm bincom: %d", len );
 			state = GET_FB_DATA;
 			framebuffer[pos] = c;
 			pos++;
@@ -197,8 +242,8 @@ void DataLink::parse_NMEA_UBX( char c, int port, bool last ){
 
 		case GET_NMEA_STREAM:
 			if ((c < NMEA_MIN || c > NMEA_MAX) && (c != NMEA_CR && c != NMEA_LF)) {
-				ESP_LOGE(FNAME, "Port S%1d: Invalid NMEA character %x, restart, pos: %d, state: %d", port, (int)c, pos, state );
-				ESP_LOG_BUFFER_HEXDUMP(FNAME, framebuffer, pos+1, ESP_LOG_INFO);
+				// ESP_LOGE(FNAME, "Port S%1d: Invalid NMEA character %x, restart, pos: %d, state: %d", port, (int)c, pos, state );
+				// ESP_LOG_BUFFER_HEXDUMP(FNAME, framebuffer, pos+1, ESP_LOG_INFO);
 				state = GET_NMEA_UBX_SYNC;
 				break;
 			}
@@ -207,14 +252,23 @@ void DataLink::parse_NMEA_UBX( char c, int port, bool last ){
 				pos = 0;
 				state = GET_NMEA_UBX_SYNC;
 			}
-			framebuffer[pos] = c;
-			pos++;
-			if ( (c == NMEA_LF) || (last && (c == NMEA_CR) ) ) { // catch case when CR is last char, e.g. commands from BT
+			if ( c == NMEA_CR || c == NMEA_LF ) { // normal case, accordign to NMEA 183 protocol, first CR, then LF as the last char  (<CR><LF> ends the message.)
+				           	   	   	   	   	   	  // but we accept also a single terminator as not relevant for the data carried        0d  0a
+				// make things clean!                                                                                                   \r  \n
+				framebuffer[pos] = NMEA_CR;       // append a CR
+				pos++;
+				framebuffer[pos] = NMEA_LF;       // append a LF
+				pos++;
 				framebuffer[pos] = 0;  // framebuffer is zero terminated
+				// pos++;
 				processNMEA( framebuffer, pos, port );
 				state = GET_NMEA_UBX_SYNC;
 				pos = 0;
+			}else{
+				framebuffer[pos] = c;
+				pos++;
 			}
+
 			break;
 
 		case GET_UBX_SYNC2:

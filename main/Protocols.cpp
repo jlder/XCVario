@@ -29,8 +29,9 @@
 #include "SetupNG.h"
 #include "CircleWind.h"
 
-S2F * Protocols::_s2f = 0;
-
+S2F *   Protocols::_s2f = 0;
+uint8_t Protocols::_protocol_version = 1;
+bool    Protocols::_can_send_error = false;
 Protocols::Protocols(S2F * s2f) {
 	_s2f = s2f;
 }
@@ -113,8 +114,31 @@ void Protocols::sendItem( const char *key, char type, void *value, int len, bool
 		// ESP_LOGI(FNAME,"sendNMEAString: %s", str );
 		SString nmea( str );
 		if( !Router::forwardMsg( nmea, can_tx_q ) ){
-			ESP_LOGW(FNAME,"Warning: Overrun in send to Client XCV %d bytes", nmea.length() );
+			if( !_can_send_error ){
+				_can_send_error = true;
+				ESP_LOGW(FNAME,"Permanent send msg to XCV client XCV (%d bytes) failure", nmea.length() );
+			}
 		}
+		else if( _can_send_error ){
+			_can_send_error = false;
+			ESP_LOGI(FNAME,"Okay again send msg to XCV client (%d bytes)", nmea.length() );
+		}
+	}
+}
+
+void Protocols::sendNmeaXCVCmd( const char *item, float value ){
+	if( Flarm::bincom )  // do not sent to client in case
+		return;
+	// ESP_LOGI(FNAME,"sendNMEACmd: %s: %f", item, value );
+	char str[40];
+	sprintf( str,"!xcv,%s,%d", item, (int)(value+0.5) );
+	int cs = calcNMEACheckSum(&str[1]);
+	int i = strlen(str);
+	sprintf( &str[i], "*%02X\r\n", cs );
+	ESP_LOGI(FNAME,"sendNMEACmd: %s", str );
+	SString nmea( str );
+	if( !Router::forwardMsg( nmea, xcv_tx_q ) ){
+		ESP_LOGW(FNAME,"Warning: Overrun in send to XCV tx queue %d bytes", nmea.length() );
 	}
 }
 
@@ -144,11 +168,18 @@ void Protocols::sendNMEA( proto_t proto, char* str, float baro, float dp, float 
 		 */
 		float bal = (aballast+100)/100.0;
 		// ESP_LOGW(FNAME,"Ballast: %f %1.2f", bal, bal );
-		sprintf(str,"$PXCV,%3.1f,%1.2f,%d,%1.3f,%d,%2.1f,%4.1f,%4.1f,%.1f", te, mc, bugs, bal, !cruise, std::roundf(temp*10.f)/10.f, QNH.get() , baro, dp );
+		if( Protocols::getXcvProtocolVersion() > 1 ){
+			// omit ballast overload field
+			sprintf(str,"$PXCV,%3.1f,%1.2f,%d,,%d,%2.1f,%4.1f,%4.1f,%.1f", te, mc, bugs, !cruise, std::roundf(temp*10.f)/10.f, QNH.get() , baro, dp );
+
+		}else{
+			// legacy send ballast overload
+			sprintf(str,"$PXCV,%3.1f,%1.2f,%d,%1.3f,%d,%2.1f,%4.1f,%4.1f,%.1f", te, mc, bugs, bal, !cruise, std::roundf(temp*10.f)/10.f, QNH.get() , baro, dp );
+		}
 		int append_idx = strlen(str);
-		if( haveMPU && attitude_indicator.get() ){
+		if( gflags.haveMPU && attitude_indicator.get() ){
 			float roll = IMU::getRoll();
-			float pitch = IMU::getPitch();
+			float pitch = IMU::getXCSPitch();
 			sprintf(str+append_idx,",%3.1f,%3.1f,%1.2f,%1.2f,%1.2f", roll, pitch, acc_x, acc_y, acc_z );
 		}else{
 			sprintf(str+append_idx,",,,,,");
@@ -233,10 +264,10 @@ void Protocols::sendNMEA( proto_t proto, char* str, float baro, float dp, float 
 		 */
 		sprintf(str, "$PEYI,%.2f,%.2f,,,,%.2f,%.2f,%.2f,,", roll, pitch,acc_x,acc_y,acc_z );
 	}
-	else if( haveMPU && attitude_indicator.get() && (proto == P_AHRS_APENV1) ) {  // LEVIL_AHRS
+	else if( gflags.haveMPU && attitude_indicator.get() && (proto == P_AHRS_APENV1) ) {  // LEVIL_AHRS
 		sprintf(str, "$APENV1,%d,%d,0,0,0,%d", (int)(Units::kmh2knots(ias)+0.5),(int)(Units::meters2feet(alt)+0.5),(int)(Units::ms2fpm(te)+0.5));
 	}
-	else if( haveMPU && attitude_indicator.get() && (proto == P_AHRS_RPYL) ) {   // LEVIL_AHRS  $RPYL,Roll,Pitch,MagnHeading,SideSlip,YawRate,G,errorcode,
+	else if( gflags.haveMPU && attitude_indicator.get() && (proto == P_AHRS_RPYL) ) {   // LEVIL_AHRS  $RPYL,Roll,Pitch,MagnHeading,SideSlip,YawRate,G,errorcode,
 		sprintf(str, "$RPYL,%d,%d,%d,0,0,%d,0",
 				(int)(IMU::getRoll()*10+0.5),         // Bank == roll     (deg)
 				(int)(IMU::getPitch()*10+0.5),        // Pitch            (deg)
@@ -308,11 +339,72 @@ void Protocols::parseNMEA( const char *str ){
 	// ESP_LOGI(FNAME,"parseNMEA: %s, len: %d", str,  strlen(str) );
 
 	if ( strncmp( str, "!xc,", 4 ) == 0 ) { // need this to support Wind Simulator with Compass simulation
-		float h;
-		sscanf( str,"!xc,%f", &h );
-		// ESP_LOGI(FNAME,"Compass heading detected=%3.1f", h );
+		float heading;
+		float TAS;
+		sscanf( str,"!xc,%f,%f", &heading, &TAS );
+		ESP_LOGI(FNAME,"Compass heading detected=%3.1f TAS: %3.1f", heading, TAS );
 		if( compass )
-			compass->setHeading( h );
+			compass->setHeading( heading );
+		tas = TAS;
+	}
+	else if ( strncmp( str, "!xcs,", 5 ) == 0 ) {
+		if( strncmp( str+5, "crew-weight,", 12 ) == 0 ){
+			ESP_LOGI(FNAME,"Detected crew-weight cmd");
+			int weight;
+			int cs;
+			sscanf(str+17, "%d*%02x", &weight, &cs);
+			int calc_cs=calcNMEACheckSum( str );
+			if( calc_cs != cs ){
+				ESP_LOGW(FNAME,"CS Error in %s; %d != %d", str, cs, calc_cs );
+			}
+			else{
+				ESP_LOGI(FNAME,"New crew-weight: %d", weight );
+				crew_weight.set( (float)weight );
+			}
+		}
+		else if( strncmp( str+5, "empty-weight,", 13 ) == 0 ){
+			ESP_LOGI(FNAME,"Detected empty-weight cmd");
+			int weight;
+			int cs;
+			sscanf(str+18, "%d*%02x", &weight, &cs);
+			int calc_cs=calcNMEACheckSum( str );
+			if( calc_cs != cs ){
+				ESP_LOGW(FNAME,"CS Error in %s; %d != %d", str, cs, calc_cs );
+			}
+			else{
+				ESP_LOGI(FNAME,"New empty_weight: %d", weight );
+				empty_weight.set( (float)weight );
+			}
+		}
+		else if( strncmp( str+5, "bal-water,", 10 ) == 0 ){
+			ESP_LOGI(FNAME,"Detected bal_water cmd");
+			int weight;
+			int cs;
+			sscanf(str+15, "%d*%02x", &weight, &cs);
+			int calc_cs=calcNMEACheckSum( str );
+			if( calc_cs != cs ){
+				ESP_LOGW(FNAME,"CS Error in %s; %d != %d", str, cs, calc_cs );
+			}
+			else{
+				ESP_LOGI(FNAME,"New ballast: %d", weight );
+				ballast_kg.set( (float)weight );
+			}
+		}
+		else if( strncmp( str+5, "version,", 8 ) == 0 ){
+			ESP_LOGI(FNAME,"Detected version cmd");
+			int version;
+			int cs;
+			sscanf(str+13, "%d*%02x", &version, &cs);
+			int calc_cs=calcNMEACheckSum( str );
+			if( calc_cs != cs ){
+				ESP_LOGW(FNAME,"CS Error in %s; %d != %d", str, cs, calc_cs );
+			}
+			else{
+				ESP_LOGI(FNAME,"Got xcv protocol version: %d", version );
+				_protocol_version = version;
+				sendNmeaXCVCmd( "version", 2 );
+			}
+		}
 	}
 	else if ( (strncmp( str, "!g,", 3 ) == 0)    ) {
 		ESP_LOGI(FNAME,"parseNMEA, Cambridge C302 style command !g detected: %s",str);

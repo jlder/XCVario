@@ -145,7 +145,7 @@ void WifiApp::socket_server(void *setup) {
 			if( len ){
 				// ESP_LOGI(FNAME, "port %d to sent %d: bytes, %s", config->port, len, buffer );
 				config->idle = 0;
-				DM.monitorString( MON_WIFI_8880+config->port-8880, DIR_TX, buffer );
+				DM.monitorString( MON_WIFI_8880+config->port-8880, DIR_TX, buffer, len );
 			}
 			else
 			{
@@ -166,7 +166,7 @@ void WifiApp::socket_server(void *setup) {
 				ssize_t sizeRead = recv(client_rec.client, r, SSTRLEN-1, MSG_DONTWAIT);
 				if (sizeRead > 0) {
 					config->dlw->process( r, sizeRead, config->port );
-					DM.monitorString( MON_WIFI_8880+config->port-8880, DIR_RX, r );
+					DM.monitorString( MON_WIFI_8880+config->port-8880, DIR_RX, r, sizeRead );
 					// ESP_LOGI(FNAME, "RX wifi client port %d size: %d bincom:%d", config->port, sizeRead, Flarm::bincom );
 					// ESP_LOG_BUFFER_HEXDUMP(FNAME,tcprx.c_str(),sizeRead, ESP_LOG_INFO);
 				}
@@ -279,13 +279,13 @@ void WifiApp::wifi_init_softap()
 		ESP_ERROR_CHECK(esp_wifi_set_max_tx_power( int(wifi_max_power.get()*80.0/100.0) ));
 
 		if( serial2_speed.get() != 0 &&  serial2_tx.get() != 0 )  // makes only sense if there is data from AUX = serial interface S2
-			xTaskCreatePinnedToCore(&socket_server, "socket_ser_2", 4096, &AUX, 10, &AUX.pid, 0);  // 10
+			xTaskCreatePinnedToCore(&socket_server, "socket_ser_2", 4096, &AUX, 7, &AUX.pid, 0);  // 10
 		if( wireless == WL_WLAN_MASTER || wireless == WL_WLAN_STANDALONE ) // 8880 Wifi server makes only sense if mode is WLAN, not Bluetooth
-			xTaskCreatePinnedToCore(&socket_server, "socket_srv_0", 4096, &XCVario, 11, &XCVario.pid, 0);  // 10
+			xTaskCreatePinnedToCore(&socket_server, "socket_srv_0", 4096, &XCVario, 8, &XCVario.pid, 0);  // 10
 		if( serial1_speed.get() != 0 &&  serial1_tx.get() != 0 ) // makes only sense if there is a FLARM connected on S1
-			xTaskCreatePinnedToCore(&socket_server, "socket_ser_1", 4096, &FLARM, 12, &FLARM.pid, 0);  // 10
+			xTaskCreatePinnedToCore(&socket_server, "socket_ser_1", 4096, &FLARM, 9, &FLARM.pid, 0);  // 10
 		if( wireless == WL_WLAN_MASTER ) // New port 8884 makes sense if we are WLAN_MASTER (this is backward compatible)
-			xTaskCreatePinnedToCore(&socket_server, "socket_srv_3", 4096, &XCVarioMS, 9, &XCVarioMS.pid, 0);  // 10
+			xTaskCreatePinnedToCore(&socket_server, "socket_srv_3", 4096, &XCVarioMS, 6, &XCVarioMS.pid, 0);  // 10
 
 		ESP_LOGV(FNAME, "wifi_init_softap finished SUCCESS. SSID:%s password:%s channel:%d", (char *)wc.ap.ssid, (char *)wc.ap.password, wc.ap.channel );
 	}

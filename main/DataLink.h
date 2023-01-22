@@ -27,7 +27,10 @@ enum state_t {
 	GET_FB_LEN1,
 	GET_FB_LEN2,
 	GET_FB_DATA,
-	GET_KRT2_STX
+	GET_KRT2_STX,
+	GET_BECKER_PROTID,
+	GET_BECKER_LEN,
+	GET_BECKER_DATA
 };
 
 
@@ -37,7 +40,7 @@ class DataLink {
 		void process( const char *packet, int len, int port );
 
 	private:
-		void parse_NMEA_UBX( char c, int port, bool last );
+		void parse_NMEA_UBX( char c, int port );
 		void processNMEA( char * buffer, int len, int port );
 		void addChk(const char c);
 		void routeSerialData( const char *data,uint32_t len, int port, bool nmea );

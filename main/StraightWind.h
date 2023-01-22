@@ -11,8 +11,8 @@
 
 #include <sys/time.h>
 #include "vector.h"
+#include <list>
 
-#define NUM_STRAIGHT_RESULTS 50
 
 class StraightWind
 {
@@ -54,9 +54,8 @@ public:
 		_age = 0;
 	}
 
-	void calculateWind( double tc, double gs, double th, double tas  );
-	static double calculateSpeed( double angle1, double speed1, double angle2, double speed2  );
-	static double calculateAngle( double angle1, double speed1, double angle2, double speed2  );
+	void calculateWind( float tc, float gs, float th, float tas, float deviation  );
+	static void calculateSpeedAndAngle( float angle1, float speed1, float angle2, float speed2, float& speed, float& angle );
 	void newCirclingWind( float angle, float speed );
 	void test();
 	int getAge() { return _age; }
@@ -70,15 +69,12 @@ public:
 	const char *getStatus() { return status; }
 
 private:
-
-	int    nunberOfSamples;  // current number of samples
-	double averageTas;             // TAS in km/h
-	double averageTH;          // sum of Compass true heading
-	double averageTC;          // sum of GPS heading (true course)
-	double averageGS;		   // average ground speed
-	double windDir;            // calculated wind direction
-	double windSpeed;          // calculated wind speed in Km/h
-	double lastWindSpeed;          // calculated wind speed in Km/h
+	float averageTas;         // TAS in km/h
+	float averageTH;          // sum of Compass true heading
+	float averageTC;          // sum of GPS heading (true course)
+	float averageGS;		   // average ground speed
+	float windDir;            // calculated wind direction
+	float windSpeed;          // calculated wind speed in Km/h
 	bool   lowAirspeed;
 	float  circlingWindDir;
 	float  circlingWindDirReverse;
@@ -92,8 +88,10 @@ private:
 	float  magneticHeading;
 	const char *status;
 	float  jitter;
-	int curVectorNum;
-	static Vector windVectors[NUM_STRAIGHT_RESULTS];
+	std::list<Vector> windVectors;
 	float newWindSpeed;
 	float newWindDir;
+	float slipAverage;
+	float lastHeading;
+	float lastGroundCourse;
 };

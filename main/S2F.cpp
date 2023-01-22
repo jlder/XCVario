@@ -60,9 +60,9 @@ void S2F::recalculatePolar()
 	double w1 = polar_sink1.get();
 	double w2 = polar_sink2.get();
 	double w3 = polar_sink3.get();
-	ESP_LOGI(FNAME, "v1/s1 %.1f/%.1f", v1 * 3.6, w1);
-	ESP_LOGI(FNAME, "v2/s2 %.1f/%.1f", v2 * 3.6, w2);
-	ESP_LOGI(FNAME, "v3/s3 %.1f/%.1f", v3 * 3.6, w3);
+	ESP_LOGI(FNAME, "v1/s1 %.1f/%.3f", v1 * 3.6, w1);
+	ESP_LOGI(FNAME, "v2/s2 %.1f/%.3f", v2 * 3.6, w2);
+	ESP_LOGI(FNAME, "v3/s3 %.1f/%.3f", v3 * 3.6, w3);
 	// w= a0 + a1*v + a2*v^2   from ilec
 	// w=  c +  b*v +  a*v^2   from wiki
 	double d = v1 * v1 * (v2 - v3) + v2 * v2 * (v3 - v1) + v3 * v3 * (v1 - v2);
@@ -96,7 +96,10 @@ void S2F::setPolar()
 	polar_max_ballast.set( p.max_ballast );
 	polar_wingarea.set( p.wingarea, true, false );
 	empty_weight.set( (p.wingload * p.wingarea) - 80.0, true, false ); // Calculate default for emtpy mass
-	ESP_LOGI(FNAME,"Referelce weight:%.1f, new empty_weight: %.1f", (p.wingload * p.wingarea), empty_weight.get() );
+	if( Protocols::getXcvProtocolVersion() > 1 ){
+			Protocols::sendNmeaXCVCmd( "empty-weight", empty_weight.get() );
+	}
+	ESP_LOGI(FNAME,"Reference weight:%.1f, new empty_weight: %.1f", (p.wingload * p.wingarea), empty_weight.get() );
 	modifyPolar();
 }
 
@@ -187,9 +190,9 @@ double S2F::speed( double netto_vario, bool circling )
 		   stf = 3.6*sqrt( (a0-MC.get()+netto_vario) / a2 );
    }
    // ESP_LOGI(FNAME,"speed() S2F: %f netto_vario: %f circ: %d, a0: %f, MC %f", stf, netto_vario, circling, a0, MC.get() );
-   if( (stf < _min_speed) or isnan(stf) )
+   if( (stf < _min_speed) || isnan(stf) )
 	   return _min_speed;
-   if( stf > Units::Airspeed2Kmh(v_max.get()) or isinf( stf) )
+   if( stf > Units::Airspeed2Kmh(v_max.get()) || isinf( stf) )
 	   return Units::Airspeed2Kmh(v_max.get());
    else
 	   return stf;

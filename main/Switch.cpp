@@ -34,6 +34,8 @@ bool Switch::cm_auto_prev = false;
 bool Switch::cruise_mode_final = false;
 bool Switch::_cruise_mode_xcv = false;
 bool Switch::cm_xcv_prev = false;
+bool Switch::initial = true;
+
 Average<GYRO_FILTER_SAMPLES, float, float> Switch::filter;
 
 gpio_num_t Switch::_sw = GPIO_NUM_0;
@@ -45,7 +47,7 @@ Switch::~Switch() {
 }
 
 bool Switch::cruiseMode() {
-	if( audio_mode.get() == AM_EXTERNAL ){
+	if( s2f_switch_mode.get() == AM_EXTERNAL ){
 		// just take from master and ignore setting
 		_cruise_mode_xcv = cruise_mode.get(); // updated from master
 		if( _cruise_mode_xcv != cm_xcv_prev  ){
@@ -54,7 +56,7 @@ bool Switch::cruiseMode() {
 			ESP_LOGI(FNAME,"cruise_mode from change from Peer: %d", cruise_mode_final );
 		}
 	}
-	else if( audio_mode.get() == AM_AUTOSPEED ){        // Let autospeed mode merge both states
+	else if( s2f_switch_mode.get() == AM_AUTOSPEED ){        // Let autospeed mode merge both states
 		if( _cruise_mode_sw != cm_switch_prev  ){
 			ESP_LOGI(FNAME,"cruise_mode change %d", cruise_mode_final );
 			cm_switch_prev = _cruise_mode_sw;
@@ -66,7 +68,7 @@ bool Switch::cruiseMode() {
 			cruise_mode_final = _cruise_mode_speed;
 		}
 	}
-	else if( audio_mode.get() == AM_FLAP  ){
+	else if( s2f_switch_mode.get() == AM_FLAP  ){
 		if( flap_enable.get() ){
 			if( FLAP->getFlapPosition() > s2f_flap_pos.get() )
 				cruise_mode_final = false;
@@ -74,7 +76,7 @@ bool Switch::cruiseMode() {
 				cruise_mode_final = true;
 		}
 	}
-	else if( audio_mode.get() == AM_AHRS ){
+	else if( s2f_switch_mode.get() == AM_AHRS ){
 		float gr = (float)filter( (float)IMU::getGyroRate() );
 		// ESP_LOGI( FNAME,"Gyro-Rate %.2f", gr );
 		float ref = s2f_gyro_deg.get();
@@ -87,25 +89,26 @@ bool Switch::cruiseMode() {
 			cruise_mode_final = false;
 		// ESP_LOGI( FNAME,"Gyro-Rate: %.2f  thres: %.2f cmf: %d", gr, ref, cruise_mode_final  );
 	}
-	else if( audio_mode.get() == AM_SWITCH ){
+	else if( s2f_switch_mode.get() == AM_SWITCH ){
 		if( cruise_mode_final != _cruise_mode_sw ){
 			cruise_mode_final = _cruise_mode_sw;
 		}
 	}
-	else if( audio_mode.get() == AM_VARIO ) {
+	else if( s2f_switch_mode.get() == AM_VARIO ) {
 		if( cruise_mode_final != false ){
 			cruise_mode_final = false;
 		}
 	}
-	else if( audio_mode.get() == AM_S2F ){
+	else if( s2f_switch_mode.get() == AM_S2F ){
 		if( cruise_mode_final != true ){
 			cruise_mode_final = true;
 		}
 	}
 	// ESP_LOGI(FNAME,"cruise_mode_final %d", cruise_mode_final );
 
-	if( (int)cruise_mode_final != (int)cruise_mode.get() ){
+	if( (int)cruise_mode_final != (int)cruise_mode.get() || initial ){
 		ESP_LOGI(FNAME,"New cruise mode: %d", cruise_mode_final );
+		initial = false;
 		cruise_mode.set( (int)cruise_mode_final );
 	}
 	return cruise_mode_final;
@@ -140,7 +143,7 @@ void Switch::setCruiseModeXCV(){
 
 void Switch::tick() {
 	_tick++;
-	if( audio_mode.get() == AM_AUTOSPEED  && !(_tick%10) ){ // its enough to check this every 10 tick
+	if( s2f_switch_mode.get() == AM_AUTOSPEED  && !(_tick%10) ){ // its enough to check this every 10 tick
 		// ESP_LOGI(FNAME,"mode: %d ias: %3.1f hyst: %3.1f", _cruise_mode_speed, ias.get(), s2f_hysteresis.get() );
 		if( _cruise_mode_speed ){
 			if ( ias.get() < (_cruise_speed_kmh - s2f_hysteresis.get()) ){
@@ -160,7 +163,7 @@ void Switch::tick() {
 		}
 	}
 
-	if( audio_mode.get() == AM_AUTOSPEED || audio_mode.get() == AM_SWITCH ){   // both of this modes consider switch
+	if( s2f_switch_mode.get() == AM_AUTOSPEED || s2f_switch_mode.get() == AM_SWITCH ){   // both of this modes consider switch
 		if( s2f_switch_type.get() == S2F_HW_SWITCH || s2f_switch_type.get() == S2F_HW_SWITCH_INVERTED ){
 			if( isClosed() ){
 				if( s2f_switch_type.get() == S2F_HW_SWITCH_INVERTED ){

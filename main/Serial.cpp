@@ -116,7 +116,7 @@ void Serial::serialHandler(void *pvParameters)
 				// ESP_LOG_BUFFER_HEXDUMP(FNAME,s.c_str(),s.length(), ESP_LOG_INFO);
 				cfg->uart->write( s.c_str(),s.length() );
 				if( !bincom_mode )
-					DM.monitorString( cfg->monitor, DIR_TX, s.c_str() );
+					DM.monitorString( cfg->monitor, DIR_TX, s.c_str(), s.length());
 				// ESP_LOGD(FNAME,"S%d: TX written: %d", cfg->uart->number(), wr);
 			}
 		}
@@ -130,9 +130,7 @@ void Serial::serialHandler(void *pvParameters)
 				// ESP_LOG_BUFFER_HEXDUMP(FNAME,rxBuf, available, ESP_LOG_INFO);
 				rxBuf[rxBytes] = 0;
 				cfg->dl->process( rxBuf, rxBytes, cfg->port );
-				if( !Flarm::bincom ){
-					DM.monitorString( cfg->monitor, DIR_RX, rxBuf, Flarm::bincom );
-				}
+				DM.monitorString( cfg->monitor, DIR_RX, rxBuf, rxBytes );
 				free( rxBuf );
 			}
 		}
@@ -152,10 +150,8 @@ void Serial::serialHandler(void *pvParameters)
 }
 
 void Serial::enterBincomMode( xcv_serial_t *cfg ){
-	// Stop routing of TX/RX data of other Serial channel, TDB: check if we did not forget what else to stop ?
-	setroutingStopped( cfg->cfg2, true );
-	// Stop RX interrupt of other serial channel
-	cfg->cfg2->uart->disableInterrupt();
+	// Stop routing of TX/RX data of a potential other device on the second serial channel needs to be done by user.
+	// Both channels may be involved in igc download so we can't automate more here
 	delay( 100 );
 	bincom_mode = true;
 	ESP_LOGI(FNAME, "%s: --> Switching to binary mode", cfg->name );
@@ -266,7 +262,7 @@ void Serial::begin(){
 		}
 	}
 
-	if( serial2_speed.get() != 0  && hardwareRevision.get() >= 3 ){
+	if( serial2_speed.get() != 0  && hardwareRevision.get() >= XCVARIO_21 ){
 		ESP_LOGI(FNAME,"Serial Interface ttyS2 enabled with serial speed: %d baud: %d tx_inv: %d rx_inv: %d",  serial2_speed.get(), baud[serial2_speed.get()], serial2_tx_inverted.get(), serial2_rx_inverted.get() );
 		if( serial2_pins_twisted.get() ){  //   speed, RX, TX, invRX, invTX
 			gpio_pullup_en( GPIO_NUM_4 );
@@ -296,12 +292,12 @@ void Serial::begin(){
 void Serial::taskStart(){
 	ESP_LOGI(FNAME,"Serial::taskStart()" );
 	bool serial1 = (serial1_speed.get() != 0 || wireless != 0);
-	bool serial2 = (serial2_speed.get() != 0 && hardwareRevision.get() >= 3);
+	bool serial2 = (serial2_speed.get() != 0 && hardwareRevision.get() >= XCVARIO_21);
 
 	if( serial1 ){
-		xTaskCreatePinnedToCore(&serialHandler, "serialHandler1", 4096, &S1, 22, &S1.pid, 0);  // stay below canbus
+		xTaskCreatePinnedToCore(&serialHandler, "serialHandler1", 4096, &S1, 13, &S1.pid, 0);  // stay below canbus
 	}
 	if( serial2 ){
-		xTaskCreatePinnedToCore(&serialHandler, "serialHandler2", 4096, &S2, 22, &S2.pid, 0);  // stay below canbus
+		xTaskCreatePinnedToCore(&serialHandler, "serialHandler2", 4096, &S2, 13, &S2.pid, 0);  // stay below canbus
 	}
 }

@@ -41,7 +41,7 @@ public:
 	void drawWingSymbol(int16_t wk, float wksens);
 	void redraw() { sensorOldY = -1000; dirty=true; };
 	// void redrawLever() { sensorOldY = -1000; };
-	static void setupMenue( SetupMenu *parent );
+	static void setupMenue( MenuEntry *parent );
 	unsigned int getSensorRaw(int oversampling=1);
     static inline Flap* FLAP() { return _instance; }
     static const int MAX_NR_POS = 9;
@@ -57,8 +57,10 @@ private: // helper
     friend int flap_enable_act( SetupMenuSelect *p );
 	static void setupSensorMenueEntries(MenuEntry *wkm);
     static void setupIndicatorMenueEntries(MenuEntry *wkm);
+    static void position_labels_menu_create(MenuEntry* top);
+    static void speeds_setup_menu_create(MenuEntry* top);
 
-	float sensorToLeverPosition( int sensorreading );
+	bool sensorToLeverPosition( int sensorreading, float& lever);
 	void  initSpeeds();
     void  initLabels();
 	void  initSensPos();

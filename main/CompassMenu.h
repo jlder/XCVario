@@ -50,13 +50,12 @@ class CompassMenu
   /** Compass Menu Action method to calibrate sensor. */
   static int sensorCalibrationAction( SetupMenuSelect *p );
 
+  static bool showSensorRawData(SetupMenuSelect *p);
+
   static SetupNG<float> *deviations[8];
 
   // Backup for calibration data
   private:
-  static t_magn_axes  raw_back;
-  static t_float_axes scale_back;
-  static t_float_axes bias_back;
 
   // Pointer to setup menu of sensorCalibrationAction
   static SetupMenuSelect* menuPtr;
