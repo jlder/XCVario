@@ -112,6 +112,7 @@ Protocols OV( &Speed2Fly );
 
 AnalogInput Battery( (22.0+1.2)/1200, ADC_ATTEN_DB_0, ADC_CHANNEL_7, ADC_UNIT_1 );
 
+TaskHandle_t mpid = NULL;
 TaskHandle_t apid = NULL;
 TaskHandle_t bpid = NULL;
 TaskHandle_t tpid = NULL;
@@ -142,7 +143,7 @@ MPU_t MPU;         // create an object
 mpud::float_axes_t accelG;
 mpud::float_axes_t accelISUNED; // accel in standard units m/s² with NED reference
 mpud::float_axes_t gyroRawDPS;
-mpud::float_axes_t currentGyroBiasDPS;
+// TODO not used mpud::float_axes_t currentGyroBiasDPS;
 mpud::float_axes_t currentGyroBiasISUNED; // gyro bias in standard units rad/s with NED reference
 mpud::float_axes_t newGyroBias;
 mpud::float_axes_t newGyroBiasDPS;
@@ -152,10 +153,12 @@ mpud::float_axes_t accelG_Prev;
 mpud::float_axes_t gyroDPS_Prev;
 mpud::float_axes_t accelAVG;
 
+/* TODO constant nd variables for gyro bias calculation
 #define MAXDRIFT 2                // °/s maximum drift that is automatically compensated on ground
 #define NUM_GYRO_SAMPLES 3000     // 10 per second -> 5 minutes, so T has been settled after power on
 static uint16_t num_gyro_samples = 0;
 static int32_t cur_gyro_bias[3];
+*/
 
 // Magnetic sensor / compass
 Compass *compass = 0;
@@ -192,7 +195,6 @@ static float dynamicP; // filtered dynamic pressure
 static float OATemp; // OAT for pressure corrections (real or from standard atmosphere) 
 static float MPUtempcel; // MPU chip temperature
 static float temperature=15.0;
-static bool  validTemperature=false;
 static float battery=0.0;
 
 float slipAngle = 0.0;
@@ -644,14 +646,18 @@ void clientLoop(void *pvParameters)
 void grabSensors(void *pvParameters){
 // grabSensors gets MPU, converts them in NED frame in International System Units : m/s² for accels and rad/s for rotation rates.
 // it also gets static, TE, dynamic and temperature data
+
+	/* TODO variables for bias calculation 
 	float gyrosum = 0;
 	float prevgyrosum = 0;
 	float prevaccelz = 0;
 	bool processbias = false;
 	bool biassolution = false;
 	bool needfirstbias = true;
-	int nbsamples = 0;
+	int nbsamples = 0; */
+	
 	int mtick = 0; // counter to schedule tasks at specific time
+	
 	// TODO get gyro bias from Flash: currentGyroBias = gyro_bias.get(); // get stored gyro biais
 	char str[250];
 	
@@ -846,7 +852,7 @@ void readSensors(void *pvParameters){
 
 		float tasraw = 0;
 		if( baroP != 0 )
-			tasraw =  Atmosphere::TAS( iasraw , baroP, T);  // True airspeed in km/h
+			tasraw =  Atmosphere::TAS( iasraw , baroP, OATemp);  // True airspeed in km/h
 
 		if( airspeed_mode.get() == MODE_CAS ){
 			float casraw=Atmosphere::CAS( dynamicP );
@@ -1091,9 +1097,11 @@ void system_startup(void *args){
 	gyroDPS.x = 0;
 	gyroDPS.y = 0;
 	gyroDPS.z = 0;
+	/* TODO variables for gyro bias calculation
 	cur_gyro_bias[0] = 0;
 	cur_gyro_bias[1] = 0;
 	cur_gyro_bias[2] = 0;
+	*/
 
 	bool selftestPassed=true;
 	int line = 1;
@@ -1795,7 +1803,7 @@ void system_startup(void *args){
 	}
 	else {
 		xTaskCreatePinnedToCore(&readSensors, "readSensors", 5120, NULL, 11, &bpid, 0);
-		xTaskCreatePinnedToCore(&grabMPU, "grabSensors", 4096, NULL, 24, &mpid, 0);
+		xTaskCreatePinnedToCore(&grabSensors, "grabSensors", 4096, NULL, 24, &mpid, 0);
 	}
 	xTaskCreatePinnedToCore(&readTemp, "readTemp", 3000, NULL, 5, &tpid, 0);       // increase stack by 500 byte
 	xTaskCreatePinnedToCore(&drawDisplay, "drawDisplay", 6144, NULL, 4, &dpid, 0); // increase stack by 1K
