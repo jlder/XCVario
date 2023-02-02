@@ -580,7 +580,7 @@ void Protocols::parseNMEA( const char *str ){
 			ACCELcalib = false;			
 		}
 		else if (str[3] == '5') {
-			IMUstream = false; // gyros bias stream
+			IMUstream = false; // accel average stream (purpose is to help accels bench calibration)
 			SENstream = false;			
 			GBIASstream = false;
 			ACCELcalib = true;
