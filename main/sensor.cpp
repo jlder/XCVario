@@ -133,13 +133,18 @@ I2C_t& i2c = i2c1;  // i2c0 or i2c1
 I2C_t& i2c_0 = i2c0;  // i2c0 or i2c1
 MPU_t MPU;         // create an object
 mpud::float_axes_t accelG;
+mpud::float_axes_t accelISUNED; // accel in standard units m/s² with NED reference
 mpud::float_axes_t gyroDPS;
+mpud::float_axes_t gyroISUNED; // gyro in standard units rad/s with NED reference
 mpud::float_axes_t accelG_Prev;
 mpud::float_axes_t gyroDPS_Prev;
 #define MAXDRIFT 2                // °/s maximum drift that is automatically compensated on ground
 #define NUM_GYRO_SAMPLES 3000     // 10 per second -> 5 minutes, so T has been settled after power on
 static uint16_t num_gyro_samples = 0;
 static int32_t cur_gyro_bias[3];
+
+static float accelTime; // time stamp for accels
+static float gyroTime;  // time stamp for gyros
 
 // Magnetic sensor / compass
 Compass *compass = 0;
@@ -177,6 +182,7 @@ float netto = 0;
 float as2f = 0;
 float s2f_delta = 0;
 float polar_sink = 0;
+static float MPUtempcel; // MPU chip temperature
 
 float      stall_alarm_off_kmh=0;
 uint16_t   stall_alarm_off_holddown=0;
@@ -191,6 +197,10 @@ float mpu_target_temp=45.0;
 AdaptUGC *egl = 0;
 
 #define GYRO_FS (mpud::GYRO_FS_250DPS)
+
+#define GRAVITY 9.807
+
+#define DegToRad (M_PI / 180)
 
 float getTAS() { return tas; };
 
@@ -418,22 +428,65 @@ void audioTask(void *pvParameters){
 
 static void grabMPU()
 {
+	char str[250];
+	
 	mpud::raw_axes_t accelRaw;     // holds x, y, z axes as int16
 	mpud::raw_axes_t gyroRaw;      // holds x, y, z axes as int16
+	
+	accelTime = esp_timer_get_time()/1000000.0; // time in second
 	esp_err_t err = MPU.acceleration(&accelRaw);  // fetch raw data from the registers
 	if( err != ESP_OK )
 		ESP_LOGE(FNAME, "accel I2C error, X:%+.2f Y:%+.2f Z:%+.2f", -accelG[2], accelG[1], accelG[0] );
+	gyroTime = esp_timer_get_time()/1000000.0; // time in second
 	err |= MPU.rotation(&gyroRaw);       // fetch raw data from the registers
 	if( err != ESP_OK )
 		ESP_LOGE(FNAME, "gyro I2C error, X:%+.2f Y:%+.2f Z:%+.2f",  gyroDPS.x, gyroDPS.y, gyroDPS.z );
 
 	accelG = mpud::accelGravity(accelRaw, mpud::ACCEL_FS_8G);  // raw data to gravity
+	// convert accels coordinates to NED ISU : m/s²
+	accelISUNED.x = - accelG.z * GRAVITY;
+	accelISUNED.y = - accelG.y * GRAVITY;
+	accelISUNED.z = - accelG.x * GRAVITY;
+	
 	gyroDPS = mpud::gyroDegPerSec(gyroRaw, GYRO_FS);  // raw data to º/s
+	gyroISUNED.x = -gyroDPS.z * DegToRad;
+	gyroISUNED.y = -gyroDPS.y * DegToRad;
+	gyroISUNED.z = -gyroDPS.x * DegToRad;	
 	// mpud::raw_axes_t gbo = MPU.getGyroOffset();
 	// ESP_LOGI(FNAME, "accel X: %+.2f Y:%+.2f Z:%+.2f  gyro X: %+.2f Y:%+.2f Z:%+.2f ABx:%d ABy:%d ABz=%d\n", -accelG[2], accelG[1], accelG[0] ,  gyroDPS.x, gyroDPS.y, gyroDPS.z, gbo.x, gbo.y, gbo.z );
 	// if( !(count%60) ){
 	//	ESP_LOGI(FNAME, "Gyro X:%+.2f Y:%+.2f Z:%+.2f T=%f\n", gyroDPS.x, gyroDPS.y, gyroDPS.z, MPU.getTemperature());
 	// }
+
+	// get MPU temp
+	int16_t MPUtempraw;
+	esp_err_t errtemp = MPU.temperature(&MPUtempraw);
+	if( errtemp == ESP_OK )
+		MPUtempcel = mpud::tempCelsius(MPUtempraw);	
+	
+	/*
+		Stream data to BT
+		
+		TST data in ISU and NED orientation
+			$TST,
+			T..T.TTTTTT:	accel time in second with micro second resolution (before IMU measurement),
+			X.XXXX:			acceleration in X-Axis in m/s²,
+			Y.YYYY:			acceleration in Y-Axis in m/s²,
+			Z.ZZZZ:			acceleration in Z-Axis in m/s²,
+			T..T.TTTTTT:	gyro time in second with micro second resolution (before IMU measurement)
+			XXX.XXXX:			rotation X-Axis rad/s,
+			YYY.YYYY:			rotation Y-Axis rad/s,
+			ZZZ.ZZZZ:			rotation Z-Axis rad/s,
+			XXX.XXXX:			gyro bias X-Axis rad/s,
+			YYY.YYYY:			gyro bias Y-Axis rad/s,
+			ZZZ.ZZZZ:			gyro bias Z-Axis rad/s,
+			XX.XX:				MPU temperature °C				
+			<CR><LF>	
+	*/
+	sprintf(str,"$TST,%.6f,%1.4f,%1.4f,%1.4f,%.6f,%3.4f,%3.4f,%3.4f,%2.2f\r\n",
+		accelTime, accelISUNED.x, accelISUNED.y, accelISUNED.z , gyroTime, gyroISUNED.x, gyroISUNED.y, gyroISUNED.z, MPUtempcel);
+	Router::sendXCV(str);
+		
 	bool goodAccl = true;
 	if( abs( accelG.x - accelG_Prev.x ) > 1 || abs( accelG.y - accelG_Prev.y ) > 1 || abs( accelG.z - accelG_Prev.z ) > 1 ) {
 		MPU.acceleration(&accelRaw);
