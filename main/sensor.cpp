@@ -458,11 +458,15 @@ static void grabSensors(void *pvParameters)
 	mpud::raw_axes_t accelRaw;     // holds x, y, z axes as int16
 	mpud::raw_axes_t gyroRaw;      // holds x, y, z axes as int16
 	int mtick = 0; // counter to schedule tasks at specific time
-	char str[150]; // string for flight test message broadcast
+	char str[150]; // string for flight test message 
+	float grabtime;
 	
 	while (1) {
 		mtick++;
 		TickType_t xLastWakeTime_mpu =xTaskGetTickCount();
+		grabtime = esp_timer_get_time()/1000000; // time in second
+		sprintf(str,"$T, %0.6f\r\n", grabtime);
+		Router::sendXCV(str);
 		
 		// get MPU data every IMUrate * 25 ms
 		if( gflags.haveMPU && ((mtick % IMUrate) == 0) ) {
@@ -1172,10 +1176,10 @@ void system_startup(void *args){
 		mpu_target_temp = mpu_temperature.get();
 		ESP_LOGI( FNAME,"MPU initialize");
 		MPU.initialize();  // this will initialize the chip and set default configurations
-		MPU.setSampleRate(50);  // in (Hz)
+		MPU.setSampleRate(400);  // in (Hz)
 		MPU.setAccelFullScale(mpud::ACCEL_FS_8G);
 		MPU.setGyroFullScale( GYRO_FS );
-		MPU.setDigitalLowPassFilter(mpud::DLPF_5HZ);  // smoother data
+		MPU.setDigitalLowPassFilter(mpud::DLPF_42HZ);  // smoother data
 		mpud::raw_axes_t gb = gyro_bias.get();
 		mpud::raw_axes_t ab = accl_bias.get();
 		char ahrs[30];
@@ -1752,13 +1756,15 @@ void system_startup(void *args){
 	if( screen_centeraid.get() ){
 		centeraid = new CenterAid( MYUCG );
 	}
+	
+	xTaskCreatePinnedToCore(&grabSensors, "grabSensors", 4096, NULL, 15, &mpid, 0);
+	
 	if( SetupCommon::isClient() ){
 		xTaskCreatePinnedToCore(&clientLoop, "clientLoop", 4096, NULL, 11, &bpid, 0);
 		xTaskCreatePinnedToCore(&audioTask, "audioTask", 4096, NULL, 11, &apid, 0);
 	}
 	else {
 		xTaskCreatePinnedToCore(&readSensors, "readSensors", 5120, NULL, 11, &bpid, 0);
-		xTaskCreatePinnedToCore(&grabSensors, "grabSensors", 4096, NULL, 15, &mpid, 0);
 	}
 	xTaskCreatePinnedToCore(&readTemp, "readTemp", 3000, NULL, 5, &tpid, 0);       // increase stack by 500 byte
 	xTaskCreatePinnedToCore(&drawDisplay, "drawDisplay", 6144, NULL, 4, &dpid, 0); // increase stack by 1K
