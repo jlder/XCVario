@@ -460,13 +460,10 @@ static void grabSensors(void *pvParameters)
 	mpud::raw_axes_t gyroRaw;      // holds x, y, z axes as int16
 	int mtick = 0; // counter to schedule tasks at specific time
 	char str[150]; // string for flight test message 
-	float grabtime;
-	float grablength;
 	
 	while (1) {
 		mtick++;
 		TickType_t xLastWakeTime_mpu =xTaskGetTickCount();
-		grabtime = esp_timer_get_time()/1000000; // time in second
 		
 		// get MPU data every IMUrate * 25 ms
 		if( gflags.haveMPU && ((mtick % IMUrate) == 0) ) {
@@ -608,11 +605,13 @@ static void grabSensors(void *pvParameters)
 				Router::sendXCV(str);
 			}
 		}
-		grablength = (esp_timer_get_time()/1000000)-grabtime; // time in second		
-		
-		sprintf(str,"%0.6f,%0.6f,%0.6f,%0.6f\r\n", (grabtime-grabtimeprev),grabtime,statTime,grablength);
-		grabtimeprev=grabtime;
-		Router::sendXCV(str);
+
+		if ( !IMUstream && !SENstream ) {
+			float grablength = (esp_timer_get_time()/1000000.0)-accelTime; // time in second		
+			sprintf(str,"%0.6f,%0.6f,%0.6f,%0.6f\r\n", (accelTime-grabtimeprev),accelTime,statTime,grablength);
+			grabtimeprev=accelTime;
+			Router::sendXCV(str);
+		}
 		
 		esp_task_wdt_reset();
 		vTaskDelayUntil(&xLastWakeTime_mpu, 25/portTICK_PERIOD_MS);  // 25 ms = 40 Hz loop
