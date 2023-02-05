@@ -1763,7 +1763,7 @@ void system_startup(void *args){
 		centeraid = new CenterAid( MYUCG );
 	}
 	grabtimeprev = (esp_timer_get_time()/1000000); // time in second	
-	xTaskCreatePinnedToCore(&grabSensors, "grabSensors", 4096, NULL, 15, &mpid, 0);
+	xTaskCreatePinnedToCore(&grabSensors, "grabSensors", 4096, NULL, 24, &mpid, 0);
 	
 	if( SetupCommon::isClient() ){
 		xTaskCreatePinnedToCore(&clientLoop, "clientLoop", 4096, NULL, 11, &bpid, 0);
