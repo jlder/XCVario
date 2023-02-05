@@ -460,6 +460,8 @@ static void grabSensors(void *pvParameters)
 	mpud::raw_axes_t gyroRaw;      // holds x, y, z axes as int16
 	int mtick = 0; // counter to schedule tasks at specific time
 	char str[150]; // string for flight test message 
+	float grablength;
+	float grabperiod;
 	
 	while (1) {
 		mtick++;
@@ -607,9 +609,10 @@ static void grabSensors(void *pvParameters)
 		}
 
 		if ( !IMUstream && !SENstream ) {
-			float grablength = (esp_timer_get_time()/1000000.0)-accelTime; // time in second		
-			sprintf(str,"%0.6f,%0.6f,%0.6f,%0.6f\r\n", (accelTime-grabtimeprev),accelTime,statTime,grablength);
-			grabtimeprev=accelTime;
+			grablength = (esp_timer_get_time()/1000000.0)-accelTime; // time in second 
+			grabperiod = accelTime-grabtimeprev;
+			grabtimeprev = accelTime;
+			sprintf(str,"%0.6f,%0.6f,%0.6f,%0.6f\r\n", grabperiod,accelTime,statTime,grablength);
 			Router::sendXCV(str);
 		}
 		
@@ -1761,7 +1764,7 @@ void system_startup(void *args){
 	if( screen_centeraid.get() ){
 		centeraid = new CenterAid( MYUCG );
 	}
-	grabtimeprev = (esp_timer_get_time()/1000000); // time in second	
+	grabtimeprev = (esp_timer_get_time()/1000000.0); // time in second	
 	xTaskCreatePinnedToCore(&grabSensors, "grabSensors", 4096, NULL, 24, &mpid, 0);
 	
 	if( SetupCommon::isClient() ){
