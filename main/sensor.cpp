@@ -631,6 +631,7 @@ static void grabSensors(void *pvParameters)
 			sprintf(str,"%0.6f,%0.6f,%0.6f,%0.6f,%0.6f\r\n", grabperiod, grablength, mpuLength, baroLength, gnssLength);
 			Router::sendXCV(str);
 		}
+		Router::routeXCV();
 		
 		esp_task_wdt_reset();
 		vTaskDelayUntil(&xLastWakeTime_mpu, 25/portTICK_PERIOD_MS);  // 25 ms = 40 Hz loop
@@ -1788,7 +1789,7 @@ void system_startup(void *args){
 		// xTaskCreatePinnedToCore(&audioTask, "audioTask", 4096, NULL, 11, &apid, 0);
 	}
 	else {
-		// xTaskCreatePinnedToCore(&readSensors, "readSensors", 5120, NULL, 11, &bpid, 0);
+		xTaskCreatePinnedToCore(&readSensors, "readSensors", 5120, NULL, 11, &bpid, 0);
 	}
 	xTaskCreatePinnedToCore(&readTemp, "readTemp", 3000, NULL, 5, &tpid, 0);       // increase stack by 500 byte
 	xTaskCreatePinnedToCore(&drawDisplay, "drawDisplay", 6144, NULL, 4, &dpid, 0); // increase stack by 1K
