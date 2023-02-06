@@ -462,13 +462,20 @@ static void grabSensors(void *pvParameters)
 	char str[150]; // string for flight test message 
 	float grablength;
 	float grabperiod;
+	float mpuTime=0.0;
+	float baroTime=0.0;
+	float gnssTime=0.0;
+	float mpuLength=0.0;
+	float baroLength=0.0;
+	float gnssLength=0.0;
 	
 	while (1) {
 		mtick++;
 		TickType_t xLastWakeTime_mpu =xTaskGetTickCount();
-		
+
 		// get MPU data every IMUrate * 25 ms
 		if( gflags.haveMPU && ((mtick % IMUrate) == 0) ) {
+			mpuTime = esp_timer_get_time()/1000000.0; // record time in second;
 			// get accel raw data
 			erracc = MPU.acceleration(&accelRaw);  // fetch raw accel data from the registers
 			if( erracc == ESP_OK ){
@@ -509,6 +516,7 @@ static void grabSensors(void *pvParameters)
 				sprintf(str,"$IMU,%.6f,%1.4f,%1.4f,%1.4f,%.6f,%3.4f,%3.4f,%3.4f\r\n",accelTime, accelISUNED.x, accelISUNED.y, accelISUNED.z , gyroTime, gyroISUNED.x, gyroISUNED.y, gyroISUNED.z );
 				Router::sendXCV(str);
 			}
+
 			// if average accels streaming is requested for calibration purpose, average 20 samples of accélération ~0.5 second average with tick at 40Hz
 			if ( ACCELcalib ) { 
 				if ( (mtick % 20) == 0 ) {
@@ -529,27 +537,31 @@ static void grabSensors(void *pvParameters)
 					accelAVG.y = accelAVG.y + accelISUNED.y;
 					accelAVG.z = accelAVG.z + accelISUNED.z;
 				}
-			}			
+			}
+			mpuLength = (esp_timer_get_time()/1000000.0 )- mpuTime;			
 		}
+
 		
 		// get sensors data : static, TE, dynamic pressure, OAT, MPU temp and GNSS data. 
 		// get sensors data every SENrate * 25ms
-				statTime = esp_timer_get_time()/1000000.0; // record time in second
+
 		if ( (mtick % SENrate) == 0 ) {
+			baroTime = esp_timer_get_time()/1000000.0; // record time in second
 			// get raw static pressurebool
 			bool ok=false;
 			float p = 0;
 			p = baroSensor->readPressure(ok);
 			if ( ok ) {
+				statTime = esp_timer_get_time()/1000000.0; // record time in second
 				statP = p;
-
 				baroP = p;
 			}
 			// get raw te pressure
 			p = teSensor->readPressure(ok);
 			if ( ok ) {
+				teTime = esp_timer_get_time()/1000000.0; // record time in secondte
 				teP = p;
-				teTime = esp_timer_get_time()/1000000.0; // record time in second
+
 			}
 			// get raw dynamic pressure
 			if( asSensor )
@@ -572,6 +584,9 @@ static void grabSensors(void *pvParameters)
 			esp_err_t errtemp = MPU.temperature(&MPUtempraw);
 			if( errtemp == ESP_OK )
 				MPUtempcel = mpud::tempCelsius(MPUtempraw);
+			baroLength = (esp_timer_get_time()/1000000.0) - baroTime;
+			
+			gnssTime = esp_timer_get_time()/1000000.0; // record time in second			
 			// get Ublox GNSS data
 			// when GNSS receiver is connected to S1 interface
 			const gnss_data_t *gnss1 = s1UbloxGnssDecoder.getGNSSData(1);
@@ -579,7 +594,8 @@ static void grabSensors(void *pvParameters)
 			const gnss_data_t *gnss2 = s2UbloxGnssDecoder.getGNSSData(2);
 			// select gnss with better fix
 			const gnss_data_t *chosenGnss = (gnss2->fix >= gnss1->fix) ? gnss2 : gnss1;
-			
+			gnssLength = (esp_timer_get_time()/1000000.0) - gnssTime;
+
 			if ( SENstream ) {
 			/*
 				$SEN,
@@ -609,10 +625,10 @@ static void grabSensors(void *pvParameters)
 		}
 
 		if ( !IMUstream && !SENstream ) {
-			grablength = (esp_timer_get_time()/1000000.0)-accelTime; // time in second 
-			grabperiod = accelTime-grabtimeprev;
-			grabtimeprev = accelTime;
-			sprintf(str,"%0.6f,%0.6f,%0.6f,%0.6f\r\n", grabperiod,accelTime,statTime,grablength);
+			grablength = (esp_timer_get_time()/1000000.0)-mpuTime; // time in second 
+			grabperiod = mpuTime-grabtimeprev;
+			grabtimeprev = mpuTime;
+			sprintf(str,"%0.6f,%0.6f,%0.6f,%0.6f,%0.6f\r\n", grabperiod, grablength, mpuLength, baroLength, gnssLength);
 			Router::sendXCV(str);
 		}
 		
@@ -1769,15 +1785,15 @@ void system_startup(void *args){
 	
 	if( SetupCommon::isClient() ){
 		xTaskCreatePinnedToCore(&clientLoop, "clientLoop", 4096, NULL, 11, &bpid, 0);
-		xTaskCreatePinnedToCore(&audioTask, "audioTask", 4096, NULL, 11, &apid, 0);
+		// xTaskCreatePinnedToCore(&audioTask, "audioTask", 4096, NULL, 11, &apid, 0);
 	}
 	else {
-		xTaskCreatePinnedToCore(&readSensors, "readSensors", 5120, NULL, 11, &bpid, 0);
+		// xTaskCreatePinnedToCore(&readSensors, "readSensors", 5120, NULL, 11, &bpid, 0);
 	}
 	xTaskCreatePinnedToCore(&readTemp, "readTemp", 3000, NULL, 5, &tpid, 0);       // increase stack by 500 byte
 	xTaskCreatePinnedToCore(&drawDisplay, "drawDisplay", 6144, NULL, 4, &dpid, 0); // increase stack by 1K
 
-	Audio::startAudio();
+	// Audio::startAudio();
 }
 
 extern "C" void  app_main(void)
