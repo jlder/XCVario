@@ -607,6 +607,23 @@ static void processIMU(void *pvParameters)
 	mpud::float_axes_t currentGyroBias = gyro_bias.get();
 	// TODO estimation of gyro gain
 	
+	// get installation parameters tilt, sway, distCG
+	// compute trigonometry
+	float DistCGVario = distCG.get();
+	float CS = cos(sway.get());
+	float SS = sin(sway.get());
+	float CT = cos(tilt.get());
+	float ST = sin(tilt.get());
+	float TT = tan(tilt.get());
+	float TTmultSS = TT * SS;
+	float TTmultCS = TT * CS;
+	float SSdivCT = SS / CT;
+	float CSdivCT = CS / CT;
+	float STmultSS = ST * SS;
+	float STmultCS = ST * CS;
+	float SSmultCT = SS * CT;
+	float CTmultCS = CT * CS;
+	
 	// string for flight test message broadcast on wireless
 	char str[150]; 
 	
@@ -641,8 +658,13 @@ static void processIMU(void *pvParameters)
 			// WIP convert NEDMPU to NEDBODY
 			mpud::float_axes_t gyroISUNEDBODY;
 			mpud::float_axes_t accelISUNEDBODY;
-			gyroISUNEDBODY = gyroISUNEDMPU;
-			accelISUNEDBODY = accelISUNEDMPU;
+			gyroISUNEDBODY.x = gyroISUNEDMPU.x * CT + ST * ( SS * gyroISUNEDMPU.y + gyroISUNEDMPU.z * CS);
+			gyroISUNEDBODY.y = CS * gyroISUNEDMPU.y - SS * gyroISUNEDMPU.z;
+			gyroISUNEDBODY.z = SSdivCT * gyroISUNEDMPU.y + CSdivCT * gyroISUNEDMPU.z;
+			accelISUNEDBODY.x = CT * accelISUNEDMPU.x + STmultSS * accelISUNEDMPU.y + STmultCS * accelISUNEDMPU.z - ( gyroISUNEDBODY.y * gyroISUNEDBODY.y + gyroISUNEDBODY.z * gyroISUNEDBODY.z ) * DistCGVario;
+			accelISUNEDBODY.y = CS * accelISUNEDMPU.y - SS * accelISUNEDMPU.z;
+			accelISUNEDBODY.z = -ST * accelISUNEDMPU.x + SSmultCT * accelISUNEDMPU.y + CTmultCS * accelISUNEDMPU.z;			
+
 			// Apply bias correction from IMU
 			gyroISUNEDBODY.x = gyroISUNEDBODY.x - IMUBiasx;
 			gyroISUNEDBODY.y = gyroISUNEDBODY.y - IMUBiasy;			
