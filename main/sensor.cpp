@@ -116,6 +116,7 @@ AnalogInput Battery( (22.0+1.2)/1200, ADC_ATTEN_DB_0, ADC_CHANNEL_7, ADC_UNIT_1 
 
 // Fligth Test
 TaskHandle_t mpid = NULL;
+TaskHandle_t npid = NULL;
 // Fligth Test
 
 TaskHandle_t apid = NULL;
@@ -523,8 +524,7 @@ static void processIMU(void *pvParameters)
 
 		TickType_t xLastWakeTime_mpu =xTaskGetTickCount();
 		
-		// get MPU data every IMUrate * 25 ms
-		if( gflags.haveMPU && ((mtick % IMUrate) == 0) ) {
+		if( gflags.haveMPU ) {
 			// get accel data
 			if( MPU.acceleration(&accelRaw) == ESP_OK ){
 				accelG = mpud::accelGravity(accelRaw, mpud::ACCEL_FS_8G);  // For compatibility with Eckhard code only. Convert raw data to to 8G full scale
@@ -613,91 +613,7 @@ static void processIMU(void *pvParameters)
 			else gyrobiastemptimer = 0; // Insure No bias evaluation during flight
 		}
 		
-		// get sensors data : static, TE, dynamic pressure, OAT, MPU temp and GNSS data. 
-		// get sensors data every SENrate * 25ms
-		if ( (mtick % SENrate) == 0 ) {
-			// get raw static pressurebool
-			bool ok=false;
-			float p = 0;
-
-			p = baroSensor->readPressure(ok);
-			if ( ok ) {
-				statTime = esp_timer_get_time()/1000000.0; // record static time in second
-				statP = p;
-				// for compatibility with readSensors
-				baroP = p;
-			}
-			
-			// get raw te pressure
-			xSemaphoreTake(xMutex,portMAX_DELAY );
-			p = teSensor->readPressure(ok);
-			if ( ok ) {
-				teTime = esp_timer_get_time()/1000000.0; // record TE time in second
-				teP = p;
-				// not sure what is required for compatibility with readSensors
-			}
-			xSemaphoreGive(xMutex);
-			
-			// get raw dynamic pressure
-			if( asSensor )
-				p = asSensor->readPascal(0, ok);
-			if( ok ) {
-				dynP = p;
-				// for compatibility with readSensors
-				dynamicP = 0;
-				if (p > 60 ) 
-					dynamicP = p; 
-			}
-			// get XCVTemp
-			XCVTemp = bmpVario.bmpTemp;
-			OATemp = OAT.get();
-			if( !gflags.validTemperature ) {
-				OATemp = 15 - ( (altitude.get()/100) * 0.65 );
-				ESP_LOGI(FNAME,"OATemp: %0.1f  Altitude %0.1f", OATemp, altitude.get() );
-			}
-			// not sure what is required for compatibility with readSensors
-			
-			// get MPU temp
-			MPUtempcel = MPU.getTemperature();
-			
-			// get Ublox GNSS data
-			// when GNSS receiver is connected to S1 interface
-			const gnss_data_t *gnss1 = s1UbloxGnssDecoder.getGNSSData(1);
-			// when GNSS receiver is connected to S2 interface
-			const gnss_data_t *gnss2 = s2UbloxGnssDecoder.getGNSSData(2);
-			// select gnss with better fix
-			const gnss_data_t *chosenGnss = (gnss2->fix >= gnss1->fix) ? gnss2 : gnss1;
-			
-			if ( SENstream ) {
-			/*
-				$S,			Sensor data
-				TTTTTT:		static time in milli second,
-				PPPPPP:		static pressure in Pa,
-				TTTTTT:		TE time in milli second,
-				PPPPPP:		TE pressure in Pa,
-				PPPPPP:		Dynamic pressure in Pa,
-				XXX:		Outside Air Temperature in tenth of °C,
-				XXX:		MPU temperature in tenth °C,
-				X:			fix 0 to 5   3=3D   4= 3D diff,
-				XX:			numSV number of satelites used, 
-				TTTTTT:		GNSS time in milli second,
-				AAAAAA:		GNSS altitude in centimeter,
-				VVVV:		GNSS speed x or north in centimeters/s,
-				VVVV:		GNSS speed y or east in centimeters/s,
-				VVVV:		GNSS speed z or down in centimeters/s,
-				<CR><LF>		
-			*/
-				sprintf(str,"$S,%lld,%i,%lld,%i,%i,%i,%i,%1d,%2d,%lld,%i,%i,%i,%i\r\n",
-					(int64_t)(statTime*1000.0), (int32_t)(statP*100.0), (int64_t)(teTime*1000.0),(int32_t)(teP*100.0), (int16_t)(dynP),  (int16_t)(OATemp*10.0), (int16_t)(MPUtempcel*10.0), chosenGnss->fix, chosenGnss->numSV,
-					(int64_t)(chosenGnss->time*1000.0), (int32_t)(chosenGnss->coordinates.altitude*100), (int16_t)(chosenGnss->speed.x*100), (int16_t)(chosenGnss->speed.y*100), (int16_t)(chosenGnss->speed.z*100));
-				Router::sendXCV(str);
-			}
-		}
-		
 		mtick++;
-		
-//		grabSensorsTime = (esp_timer_get_time()/1000.0) - grabSensorsTime;
-//		ESP_LOGI(FNAME,"processIMU: %0.1f  / %0.1f", grabSensorsTime, 25.0 );
 		
 		vTaskDelayUntil(&xLastWakeTime_mpu, 25/portTICK_PERIOD_MS);  // 25 ms = 40 Hz loop
 		if( (mtick % 25) == 0) {  // test stack every second
@@ -705,7 +621,111 @@ static void processIMU(void *pvParameters)
 				 ESP_LOGW(FNAME,"Warning MPU and sensor task stack low: %d bytes", uxTaskGetStackHighWaterMark( mpid ) );
 		}
 	}		
-}			
+}
+
+static void processSENSORS(void *pvParameters)
+{
+// processIMU process reads all sensors information required for processing total energy calculation, including attitude estimation
+// it is also able to stream flight test data to BT which is used in post processing to validate algorithms.
+// This process gets following information:
+// - MPU, converts accels and gyros to NED frame in International System Units : m/s² for accels and rad/s for rotation rates.
+// - Sensors data, static, TE, dynamic pressure, OAT and MPU temp
+// - Ublox GNSS data. 
+
+	// string for flight test message broadcast on wireless
+	char str[150]; 
+	
+	while (1) {	
+
+		TickType_t xLastWakeTime_sen =xTaskGetTickCount();
+	
+		// get sensors data : static, TE, dynamic pressure, OAT, MPU temp and GNSS data. 
+
+		// get raw static pressure
+		bool ok=false;
+		float p = 0;
+		p = baroSensor->readPressure(ok);
+		if ( ok ) {
+			statTime = esp_timer_get_time()/1000000.0; // record static time in second
+			statP = p;
+			// for compatibility with readSensors
+			baroP = p;
+		}
+		
+		// get raw te pressure
+		xSemaphoreTake(xMutex,portMAX_DELAY );
+		p = teSensor->readPressure(ok);
+		if ( ok ) {
+			teTime = esp_timer_get_time()/1000000.0; // record TE time in second
+			teP = p;
+			// not sure what is required for compatibility with readSensors
+		}
+		xSemaphoreGive(xMutex);
+		
+		// get raw dynamic pressure
+		if( asSensor )
+			p = asSensor->readPascal(0, ok);
+		if( ok ) {
+			dynP = p;
+			// for compatibility with readSensors
+			dynamicP = 0;
+			if (p > 60 ) 
+				dynamicP = p; 
+		}
+		
+		// get XCVTemp not sure what is required for compatibility with readSensors
+		XCVTemp = bmpVario.bmpTemp;
+		OATemp = OAT.get();
+		if( !gflags.validTemperature ) {
+			OATemp = 15 - ( (altitude.get()/100) * 0.65 );
+			ESP_LOGI(FNAME,"OATemp: %0.1f  Altitude %0.1f", OATemp, altitude.get() );
+		}
+		
+		// get MPU temp
+		MPUtempcel = MPU.getTemperature();
+		
+		// get Ublox GNSS data
+		// when GNSS receiver is connected to S1 interface
+		const gnss_data_t *gnss1 = s1UbloxGnssDecoder.getGNSSData(1);
+		// when GNSS receiver is connected to S2 interface
+		const gnss_data_t *gnss2 = s2UbloxGnssDecoder.getGNSSData(2);
+		// select gnss with better fix
+		const gnss_data_t *chosenGnss = (gnss2->fix >= gnss1->fix) ? gnss2 : gnss1;
+		
+		if ( SENstream ) {
+		/*
+			$S,			Sensor data
+			TTTTTT:		static time in milli second,
+			PPPPPP:		static pressure in Pa,
+			TTTTTT:		TE time in milli second,
+			PPPPPP:		TE pressure in Pa,
+			PPPPPP:		Dynamic pressure in Pa,
+			XXX:		Outside Air Temperature in tenth of °C,
+			XXX:		MPU temperature in tenth °C,
+			X:			fix 0 to 5   3=3D   4= 3D diff,
+			XX:			numSV number of satelites used, 
+			TTTTTT:		GNSS time in milli second,
+			AAAAAA:		GNSS altitude in centimeter,
+			VVVV:		GNSS speed x or north in centimeters/s,
+			VVVV:		GNSS speed y or east in centimeters/s,
+			VVVV:		GNSS speed z or down in centimeters/s,
+			<CR><LF>		
+		*/
+			sprintf(str,"$S,%lld,%i,%lld,%i,%i,%i,%i,%1d,%2d,%lld,%i,%i,%i,%i\r\n",
+				(int64_t)(statTime*1000.0), (int32_t)(statP*100.0), (int64_t)(teTime*1000.0),(int32_t)(teP*100.0), (int16_t)(dynP),  (int16_t)(OATemp*10.0), (int16_t)(MPUtempcel*10.0), chosenGnss->fix, chosenGnss->numSV,
+				(int64_t)(chosenGnss->time*1000.0), (int32_t)(chosenGnss->coordinates.altitude*100), (int16_t)(chosenGnss->speed.x*100), (int16_t)(chosenGnss->speed.y*100), (int16_t)(chosenGnss->speed.z*100));
+			Router::sendXCV(str);
+		}
+		
+		mtick++;
+		
+		vTaskDelayUntil(&xLastWakeTime_sen, 100/portTICK_PERIOD_MS);  // 100 Hz loop
+		if( (mtick % 100) == 0) {  // test stack every second
+			if( uxTaskGetStackHighWaterMark( npid ) < 1024 )
+				 ESP_LOGW(FNAME,"Warning processSENSORS task stack low: %d bytes", uxTaskGetStackHighWaterMark( npid ) );
+		}
+	}		
+}						
 
 static void grabMPU()
 {
@@ -1884,6 +1904,7 @@ void system_startup(void *args){
 	}
 	
 	xTaskCreatePinnedToCore(&processIMU, "processIMU", 4096, NULL, 15, &mpid, 0);
+	xTaskCreatePinnedToCore(&processSENSORS, "processSENSORS", 4096, NULL, 14, &npid, 0);	
 	
 	if( SetupCommon::isClient() ){
 		xTaskCreatePinnedToCore(&clientLoop, "clientLoop", 4096, NULL, 11, &bpid, 0);
