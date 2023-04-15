@@ -496,7 +496,6 @@ static void processIMU(void *pvParameters)
 	mpud::float_axes_t gyroISUNEDMPU;
 
 	// variables for bias estimation
-	bool BIAS_Init = false;
 	int16_t gyrobiastemptimer = 0;
 	float deltaGyroTest = 0.0;	// gyro alfa/beta filter for gyro stability test
 	float GyroTestPrimFilt = 0.0;
