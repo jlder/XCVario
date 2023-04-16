@@ -153,7 +153,10 @@ mpud::float_axes_t gyroDPS_Prev;
 
 #define MAXDRIFT 2                // °/s maximum drift that is automatically compensated on ground
 #define NUM_GYRO_SAMPLES 3000     // 10 per second -> 5 minutes, so T has been settled after power on
-//static uint16_t num_gyro_samples = 0;
+
+// Magnetic sensor / compass
+Compass *compass = 0;
+BTSender btsender;
 
 // Fligth Test
 #define IMUrate 1 // IMU data stream rate x 25ms. 0 not allowed
@@ -165,11 +168,9 @@ mpud::float_axes_t gyroDPS_Prev;
 #define MPU_TEMP_STABILITY 1200; // 30 seconds at 40 hz
 #define GYRO_STABILITY 0.1; // threshold to consider gyro are stable
 
-// Magnetic sensor / compass
-Compass *compass = 0;
-BTSender btsender;
-
 // Fligth Test
+mpud::float_axes_t gyroISUNEDBODY;
+mpud::float_axes_t accelISUNEDBODY;
 static int64_t gyroTime;  // time stamp for gyros
 static int16_t dtGyr; // period between last gyro samples
 static int64_t prevgyroTime;
@@ -626,6 +627,7 @@ static void processIMU(void *pvParameters)
 	while (1) {
 
 		TickType_t xLastWakeTime_mpu =xTaskGetTickCount();
+		mtick++;
 		
 		if( gflags.haveMPU ) {
 			// get accel data
@@ -648,24 +650,18 @@ static void processIMU(void *pvParameters)
 				gyroISUNEDMPU.x = -(gyroRPS.z - currentGyroBias.z);
 				gyroISUNEDMPU.y = -(gyroRPS.y - currentGyroBias.y);
 				gyroISUNEDMPU.z = -(gyroRPS.x - currentGyroBias.x);
-				// TODO convert gyros to ISUNEDBODY and remove offset estimation in flight
+				// WIP convert NEDMPU to NEDBODY
+				gyroISUNEDBODY.x = CT * gyroISUNEDMPU.x + STmultSS * gyroISUNEDMPU.y + STmultCS * gyroISUNEDMPU.z;
+				gyroISUNEDBODY.y = CS * gyroISUNEDMPU.y - SS * gyroISUNEDMPU.z;
+				gyroISUNEDBODY.z = -ST * gyroISUNEDMPU.x + SSmultCT  * gyroISUNEDMPU.y + CTmultCS * gyroISUNEDMPU.z;
+				accelISUNEDBODY.x = CT * accelISUNEDMPU.x + STmultSS * accelISUNEDMPU.y + STmultCS * accelISUNEDMPU.z - ( gyroISUNEDBODY.y * gyroISUNEDBODY.y + gyroISUNEDBODY.z * gyroISUNEDBODY.z ) * DistCGVario;
+				accelISUNEDBODY.y = CS * accelISUNEDMPU.y - SS * accelISUNEDMPU.z;
+				accelISUNEDBODY.z = -ST * accelISUNEDMPU.x + SSmultCT * accelISUNEDMPU.y + CTmultCS * accelISUNEDMPU.z;	
+				// Apply bias correction from IMU
+				gyroISUNEDBODY.x = gyroISUNEDBODY.x;// - IMUBiasx; TODO need to validate bias estimation
+				gyroISUNEDBODY.y = gyroISUNEDBODY.y;// - IMUBiasy;			
+				gyroISUNEDBODY.z = gyroISUNEDBODY.z;// - IMUBiasz;
 			}
-			
-			// WIP convert NEDMPU to NEDBODY
-			mpud::float_axes_t gyroISUNEDBODY;
-			mpud::float_axes_t accelISUNEDBODY;
-			gyroISUNEDBODY.x = CT * gyroISUNEDMPU.x + STmultSS * gyroISUNEDMPU.y + STmultCS * gyroISUNEDMPU.z;
-			gyroISUNEDBODY.y = CS * gyroISUNEDMPU.y - SS * gyroISUNEDMPU.z;
-			gyroISUNEDBODY.z = -ST * gyroISUNEDMPU.x + SSmultCT  * gyroISUNEDMPU.y + CTmultCS * gyroISUNEDMPU.z;
-			accelISUNEDBODY.x = CT * accelISUNEDMPU.x + STmultSS * accelISUNEDMPU.y + STmultCS * accelISUNEDMPU.z - ( gyroISUNEDBODY.y * gyroISUNEDBODY.y + gyroISUNEDBODY.z * gyroISUNEDBODY.z ) * DistCGVario;
-			accelISUNEDBODY.y = CS * accelISUNEDMPU.y - SS * accelISUNEDMPU.z;
-			accelISUNEDBODY.z = -ST * accelISUNEDMPU.x + SSmultCT * accelISUNEDMPU.y + CTmultCS * accelISUNEDMPU.z;	
-
-
-			// Apply bias correction from IMU
-			gyroISUNEDBODY.x = gyroISUNEDBODY.x - IMUBiasx;
-			gyroISUNEDBODY.y = gyroISUNEDBODY.y - IMUBiasy;			
-			gyroISUNEDBODY.z = gyroISUNEDBODY.z - IMUBiasz;			
 			
 			// WIP estimate gravity with centrifugal corrections
 			mpud::float_axes_t gravISUNEDBODY;
@@ -685,16 +681,13 @@ static void processIMU(void *pvParameters)
             if ( abs(q1 * q3 - q0 * q2) < 0.5 ) {
 				Pitch = asin(-2.0 * (q1 * q3 - q0 * q2));
 			} else {
-// gfm				Pitch = M_PI / 2.0 * signbit(-2.0 * (q1 * q3 - q0 * q2));
 				Pitch = M_PI / 2.0 * signbit((q0 * q2 - q1 * q3 ));
 			}
             float Roll = atan2((q0 * q1 + q2 * q3), (0.5 - q1 * q1 - q2 * q2));
             float Yaw = atan2(2.0 * (q1 * q2 + q0 * q3), (q0 * q0 + q1 * q1 - q2 * q2 - q3 * q3));
-            if Yaw < 0.0 then
-              Yaw := Yaw + 2.0 * M_PI;
-            if Yaw > 2.0 * pi then
-              Yaw := Yaw - 2.0 * M_PI;
-
+            if (Yaw < 0.0 ) Yaw = Yaw + 2.0 * M_PI;
+            if (Yaw > 2.0 * M_PI) Yaw = Yaw - 2.0 * M_PI;
+			
 			// If required stream IMU data
 			if ( IMUstream ) {
 				/*
@@ -715,6 +708,21 @@ static void processIMU(void *pvParameters)
 				sprintf(str,"$I,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",
 					gyroTime,(int32_t)(accelISUNEDMPU.x*1000.0), (int32_t)(accelISUNEDMPU.y*1000.0), (int32_t)(accelISUNEDMPU.z*1000.0), (int32_t)(gyroISUNEDMPU.x*10000.0), (int32_t)(gyroISUNEDMPU.y*10000.0),(int32_t)(gyroISUNEDMPU.z*10000.0), (int16_t)(Roll*1000) , (int16_t)(Pitch*1000), (int16_t)(Yaw*1000) );
 				Router::sendXCV(str);
+				
+				// stream gyros bias from IMU every 10 seconds
+				if( (mtick % 400) == 0) {
+					/*
+					BIAS from IMU
+						$B,
+						XXXXX:		bias X-Axis in tenth of milli rad/s,
+						YYYYY:		bias Y-Axis in tenth of milli rad/s,
+						ZZZZZ:		bias Z-Axis in tenth of milli rad/s,
+						<CR><LF>	
+					*/					
+					sprintf(str,"$B,%i,%i,%i\r\n",
+					(int16_t)(IMUBiasx*10000.0), (int16_t)(IMUBiasy*10000.0),(int16_t)(IMUBiasz*10000.0) );
+					Router::sendXCV(str);
+				}
 			}
 			// Estimation of gyro bias when on ground:  IAS < 25 km/h and not bias estimation yet
 			if( (ias.get() < 25.0 ) && !BIAS_Init ) {
@@ -764,10 +772,8 @@ static void processIMU(void *pvParameters)
 			else gyrobiastemptimer = 0; // Insure No bias evaluation during flight
 		}
 		
-		mtick++;
-		
 		vTaskDelayUntil(&xLastWakeTime_mpu, 25/portTICK_PERIOD_MS);  // 25 ms = 40 Hz loop
-		if( (mtick % 25) == 0) {  // test stack every second
+		if( (mtick % 40) == 0) {  // test stack every second
 			if( uxTaskGetStackHighWaterMark( mpid ) < 1024 )
 				 ESP_LOGW(FNAME,"Warning MPU and sensor task stack low: %d bytes", uxTaskGetStackHighWaterMark( mpid ) );
 		}
