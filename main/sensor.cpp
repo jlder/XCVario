@@ -197,6 +197,7 @@ static float XCVTemp=15.0;//External temperature for MPU temp control
 
 // global variables for IMU
 static float GravModuleFilt = 0;
+static float GravyFilt = 0;
 static float integralFBx = 0;
 static float integralFBy = 0;
 static float integralFBz = 0;
@@ -204,6 +205,7 @@ static float integralFBz = 0;
 static float IMUBiasx = 0;
 static float IMUBiasy = 0;
 static float IMUBiasz = 0;
+static float alternategzBias = 0;
 // quaternion for IMU
 static float q0 = 0;
 static float q1 = 0;
@@ -503,6 +505,7 @@ static void MahonyUpdateIMU(float dt, float gx, float gy, float gz, float ax, fl
 #define fcgrav1 (40.0/(40.0+fcGrav))
 #define fcgrav2 (1.0-fcgrav1)
 #define Kbias 0.001
+#define winglevel 0.15 // max lateral gravity acceleration to consider wings are ~leveled
 #define Kalt 0.001
 
 float GravModule, recipNorm, halfvx, halfvy, halfvz, halfex, halfey, halfez, qa, qb, qc;
@@ -529,8 +532,8 @@ float GravModule, recipNorm, halfvx, halfvy, halfvz, halfex, halfey, halfez, qa,
 		// If gravity from acceleromters can be trusted ( acceleration module below given Nzlimit)
 		// correct gyros using proportional and integral feedback
 		// estimate long term bias from gyros
-		GravModuleFilt = fcgrav1 * GravModuleFilt + fcgrav2 * GravModule;
-		if ( abs(GravModuleFilt-GRAVITYSQUARE) < Nzlimit ) {
+		GravModuleFilt = fcgrav1 * GravModuleFilt + fcgrav2 * sqrt( GravModule );
+		if ( (GravModuleFilt-GRAVITY) < Nzlimit ) {
 			integralFBx = integralFBx + Ki * halfex * dt;
 			integralFBy = integralFBy + Ki * halfey * dt;
 			integralFBz = integralFBz + Ki * halfez * dt;
@@ -541,13 +544,14 @@ float GravModule, recipNorm, halfvx, halfvy, halfvz, halfex, halfey, halfez, qa,
 			gx = gx + Kp * halfex;
 			gy = gy + Kp * halfey;
 			gz = gz + Kp * halfez;
-			// Estimate long term bias from gyros
+			// Estimate bias from gyros by long term integration of errors
 			IMUBiasx = IMUBiasx + Kbias * halfex * dt;
 			IMUBiasy = IMUBiasy + Kbias * halfey * dt;
 			IMUBiasz = IMUBiasz + Kbias * halfez * dt;
 			// To capture gz bias when in straight flight, compute bias considering long time average of gz is ~0 when wings are leveled
 			// We should only consider long period therefore Kalt should be set very low e.g. 10-2 or 10-3
-			//if ( abs(halfvy) < winglevel ) then alternategzBias = ( 1 - Kalt ) * alternategzBias + Kalt * gz;
+			GravyFilt = fcgrav1 * GravyFilt + fcgrav2 * halfvy;
+			if ( abs(GravyFilt) < winglevel ) alternategzBias = ( 1 - Kalt ) * alternategzBias + Kalt * gz;
 			// TODO verify validity of the alternate gz bias estimation before using it for gyro corrections
 		}
 	}
@@ -719,8 +723,8 @@ static void processIMU(void *pvParameters)
 						ZZZZZ:		bias Z-Axis in tenth of milli rad/s,
 						<CR><LF>	
 					*/					
-					sprintf(str,"$B,%i,%i,%i\r\n",
-					(int16_t)(IMUBiasx*10000.0), (int16_t)(IMUBiasy*10000.0),(int16_t)(IMUBiasz*10000.0) );
+					sprintf(str,"$B,%i,%i,%i,%i\r\n",
+					(int16_t)(IMUBiasx*10000.0), (int16_t)(IMUBiasy*10000.0),(int16_t)(IMUBiasz*10000.0),(int16_t)(alternategzBias*10000.0) );
 					Router::sendXCV(str);
 				}
 			}
