@@ -496,11 +496,11 @@ void audioTask(void *pvParameters){
 static void MahonyUpdateIMU(float dt, float gx, float gy, float gz, float ax, float ay, float az) {
 
 #define Nzlimit 0.15 // m/s²
-#define Kp 1
+#define Kp 1.0
 #define Ki 0.1
-#define fcGrav 3 // 3Hz low pass
-#define fcgrav1 (40/(40+fcGrav))
-#define fcgrav2 (1-fcgrav1)
+#define fcGrav 3.0 // 3Hz low pass
+#define fcgrav1 (40.0/(40.0+fcGrav))
+#define fcgrav2 (1.0-fcgrav1)
 #define Kbias 0.001
 #define Kalt 0.001
 
@@ -670,7 +670,7 @@ static void processIMU(void *pvParameters)
 			// WIP estimate gravity with centrifugal corrections
 			mpud::float_axes_t gravISUNEDBODY;
 			mpud::float_axes_t Vbi;
-			Vbi.x = tas;
+			if (tas>25.0) Vbi.x = tas; else Vbi.x = 0.0;
 			Vbi.y = 0;
 			Vbi.z = 0;
 			gravISUNEDBODY.x = accelISUNEDBODY.x - gyroISUNEDBODY.y * Vbi.z + gyroISUNEDBODY.z * Vbi.y;
@@ -685,9 +685,15 @@ static void processIMU(void *pvParameters)
             if ( abs(q1 * q3 - q0 * q2) < 0.5 ) {
 				Pitch = asin(-2.0 * (q1 * q3 - q0 * q2));
 			} else {
-				Pitch = M_PI / 2.0 * signbit(-2.0 * (q1 * q3 - q0 * q2));
+// gfm				Pitch = M_PI / 2.0 * signbit(-2.0 * (q1 * q3 - q0 * q2));
+				Pitch = M_PI / 2.0 * signbit((q0 * q2 - q1 * q3 ));
 			}
             float Roll = atan2((q0 * q1 + q2 * q3), (0.5 - q1 * q1 - q2 * q2));
+            float Yaw = atan2(2.0 * (q1 * q2 + q0 * q3), (q0 * q0 + q1 * q1 - q2 * q2 - q3 * q3));
+            if Yaw < 0.0 then
+              Yaw := Yaw + 2.0 * M_PI;
+            if Yaw > 2.0 * pi then
+              Yaw := Yaw - 2.0 * M_PI;
 
 			// If required stream IMU data
 			if ( IMUstream ) {
@@ -701,12 +707,13 @@ static void processIMU(void *pvParameters)
 					XXXXX:		rotation X-Axis in tenth of milli rad/s,
 					YYYYY:		rotation Y-Axis in tenth of milli rad/s,
 					ZZZZZ:		rotation Z-Axis in tenth of milli rad/s,
-					XXXX:		Pitch in milli rad,
 					YYYY:		Roll in milli rad
+					XXXX:		Pitch in milli rad,
+					XXXX:		Yaw in milli rad,
 					<CR><LF>	
 				*/			
-				sprintf(str,"$I,%lld,%i,%i,%i,%i,%i,%i,%i,%i\r\n",
-					gyroTime,(int32_t)(accelISUNEDMPU.x*1000.0), (int32_t)(accelISUNEDMPU.y*1000.0), (int32_t)(accelISUNEDMPU.z*1000.0), (int32_t)(gyroISUNEDMPU.x*10000.0), (int32_t)(gyroISUNEDMPU.y*10000.0),(int32_t)(gyroISUNEDMPU.z*10000.0), (int16_t)(Pitch*1000), (int16_t)(Roll*1000) );
+				sprintf(str,"$I,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",
+					gyroTime,(int32_t)(accelISUNEDMPU.x*1000.0), (int32_t)(accelISUNEDMPU.y*1000.0), (int32_t)(accelISUNEDMPU.z*1000.0), (int32_t)(gyroISUNEDMPU.x*10000.0), (int32_t)(gyroISUNEDMPU.y*10000.0),(int32_t)(gyroISUNEDMPU.z*10000.0), (int16_t)(Roll*1000) , (int16_t)(Pitch*1000), (int16_t)(Yaw*1000) );
 				Router::sendXCV(str);
 			}
 			// Estimation of gyro bias when on ground:  IAS < 25 km/h and not bias estimation yet
