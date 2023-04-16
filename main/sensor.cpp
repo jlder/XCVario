@@ -495,11 +495,12 @@ void audioTask(void *pvParameters){
 
 static void MahonyUpdateIMU(float dt, float gx, float gy, float gz, float ax, float ay, float az) {
 
-#define Nzlimit 0.15
+#define Nzlimit 0.15 // m/s²
 #define Kp 1
 #define Ki 0.1
-#define Kgrav1 (1-3/40) // filter gravity ~3Hz with 40 Hz sampling rate
-#define Kgrav2 (1-Kgrav1)
+#define fcGrav 3 // 3Hz low pass
+#define fcgrav1 (40/(40+fcGrav))
+#define fcgrav2 (1-fcgrav1)
 #define Kbias 0.001
 #define Kalt 0.001
 
@@ -527,7 +528,7 @@ float GravModule, recipNorm, halfvx, halfvy, halfvz, halfex, halfey, halfez, qa,
 		// If gravity from acceleromters can be trusted ( acceleration module below given Nzlimit)
 		// correct gyros using proportional and integral feedback
 		// estimate long term bias from gyros
-		GravModuleFilt = Kgrav1 * GravModuleFilt + Kgrav2 * GravModule;
+		GravModuleFilt = fcgrav1 * GravModuleFilt + fcgrav2 * GravModule;
 		if ( abs(GravModuleFilt-GRAVITYSQUARE) < Nzlimit ) {
 			integralFBx = integralFBx + Ki * halfex * dt;
 			integralFBy = integralFBy + Ki * halfey * dt;
@@ -614,11 +615,6 @@ static void processIMU(void *pvParameters)
 	float SS = sin(sway.get());
 	float CT = cos(tilt.get());
 	float ST = sin(tilt.get());
-	float TT = tan(tilt.get());
-	float TTmultSS = TT * SS;
-	float TTmultCS = TT * CS;
-	float SSdivCT = SS / CT;
-	float CSdivCT = CS / CT;
 	float STmultSS = ST * SS;
 	float STmultCS = ST * CS;
 	float SSmultCT = SS * CT;
@@ -658,12 +654,13 @@ static void processIMU(void *pvParameters)
 			// WIP convert NEDMPU to NEDBODY
 			mpud::float_axes_t gyroISUNEDBODY;
 			mpud::float_axes_t accelISUNEDBODY;
-			gyroISUNEDBODY.x = gyroISUNEDMPU.x * CT + ST * ( SS * gyroISUNEDMPU.y + gyroISUNEDMPU.z * CS);
+			gyroISUNEDBODY.x = CT * gyroISUNEDMPU.x + STmultSS * gyroISUNEDMPU.y + STmultCS * gyroISUNEDMPU.z;
 			gyroISUNEDBODY.y = CS * gyroISUNEDMPU.y - SS * gyroISUNEDMPU.z;
-			gyroISUNEDBODY.z = SSdivCT * gyroISUNEDMPU.y + CSdivCT * gyroISUNEDMPU.z;
+			gyroISUNEDBODY.z = -ST * gyroISUNEDMPU.x + SSmultCT  * gyroISUNEDMPU.y + CTmultCS * gyroISUNEDMPU.z;
 			accelISUNEDBODY.x = CT * accelISUNEDMPU.x + STmultSS * accelISUNEDMPU.y + STmultCS * accelISUNEDMPU.z - ( gyroISUNEDBODY.y * gyroISUNEDBODY.y + gyroISUNEDBODY.z * gyroISUNEDBODY.z ) * DistCGVario;
 			accelISUNEDBODY.y = CS * accelISUNEDMPU.y - SS * accelISUNEDMPU.z;
-			accelISUNEDBODY.z = -ST * accelISUNEDMPU.x + SSmultCT * accelISUNEDMPU.y + CTmultCS * accelISUNEDMPU.z;			
+			accelISUNEDBODY.z = -ST * accelISUNEDMPU.x + SSmultCT * accelISUNEDMPU.y + CTmultCS * accelISUNEDMPU.z;	
+
 
 			// Apply bias correction from IMU
 			gyroISUNEDBODY.x = gyroISUNEDBODY.x - IMUBiasx;
