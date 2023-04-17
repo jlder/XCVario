@@ -678,7 +678,7 @@ static void processIMU(void *pvParameters)
 			gravISUNEDBODY.z = accelISUNEDBODY.z + gyroISUNEDBODY.y * Vbi.x - gyroISUNEDBODY.x * Vbi.y;
 
 			// Update IMU quaternion
-			MahonyUpdateIMU( dtGyr, gyroISUNEDBODY.x, gyroISUNEDBODY.x, gyroISUNEDBODY.x, -gravISUNEDBODY.x, -gravISUNEDBODY.y, -gravISUNEDBODY.z );			
+			MahonyUpdateIMU( dtGyr, gyroISUNEDBODY.x, gyroISUNEDBODY.y, gyroISUNEDBODY.z, -gravISUNEDBODY.x, -gravISUNEDBODY.y, -gravISUNEDBODY.z );			
 
 			// Euler angles
 			float Pitch;
@@ -707,26 +707,20 @@ static void processIMU(void *pvParameters)
 					YYYY:		Roll in milli rad
 					XXXX:		Pitch in milli rad,
 					XXXX:		Yaw in milli rad,
+					XXXXX:		bias gyro IMU X-Axis in tenth of milli rad/s,
+					YYYYY:		bias gyro IMU Y-Axis in tenth of milli rad/s,
+					ZZZZZ:		bias gyro IMU Z-Axis in tenth of milli rad/s,
+					ZZZZZ:		alternate bias gyro Z-Axis in tenth of milli rad/s,
+					XXXXX:		gravity module filtered in milli m/s²,					
 					<CR><LF>	
 				*/			
-				sprintf(str,"$I,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",
-					gyroTime,(int32_t)(accelISUNEDMPU.x*1000.0), (int32_t)(accelISUNEDMPU.y*1000.0), (int32_t)(accelISUNEDMPU.z*1000.0), (int32_t)(gyroISUNEDMPU.x*10000.0), (int32_t)(gyroISUNEDMPU.y*10000.0),(int32_t)(gyroISUNEDMPU.z*10000.0), (int16_t)(Roll*1000) , (int16_t)(Pitch*1000), (int16_t)(Yaw*1000) );
+				sprintf(str,"$I,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",
+					gyroTime,(int32_t)(accelISUNEDMPU.x*1000.0), (int32_t)(accelISUNEDMPU.y*1000.0), (int32_t)(accelISUNEDMPU.z*1000.0),
+					(int32_t)(gyroISUNEDMPU.x*10000.0), (int32_t)(gyroISUNEDMPU.y*10000.0),(int32_t)(gyroISUNEDMPU.z*10000.0),
+					(int16_t)(Roll*1000) ,(int16_t)(Pitch*1000),(int16_t)(Yaw*1000),
+					(int16_t)(IMUBiasx*10000.0),(int16_t)(IMUBiasy*10000.0),(int16_t)(IMUBiasz*10000.0),(int16_t)(alternategzBias*10000.0),(int16_t)(GravModuleFilt*1000)
+					);
 				Router::sendXCV(str);
-				
-				// stream gyros bias from IMU every 10 seconds
-				if( (mtick % 400) == 0) {
-					/*
-					BIAS from IMU
-						$B,
-						XXXXX:		bias X-Axis in tenth of milli rad/s,
-						YYYYY:		bias Y-Axis in tenth of milli rad/s,
-						ZZZZZ:		bias Z-Axis in tenth of milli rad/s,
-						<CR><LF>	
-					*/					
-					sprintf(str,"$B,%i,%i,%i,%i\r\n",
-					(int16_t)(IMUBiasx*10000.0), (int16_t)(IMUBiasy*10000.0),(int16_t)(IMUBiasz*10000.0),(int16_t)(alternategzBias*10000.0) );
-					Router::sendXCV(str);
-				}
 			}
 			// Estimation of gyro bias when on ground:  IAS < 25 km/h and not bias estimation yet
 			if( (ias.get() < 25.0 ) && !BIAS_Init ) {
