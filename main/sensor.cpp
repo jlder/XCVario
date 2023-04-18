@@ -496,11 +496,11 @@ void audioTask(void *pvParameters){
 	}
 }
 
-void MahonyUpdateIMU(float dt, float gx, float gy, float gz, float ax, float ay, float az,float *q0,float *q1,float *q2,float *q3) {
+void MahonyUpdateIMU(float dt, float gx, float gy, float gz, float ax, float ay, float az, float &q0, float &q1, float &q2, float &q3) {
 
 #define Nzlimit 0.15 // m/s²
-#define Kp 1.0
-#define Ki 0.1
+#define Kp 0.1
+#define Ki 0.01
 #define fcGrav 3.0 // 3Hz low pass
 #define fcgrav1 (40.0/(40.0+fcGrav))
 #define fcgrav2 (1.0-fcgrav1)
@@ -521,9 +521,9 @@ char str[150];
 		az *=recipNorm;
 
 		// Estimated direction of gravity
-		halfvx = *q1 * *q3 - *q0 * *q2;
-		halfvy = *q0 * *q1 + *q2 * *q3;
-		halfvz = *q0 * *q0 - 0.5 + *q3 * *q3;
+		halfvx = q1 * q3 - q0 * q2;
+		halfvy = q0 * q1 + q2 * q3;
+		halfvz = q0 * q0 - 0.5 + q3 * q3;
 
 		// Error is sum of cross product between estimated and measured direction of gravity
 		halfex = (ay * halfvz - az * halfvy);
@@ -561,24 +561,24 @@ char str[150];
 	gx = gx * 0.5 * dt; // pre-multiply common factors
 	gy = gy * 0.5 * dt;
 	gz = gz * 0.5 * dt;
-	qa = *q0;
-	qb = *q1;
-	qc = *q2;
-	*q0 +=(-qb * gx - qc * gy - *q3 * gz);
-	*q1 += (qa * gx + qc * gz - *q3 * gy);
-	*q2 += (qa * gy - qb * gz + *q3 * gx);
-	*q3 += (qa * gz + qb * gy - qc * gx);
+	qa = q0;
+	qb = q1;
+	qc = q2;
+	q0 +=(-qb * gx - qc * gy - q3 * gz);
+	q1 += (qa * gx + qc * gz - q3 * gy);
+	q2 += (qa * gy - qb * gz + q3 * gx);
+	q3 += (qa * gz + qb * gy - qc * gx);
 
 	// Normalise quaternion
-	recipNorm = 1.0 / sqrt(*q0 * *q0 + *q1 * *q1 + *q2 * *q2 + *q3 * *q3);
-	*q0 *= recipNorm;
-	*q1 *= recipNorm;
-	*q2 *= recipNorm;
-	*q3 *= recipNorm;
+	recipNorm = 1.0 / sqrt(q0 * q0 + q1 * q1 + q2 * q2 + q3 * q3);
+	q0 *= recipNorm;
+	q1 *= recipNorm;
+	q2 *= recipNorm;
+	q3 *= recipNorm;
 	sprintf(str,"$Im,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",
 		gyroTime,(int32_t)(ax*1000.0), (int32_t)(ay*1000.0), (int32_t)(az*1000.0),
 		(int32_t)(gx*10000.0), (int32_t)(gy*10000.0),(int32_t)(gz*10000.0),
-		(int16_t)(*q0*10000.0),(int16_t)(*q1*10000.0),(int16_t)(*q2*10000.0),(int16_t)(*q3*10000.0),(int16_t)(dt*1000)
+		(int16_t)(q0*10000.0),(int16_t)(q1*10000.0),(int16_t)(q2*10000.0),(int16_t)(q3*10000.0),(int16_t)(dt*1000)
 		);
 	Router::sendXCV(str);
 }
@@ -676,29 +676,29 @@ static void processIMU(void *pvParameters)
 				gyroISUNEDBODY.z = gyroISUNEDBODY.z;// - IMUBiasz;
 			}
 			if(BIAS_Init){
-			// WIP estimate gravity with centrifugal corrections
-			mpud::float_axes_t gravISUNEDBODY;
-			mpud::float_axes_t Vbi;
-			if (tas>25.0) Vbi.x = tas; else Vbi.x = 0.0;
-			Vbi.y = 0;
-			Vbi.z = 0;
-			gravISUNEDBODY.x = accelISUNEDBODY.x - gyroISUNEDBODY.y * Vbi.z + gyroISUNEDBODY.z * Vbi.y;
-			gravISUNEDBODY.y = accelISUNEDBODY.y - gyroISUNEDBODY.z * Vbi.x + gyroISUNEDBODY.x * Vbi.z;
-			gravISUNEDBODY.z = accelISUNEDBODY.z + gyroISUNEDBODY.y * Vbi.x - gyroISUNEDBODY.x * Vbi.y;
+				// WIP estimate gravity with centrifugal corrections
+				mpud::float_axes_t gravISUNEDBODY;
+				mpud::float_axes_t Vbi;
+				if (tas>25.0) Vbi.x = tas; else Vbi.x = 0.0;
+				Vbi.y = 0;
+				Vbi.z = 0;
+				gravISUNEDBODY.x = accelISUNEDBODY.x - gyroISUNEDBODY.y * Vbi.z + gyroISUNEDBODY.z * Vbi.y;
+				gravISUNEDBODY.y = accelISUNEDBODY.y - gyroISUNEDBODY.z * Vbi.x + gyroISUNEDBODY.x * Vbi.z;
+				gravISUNEDBODY.z = accelISUNEDBODY.z + gyroISUNEDBODY.y * Vbi.x - gyroISUNEDBODY.x * Vbi.y;
 
-			// Update IMU quaternion
-			MahonyUpdateIMU( dtGyr, gyroISUNEDBODY.x, gyroISUNEDBODY.y, gyroISUNEDBODY.z, -gravISUNEDBODY.x, -gravISUNEDBODY.y, -gravISUNEDBODY.z,&q0,&q1,&q2,&q3 );
+				// Update IMU quaternion
+				MahonyUpdateIMU( dtGyr, gyroISUNEDBODY.x, gyroISUNEDBODY.y, gyroISUNEDBODY.z, -gravISUNEDBODY.x, -gravISUNEDBODY.y, -gravISUNEDBODY.z,q0,q1,q2,q3 );
 
-			// Euler angles
-            if ( abs(q1 * q3 - q0 * q2) < 0.5 ) {
-				Pitch = asin(-2.0 * (q1 * q3 - q0 * q2));
-			} else {
-				Pitch = M_PI / 2.0 * signbit((q0 * q2 - q1 * q3 ));
-			}
-            Roll = atan2((q0 * q1 + q2 * q3), (0.5 - q1 * q1 - q2 * q2));
-            Yaw = atan2(2.0 * (q1 * q2 + q0 * q3), (q0 * q0 + q1 * q1 - q2 * q2 - q3 * q3));
-            if (Yaw < 0.0 ) Yaw = Yaw + 2.0 * M_PI;
-            if (Yaw > 2.0 * M_PI) Yaw = Yaw - 2.0 * M_PI;
+				// Euler angles
+				if ( abs(q1 * q3 - q0 * q2) < 0.5 ) {
+					Pitch = asin(-2.0 * (q1 * q3 - q0 * q2));
+				} else {
+					Pitch = M_PI / 2.0 * signbit((q0 * q2 - q1 * q3 ));
+				}
+				Roll = atan2((q0 * q1 + q2 * q3), (0.5 - q1 * q1 - q2 * q2));
+				Yaw = atan2(2.0 * (q1 * q2 + q0 * q3), (q0 * q0 + q1 * q1 - q2 * q2 - q3 * q3));
+				if (Yaw < 0.0 ) Yaw = Yaw + 2.0 * M_PI;
+				if (Yaw > 2.0 * M_PI) Yaw = Yaw - 2.0 * M_PI;
 			}
 			// If required stream IMU data
 			if ( IMUstream ) {
