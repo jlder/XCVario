@@ -496,7 +496,7 @@ void audioTask(void *pvParameters){
 	}
 }
 
-static void MahonyUpdateIMU(float dt, float gx, float gy, float gz, float ax, float ay, float az) {
+void MahonyUpdateIMU(float dt, float gx, float gy, float gz, float ax, float ay, float az,float *q0,float *q1,float *q2,float *q3) {
 
 #define Nzlimit 0.15 // m/s²
 #define Kp 1.0
@@ -510,19 +510,20 @@ static void MahonyUpdateIMU(float dt, float gx, float gy, float gz, float ax, fl
 
 float GravModule, recipNorm, halfvx, halfvy, halfvz, halfex, halfey, halfez, qa, qb, qc;
 
+char str[150];
 	// Compute feedback only if accelerometer measurement valid (avoids NaN in accelerometer normalisation)
 	if (((ax != 0.0) or (ay != 0.0) or (az != 0.0))) {
 		// Normalise accelerometer measurement
 		GravModule = ax * ax + ay * ay + az * az;
 		recipNorm = 1.0 / sqrt( GravModule );
-		ax = ax * recipNorm;
-		ay = ay * recipNorm;
-		az = az * recipNorm;
+		ax *=recipNorm;
+		ay *=recipNorm;
+		az *=recipNorm;
 
 		// Estimated direction of gravity
-		halfvx = q1 * q3 - q0 * q2;
-		halfvy = q0 * q1 + q2 * q3;
-		halfvz = q0 * q0 - 0.5 + q3 * q3;
+		halfvx = *q1 * *q3 - *q0 * *q2;
+		halfvy = *q0 * *q1 + *q2 * *q3;
+		halfvz = *q0 * *q0 - 0.5 + *q3 * *q3;
 
 		// Error is sum of cross product between estimated and measured direction of gravity
 		halfex = (ay * halfvz - az * halfvy);
@@ -560,20 +561,26 @@ float GravModule, recipNorm, halfvx, halfvy, halfvz, halfex, halfey, halfez, qa,
 	gx = gx * 0.5 * dt; // pre-multiply common factors
 	gy = gy * 0.5 * dt;
 	gz = gz * 0.5 * dt;
-	qa = q0;
-	qb = q1;
-	qc = q2;
-	q0 = q0 + (-qb * gx - qc * gy - q3 * gz);
-	q1 = q1 + (qa * gx + qc * gz - q3 * gy);
-	q2 = q2 + (qa * gy - qb * gz + q3 * gx);
-	q3 = q3 + (qa * gz + qb * gy - qc * gx);
+	qa = *q0;
+	qb = *q1;
+	qc = *q2;
+	*q0 +=(-qb * gx - qc * gy - *q3 * gz);
+	*q1 += (qa * gx + qc * gz - *q3 * gy);
+	*q2 += (qa * gy - qb * gz + *q3 * gx);
+	*q3 += (qa * gz + qb * gy - qc * gx);
 
 	// Normalise quaternion
-	recipNorm = 1.0 / sqrt(q0 * q0 + q1 * q1 + q2 * q2 + q3 * q3);
-	q0 = q0 * recipNorm;
-	q1 = q1 * recipNorm;
-	q2 = q2 * recipNorm;
-	q3 = q3 * recipNorm;
+	recipNorm = 1.0 / sqrt(*q0 * *q0 + *q1 * *q1 + *q2 * *q2 + *q3 * *q3);
+	*q0 *= recipNorm;
+	*q1 *= recipNorm;
+	*q2 *= recipNorm;
+	*q3 *= recipNorm;
+	sprintf(str,"$Im,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",
+		gyroTime,(int32_t)(ax*1000.0), (int32_t)(ay*1000.0), (int32_t)(az*1000.0),
+		(int32_t)(gx*10000.0), (int32_t)(gy*10000.0),(int32_t)(gz*10000.0),
+		(int16_t)(*q0*10000.0),(int16_t)(*q1*10000.0),(int16_t)(*q2*10000.0),(int16_t)(*q3*10000.0),(int16_t)(dt*1000)
+		);
+	Router::sendXCV(str);
 }
 
 static void processIMU(void *pvParameters)
@@ -624,6 +631,9 @@ static void processIMU(void *pvParameters)
 	float STmultCS = ST * CS;
 	float SSmultCT = SS * CT;
 	float CTmultCS = CT * CS;
+	float Roll=0.0;
+	float Pitch=0.0;
+	float Yaw=0.0;
 	
 	// string for flight test message broadcast on wireless
 	char str[150]; 
@@ -645,9 +655,8 @@ static void processIMU(void *pvParameters)
 			}
 			// get gyro data
 			if( MPU.rotation(&gyroRaw) == ESP_OK ){
-				prevgyroTime = gyroTime;
-				gyroTime = esp_timer_get_time()/1000; // record time of gyro measurement in milli second
-				dtGyr = (gyroTime - prevgyroTime)/1000; // period between last two valid samples in second
+				gyroTime = esp_timer_get_time()/1000.0; // record time of gyro measurement in milli second
+				dtGyr = (gyroTime - prevgyroTime)/1000.0; // period between last two valid samples in second
 				gyroDPS = mpud::gyroDegPerSec(gyroRaw, GYRO_FS); // For compatibility with Eckhard code only. Convert raw gyro to Gyro_FS full scale in degre per second 
 				gyroRPS = mpud::gyroRadPerSec(gyroRaw, GYRO_FS); // convert raw gyro to Gyro_FS full scale
 				// convert gyro coordinates to ISU : rad/s NED MPU and remove bias
@@ -666,7 +675,7 @@ static void processIMU(void *pvParameters)
 				gyroISUNEDBODY.y = gyroISUNEDBODY.y;// - IMUBiasy;			
 				gyroISUNEDBODY.z = gyroISUNEDBODY.z;// - IMUBiasz;
 			}
-			
+			if(BIAS_Init){
 			// WIP estimate gravity with centrifugal corrections
 			mpud::float_axes_t gravISUNEDBODY;
 			mpud::float_axes_t Vbi;
@@ -678,20 +687,19 @@ static void processIMU(void *pvParameters)
 			gravISUNEDBODY.z = accelISUNEDBODY.z + gyroISUNEDBODY.y * Vbi.x - gyroISUNEDBODY.x * Vbi.y;
 
 			// Update IMU quaternion
-			MahonyUpdateIMU( dtGyr, gyroISUNEDBODY.x, gyroISUNEDBODY.y, gyroISUNEDBODY.z, -gravISUNEDBODY.x, -gravISUNEDBODY.y, -gravISUNEDBODY.z );			
+			MahonyUpdateIMU( dtGyr, gyroISUNEDBODY.x, gyroISUNEDBODY.y, gyroISUNEDBODY.z, -gravISUNEDBODY.x, -gravISUNEDBODY.y, -gravISUNEDBODY.z,&q0,&q1,&q2,&q3 );
 
 			// Euler angles
-			float Pitch;
             if ( abs(q1 * q3 - q0 * q2) < 0.5 ) {
 				Pitch = asin(-2.0 * (q1 * q3 - q0 * q2));
 			} else {
 				Pitch = M_PI / 2.0 * signbit((q0 * q2 - q1 * q3 ));
 			}
-            float Roll = atan2((q0 * q1 + q2 * q3), (0.5 - q1 * q1 - q2 * q2));
-            float Yaw = atan2(2.0 * (q1 * q2 + q0 * q3), (q0 * q0 + q1 * q1 - q2 * q2 - q3 * q3));
+            Roll = atan2((q0 * q1 + q2 * q3), (0.5 - q1 * q1 - q2 * q2));
+            Yaw = atan2(2.0 * (q1 * q2 + q0 * q3), (q0 * q0 + q1 * q1 - q2 * q2 - q3 * q3));
             if (Yaw < 0.0 ) Yaw = Yaw + 2.0 * M_PI;
             if (Yaw > 2.0 * M_PI) Yaw = Yaw - 2.0 * M_PI;
-			
+			}
 			// If required stream IMU data
 			if ( IMUstream ) {
 				/*
@@ -717,8 +725,9 @@ static void processIMU(void *pvParameters)
 				sprintf(str,"$I,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",
 					gyroTime,(int32_t)(accelISUNEDMPU.x*1000.0), (int32_t)(accelISUNEDMPU.y*1000.0), (int32_t)(accelISUNEDMPU.z*1000.0),
 					(int32_t)(gyroISUNEDMPU.x*10000.0), (int32_t)(gyroISUNEDMPU.y*10000.0),(int32_t)(gyroISUNEDMPU.z*10000.0),
-					(int16_t)(Roll*1000) ,(int16_t)(Pitch*1000),(int16_t)(Yaw*1000),
-					(int16_t)(IMUBiasx*10000.0),(int16_t)(IMUBiasy*10000.0),(int16_t)(IMUBiasz*10000.0),(int16_t)(alternategzBias*10000.0),(int16_t)(GravModuleFilt*1000)
+					(int16_t)(Roll*1000.0) ,(int16_t)(Pitch*1000.0),(int16_t)(Yaw*1000.0),
+					//(int16_t)(IMUBiasx*10000.0),(int16_t)(IMUBiasy*10000.0),(int16_t)(IMUBiasz*10000.0),(int16_t)(alternategzBias*10000.0),(int16_t)(GravModuleFilt*1000)
+					(int16_t)(q0*10000.0),(int16_t)(q1*10000.0),(int16_t)(q2*10000.0),(int16_t)(q3*10000.0),(int16_t)(dtGyr*1000)
 					);
 				Router::sendXCV(str);
 			}
@@ -775,6 +784,7 @@ static void processIMU(void *pvParameters)
 			if( uxTaskGetStackHighWaterMark( mpid ) < 1024 )
 				 ESP_LOGW(FNAME,"Warning MPU and sensor task stack low: %d bytes", uxTaskGetStackHighWaterMark( mpid ) );
 		}
+		prevgyroTime = gyroTime;
 	}		
 }
 
