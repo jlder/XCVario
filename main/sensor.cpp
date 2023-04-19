@@ -686,7 +686,7 @@ static void processIMU(void *pvParameters)
 				gravISUNEDBODY.z = accelISUNEDBODY.z + gyroISUNEDBODY.y * Vbi.x - gyroISUNEDBODY.x * Vbi.y;
 
 				// Update IMU quaternion
-				MahonyUpdateIMU( 0.025, gyroISUNEDBODY.x, gyroISUNEDBODY.y, gyroISUNEDBODY.z, -gravISUNEDBODY.x, -gravISUNEDBODY.y, -gravISUNEDBODY.z,q0,q1,q2,q3 );
+				MahonyUpdateIMU( dtGyr, gyroISUNEDBODY.x, gyroISUNEDBODY.y, gyroISUNEDBODY.z, -gravISUNEDBODY.x, -gravISUNEDBODY.y, -gravISUNEDBODY.z,q0,q1,q2,q3 );
 
 				// Euler angles
 				if ( abs(q1 * q3 - q0 * q2) < 0.5 ) {
@@ -795,6 +795,9 @@ static void processSENSORS(void *pvParameters)
 // - Sensors data, static, TE, dynamic pressure, OAT and MPU temp
 // - Ublox GNSS data. 
 
+	bool ok=false;
+	float p = 0;
+
 	// string for flight test message broadcast on wireless
 	char str[150]; 
 	
@@ -805,8 +808,6 @@ static void processSENSORS(void *pvParameters)
 		// get sensors data : static, TE, dynamic pressure, OAT, MPU temp and GNSS data. 
 
 		// get raw static pressure
-		bool ok=false;
-		float p = 0;
 		p = baroSensor->readPressure(ok);
 		if ( ok ) {
 			statTime = esp_timer_get_time()/1000.0; // record static time in milli second
