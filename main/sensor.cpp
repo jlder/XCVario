@@ -811,7 +811,7 @@ static void processSENSORS(void *pvParameters)
 		float p = 0;
 		p = baroSensor->readPressure(ok);
 		if ( ok ) {
-			statTime = esp_timer_get_time()/1000000.0; // record static time in second
+			statTime = esp_timer_get_time()/1000.0; // record static time in milli second
 			statP = p;
 			// for compatibility with readSensors
 			baroP = p;
@@ -821,7 +821,7 @@ static void processSENSORS(void *pvParameters)
 		xSemaphoreTake(xMutex,portMAX_DELAY );
 		p = teSensor->readPressure(ok);
 		if ( ok ) {
-			teTime = esp_timer_get_time()/1000000.0; // record TE time in second
+			teTime = esp_timer_get_time()/1000.0; // record TE time in milli second
 			teP = p;
 			// not sure what is required for compatibility with readSensors
 		}
@@ -877,7 +877,7 @@ static void processSENSORS(void *pvParameters)
 			<CR><LF>		
 		*/
 			sprintf(str,"$S,%lld,%i,%lld,%i,%i,%i,%i,%1d,%2d,%lld,%i,%i,%i,%i\r\n",
-				(int64_t)(statTime*1000.0), (int32_t)(statP*100.0), (int64_t)(teTime*1000.0),(int32_t)(teP*100.0), (int16_t)(dynP),  (int16_t)(OATemp*10.0), (int16_t)(MPUtempcel*10.0), chosenGnss->fix, chosenGnss->numSV,
+				statTime, (int32_t)(statP*100.0), teTime, (int32_t)(teP*100.0), (int16_t)(dynP),  (int16_t)(OATemp*10.0), (int16_t)(MPUtempcel*10.0), chosenGnss->fix, chosenGnss->numSV,
 				(int64_t)(chosenGnss->time*1000.0), (int32_t)(chosenGnss->coordinates.altitude*100), (int16_t)(chosenGnss->speed.x*100), (int16_t)(chosenGnss->speed.y*100), (int16_t)(chosenGnss->speed.z*100));
 			Router::sendXCV(str);
 		}
