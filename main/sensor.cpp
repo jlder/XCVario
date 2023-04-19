@@ -251,7 +251,9 @@ int active_screen = 0;  // 0 = Vario
 
 float mpu_target_temp=45.0;
 
-static int mtick = 0; //counter to schedule specific tasks within a function*
+static bool processingSensors = false;
+static int mtick = 0; //counter to schedule specific tasks within a function
+static int ntick = 0; //counter to schedule specific tasks within a function
 
 AdaptUGC *egl = 0;
 
@@ -801,7 +803,7 @@ static void processSENSORS(void *pvParameters)
 	char str[150]; 
 	
 	while (1) {	
-
+		processingSensors = true;
 		TickType_t xLastWakeTime_sen =xTaskGetTickCount();
 	
 		// get sensors data : static, TE, dynamic pressure, OAT, MPU temp and GNSS data. 
@@ -882,13 +884,14 @@ static void processSENSORS(void *pvParameters)
 			Router::sendXCV(str);
 		}
 		
-		mtick++;
+		ntick++;
 		
 		vTaskDelayUntil(&xLastWakeTime_sen, 100/portTICK_PERIOD_MS);  // 100 Hz loop
-		if( (mtick % 100) == 0) {  // test stack every second
+		if( (ntick % 100) == 0) {  // test stack every second
 			if( uxTaskGetStackHighWaterMark( npid ) < 1024 )
 				 ESP_LOGW(FNAME,"Warning processSENSORS task stack low: %d bytes", uxTaskGetStackHighWaterMark( npid ) );
 		}
+		processingSensors = false;
 	}		
 }						
 
@@ -1078,7 +1081,7 @@ void readSensors(void *pvParameters){
 	while (1)
 	{
 		count++;
-		while( (mtick%4)==0 ){ // wait for processIMU SEN tick has been processed
+		while( 	processingSensors ){ // wait for processSensors has been processed
 			delay(2);
 		}
 
