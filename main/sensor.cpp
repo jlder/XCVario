@@ -2071,7 +2071,7 @@ void system_startup(void *args){
 		centeraid = new CenterAid( MYUCG );
 	}
 	
-	xTaskCreatePinnedToCore(&processIMU, "processIMU", 4096, NULL, 15, &mpid, 0);
+	xTaskCreatePinnedToCore(&processIMU, "processIMU", 5120, NULL, 15, &mpid, 0);
 	xTaskCreatePinnedToCore(&processSENSORS, "processSENSORS", 4096, NULL, 14, &npid, 0);	
 	
 	if( SetupCommon::isClient() ){
