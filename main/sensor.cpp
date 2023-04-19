@@ -510,27 +510,24 @@ void MahonyUpdateIMU(float dt, float gx, float gy, float gz, float ax, float ay,
 #define winglevel 0.15 // max lateral gravity acceleration to consider wings are ~leveled
 #define Kalt 0.001
 
-float GravModule, recipNorm, halfvx, halfvy, halfvz, halfex, halfey, halfez, qa, qb, qc;
+float GravModule, QuatModule, recipNorm, halfvx, halfvy, halfvz, halfex, halfey, halfez, qa, qb, qc;
 
 	// Compute feedback only if accelerometer measurement valid (avoids NaN in accelerometer normalisation)
-	if (((ax != 0.0) or (ay != 0.0) or (az != 0.0))) {
+	GravModule = ax * ax + ay * ay + az * az;	
+	if ( GravModule != 0.0) {
 		// Normalise accelerometer measurement
-		GravModule = ax * ax + ay * ay + az * az;
 		recipNorm = 1.0 / sqrt( GravModule );
 		ax *=recipNorm;
 		ay *=recipNorm;
 		az *=recipNorm;
-
 		// Estimated direction of gravity
 		halfvx = q1 * q3 - q0 * q2;
 		halfvy = q0 * q1 + q2 * q3;
 		halfvz = q0 * q0 - 0.5 + q3 * q3;
-
 		// Error is sum of cross product between estimated and measured direction of gravity
 		halfex = (ay * halfvz - az * halfvy);
 		halfey = (az * halfvx - ax * halfvz);
 		halfez = (ax * halfvy - ay * halfvx);
-
 		// If gravity from acceleromters can be trusted ( acceleration module below given Nzlimit)
 		// correct gyros using proportional and integral feedback
 		// estimate long term bias from gyros
@@ -571,11 +568,15 @@ float GravModule, recipNorm, halfvx, halfvy, halfvz, halfex, halfey, halfez, qa,
 	q3 += (qa * gz + qb * gy - qc * gx);
 
 	// Normalise quaternion
-	recipNorm = 1.0 / sqrt(q0 * q0 + q1 * q1 + q2 * q2 + q3 * q3);
-	q0 *= recipNorm;
-	q1 *= recipNorm;
-	q2 *= recipNorm;
-	q3 *= recipNorm;
+	
+	QuatModule = sqrt(q0 * q0 + q1 * q1 + q2 * q2 + q3 * q3);
+	if ( QuatModule != 0.0) {	
+		recipNorm = 1.0 / QuatModule;	
+		q0 *= recipNorm;
+		q1 *= recipNorm;
+		q2 *= recipNorm;
+		q3 *= recipNorm;
+	}
 }
 
 static void processIMU(void *pvParameters)
@@ -588,11 +589,14 @@ static void processIMU(void *pvParameters)
 // - Ublox GNSS data. 
 
 	// MPU data
+	esp_err_t err;
 	mpud::raw_axes_t accelRaw; 
 	mpud::float_axes_t accelISUNEDMPU;
 	mpud::raw_axes_t gyroRaw;
 	mpud::float_axes_t gyroRPS;
 	mpud::float_axes_t gyroISUNEDMPU;
+	mpud::float_axes_t gravISUNEDBODY;
+	mpud::float_axes_t Vbi;
 
 	// variables for bias estimation
 	int16_t gyrobiastemptimer = 0;
@@ -636,11 +640,10 @@ static void processIMU(void *pvParameters)
 	while (1) {
 
 		TickType_t xLastWakeTime_mpu =xTaskGetTickCount();
-		mtick++;
 		
 		if( gflags.haveMPU ) {
 			// get accel data
-		    esp_err_t err = MPU.acceleration(&accelRaw);
+		    err = MPU.acceleration(&accelRaw);
 			if( err == ESP_OK ){
 				accelG = mpud::accelGravity(accelRaw, mpud::ACCEL_FS_8G);  // For compatibility with Eckhard code only. Convert raw data to to 8G full scale
 				// convert accels coordinates to ISU : m/s² NED MPU
@@ -675,8 +678,6 @@ static void processIMU(void *pvParameters)
 			}
 			if(BIAS_Init){
 				// WIP estimate gravity with centrifugal corrections
-				mpud::float_axes_t gravISUNEDBODY;
-				mpud::float_axes_t Vbi;
 				if (tas>25.0) Vbi.x = tas; else Vbi.x = 0.0;
 				Vbi.y = 0;
 				Vbi.z = 0;
@@ -776,6 +777,7 @@ static void processIMU(void *pvParameters)
 			else gyrobiastemptimer = 0; // Insure No bias evaluation during flight
 		}
 		
+		mtick++;
 		vTaskDelayUntil(&xLastWakeTime_mpu, 25/portTICK_PERIOD_MS);  // 25 ms = 40 Hz loop
 		if( (mtick % 40) == 0) {  // test stack every second
 			if( uxTaskGetStackHighWaterMark( mpid ) < 1024 )
@@ -879,9 +881,8 @@ static void processSENSORS(void *pvParameters)
 		}
 		
 		ntick++;
-		
-		vTaskDelayUntil(&xLastWakeTime_sen, 100/portTICK_PERIOD_MS);  // 100 Hz loop
-		if( (ntick % 100) == 0) {  // test stack every second
+		vTaskDelayUntil(&xLastWakeTime_sen, 100/portTICK_PERIOD_MS);  // 10 Hz loop
+		if( (ntick % 10) == 0) {  // test stack every second
 			if( uxTaskGetStackHighWaterMark( npid ) < 1024 )
 				 ESP_LOGW(FNAME,"Warning processSENSORS task stack low: %d bytes", uxTaskGetStackHighWaterMark( npid ) );
 		}
