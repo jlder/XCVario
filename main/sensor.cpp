@@ -190,6 +190,7 @@ static float q3 = 1.0;
 
 static char str[150]; 	// string for flight test message broadcast on wireless
 static int64_t ProcessTime = 0;
+static int64_t ProcessTime_Sens = 0;
 static int64_t gyroTime;  // time stamp for gyros
 static int16_t dtGyr; // period between last gyro samples
 static int64_t prevgyroTime;
@@ -660,7 +661,7 @@ static void processIMU(void *pvParameters)
 			gravISUNEDBODY.z = accelISUNEDBODY.z + gyroISUNEDBODY.y * Vbi.x - gyroISUNEDBODY.x * Vbi.y;
 
 			// Update IMU quaternion
-			MahonyUpdateIMU( dtGyr, gyroISUNEDBODY.x, gyroISUNEDBODY.y, gyroISUNEDBODY.z, -gravISUNEDBODY.x, -gravISUNEDBODY.y, -gravISUNEDBODY.z, q0, q1, q2, q3 );
+			MahonyUpdateIMU( dtGyr/1000.0, gyroISUNEDBODY.x, gyroISUNEDBODY.y, gyroISUNEDBODY.z, -gravISUNEDBODY.x, -gravISUNEDBODY.y, -gravISUNEDBODY.z, q0, q1, q2, q3 );
 			// Euler angles
 			if ( abs(q1 * q3 - q0 * q2) < 0.5 ) {
 				Pitch = asin(-2.0 * (q1 * q3 - q0 * q2));
@@ -690,8 +691,11 @@ static void processIMU(void *pvParameters)
 				ZZZZ:		YAW in milli rad,				
 				<CR><LF>	
 			*/			
-			sprintf(str,"$I,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",
-				gyroTime,(int32_t)(accelISUNEDMPU.x*1000.0), (int32_t)(accelISUNEDMPU.y*1000.0), (int32_t)(accelISUNEDMPU.z*1000.0), (int32_t)(gyroISUNEDMPU.x*10000.0), (int32_t)(gyroISUNEDMPU.y*10000.0),(int32_t)(gyroISUNEDMPU.z*10000.0), (int16_t)(Pitch/1000.0), (int16_t)(Roll/1000.0), (int16_t)(Yaw/1000.0) );
+			sprintf(str,"$I,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",
+				gyroTime,(int32_t)(accelISUNEDBODY.x*1000.0), (int32_t)(accelISUNEDBODY.y*1000.0), (int32_t)(accelISUNEDBODY.z*1000.0),
+				(int32_t)(gyroISUNEDBODY.x*10000.0), (int32_t)(gyroISUNEDBODY.y*10000.0),(int32_t)(gyroISUNEDBODY.z*10000.0),
+				(int16_t)(Pitch*1000.0), (int16_t)(Roll*1000.0), (int16_t)(Yaw*1000.0) ,
+				(int16_t)(IMUBiasx*1000.0), (int16_t)(IMUBiasy*1000.0), (int16_t)(IMUBiasz*1000.0),(int16_t)(GravyFilt*1000.0) );
 			Router::sendXCV(str);
 		}
 		// Estimation of gyro bias when on ground:  IAS < 25 km/h and not bias estimation yet
@@ -869,7 +873,7 @@ void readSensors(void *pvParameters){
 
 		TickType_t xLastWakeTime = xTaskGetTickCount();
 		
-		ProcessTime = (esp_timer_get_time()/1000.0);
+		ProcessTime_Sens = (esp_timer_get_time()/1000.0);
 		
 		// get raw static pressure
 		bool ok=false;
@@ -1106,14 +1110,10 @@ void readSensors(void *pvParameters){
 			MPU.temp_control( count,XCVTemp);
 		}
 
-		ProcessTime = (esp_timer_get_time()/1000.0) - gyroTime;
-		if ( ProcessTime > 15 ) {
-			ESP_LOGI(FNAME,"processIMU: %i / 25", (int16_t)(ProcessTime) );
-		}	
-		
-		ProcessTime = (esp_timer_get_time()/1000.0) - ProcessTime;
-		if ( ProcessTime > 75 ) {
-			ESP_LOGI(FNAME,"readSEnsors: %i / 100", (int16_t)(ProcessTime) );
+
+		ProcessTime_Sens = (esp_timer_get_time()/1000.0) - ProcessTime_Sens;
+		if ( ProcessTime_Sens > 75 ) {
+			ESP_LOGI(FNAME,"readSEnsors: %i / 100", (int16_t)(ProcessTime_Sens) );
 		}	
 
 		esp_task_wdt_reset();
