@@ -155,9 +155,12 @@ mpud::float_axes_t gyroDPS_Prev;
 float deltaGyroModule = 0.0;	// gyro module alfa/beta filter for gyro stability test
 float GyroModulePrimFilt = 0.0;
 float GyroModuleFilt = 0.0;
+float GyroModulePrimLevel = 0.0;
 float deltaAccelModule = 0.0;	// accel module alfa/beta filter for gyro stability test
 float AccelModulePrimFilt = 0.0;
 float AccelModuleFilt = 0.0;
+float AccelModulePrimLevel = 0.0;
+
 
 // Magnetic sensor / compass
 Compass *compass = 0;
@@ -499,8 +502,8 @@ void MahonyUpdateIMU(float dt, float gx, float gy, float gz, float ax, float ay,
 #define fcgrav1 (40.0/(40.0+fcGrav))
 #define fcgrav2 (1.0-fcgrav1)
 #define Nlimit 0.2 // stability criteria for gravity estimation from accels
-#define FlightAccelprimlimit 0.5 // stability criteria on accels variations. twice value used on ground
-#define FlightGyroprimlimit 0.030  // stability criteria on gyros variations. twice value used on ground
+#define FlightAccelprimlimit 0.3 // stability criteria on accels variations. twice value used on ground
+#define FlightGyroprimlimit 0.02  // stability criteria on gyros variations. twice value used on ground
 #define Kp 1 // proportional feedback to sync quaternion
 #define Ki 0.1 // integral feedback to sync quaternion
 
@@ -515,7 +518,11 @@ float AccelGravModule, QuatModule, recipNorm, halfvx, halfvy, halfvz, halfex, ha
 	// Filter acceleration module 
 	AccelGravModule = ax * ax + ay * ay + az * az;
 	AccelGravModuleFilt = fcgrav1 * AccelGravModuleFilt + fcgrav2 * sqrt( AccelGravModule );
+<<<<<<< HEAD
 	if ( (abs(AccelGravModuleFilt-GRAVITY) < Nlimit) && (abs(GyroModulePrimFilt) < FlightGyroprimlimit) && (abs(AccelModulePrimFilt) < FlightAccelprimlimit ) ) {
+=======
+	if ( (AccelGravModuleFilt-GRAVITY) < Nlimit && GyroModulePrimLevel < FlightGyroprimlimit && AccelModulePrimLevel < FlightAccelprimlimit ) {
+>>>>>>> d96d3259194417be2e0909b8fc23929c3c559185
 		// Compute feedback only if accelerometer measurement valid (avoids NaN in accelerometer normalisation)
 		if ( AccelGravModule != 0.0) {
 			// Normalise accelerometer measurement
@@ -597,7 +604,14 @@ static void processIMU(void *pvParameters)
 	#define alfaAccelModule (2.0 * (2.0 * NAccel - 1.0) / NAccel / (NAccel + 1))
 	#define betaAccelModule (6.0 / NAccel / (NAccel + 1) / 0.025)
 	#define alfaGyroModule (2.0 * (2.0 * NGyro - 1.0) / NGyro / (NGyro + 1))
-	#define betaGyroModule (6.0 / NGyro / (NGyro + 1) / 0.025)	
+	#define betaGyroModule (6.0 / NGyro / (NGyro + 1) / 0.025)
+	#define fcAccelLevel 1.0 // 1Hz low pass to filter 
+	#define fcAL1 (40.0/(40.0+fcAccelLevel))
+	#define fcAL2 (1.0-fcAL1)
+	#define fcGyroLevel 1.0 // 1Hz low pass to filter 
+	#define fcGL1 (40.0/(40.0+fcGyroLevel))
+	#define fcGL2 (1.0-fcGL1)	
+	
 	mpud::raw_axes_t accelRaw; 
 	mpud::float_axes_t accelISUNEDMPU;
 	mpud::float_axes_t accelISUNEDBODY;	
@@ -666,7 +680,11 @@ static void processIMU(void *pvParameters)
 			deltaAccelModule =  Module - AccelModuleFilt;
 			AccelModulePrimFilt = AccelModulePrimFilt + betaAccelModule * deltaAccelModule;
 			AccelModuleFilt = AccelModuleFilt + alfaAccelModule * deltaAccelModule + AccelModulePrimFilt * dtGyr;			
-			
+			if ( AccelModulePrimLevel < abs(AccelModulePrimFilt) ) {
+				AccelModulePrimLevel = abs(AccelModulePrimFilt);
+			} else {
+				AccelModulePrimLevel = fcAL1 * AccelModulePrimLevel +  fcAL2 * abs(AccelModulePrimFilt);
+			}
 		}
 		// get gyro data
 		if( MPU.rotation(&gyroRaw) == ESP_OK ){
@@ -686,7 +704,12 @@ static void processIMU(void *pvParameters)
 			// filter gyro module with alfa/beta filter
 			deltaGyroModule =  sqrt( gyroISUNEDBODY.x * gyroISUNEDBODY.x + gyroISUNEDBODY.y * gyroISUNEDBODY.y + gyroISUNEDBODY.z * gyroISUNEDBODY.z ) - GyroModuleFilt;
 			GyroModulePrimFilt = GyroModulePrimFilt + betaGyroModule * deltaGyroModule;
-			GyroModuleFilt = GyroModuleFilt + alfaGyroModule * deltaGyroModule + GyroModulePrimFilt * dtGyr;			
+			GyroModuleFilt = GyroModuleFilt + alfaGyroModule * deltaGyroModule + GyroModulePrimFilt * dtGyr;
+			if ( GyroModulePrimLevel < abs(GyroModulePrimFilt) ) {
+				GyroModulePrimLevel = abs(GyroModulePrimFilt);
+			} else {
+				GyroModulePrimLevel = fcGL1 * GyroModulePrimLevel +  fcGL2 * abs(GyroModulePrimFilt);
+			}			
 		}
 
 		if(BIAS_Init || ias.get() > 25){
