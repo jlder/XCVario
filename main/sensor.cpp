@@ -177,9 +177,6 @@ static int32_t gyrobiastemptimer = 0;
 static float integralFBx = 0.0;
 static float integralFBy = 0.0;
 static float integralFBz = 0.0;
-static float IMUBiasx = 0.0;
-static float IMUBiasy = 0.0;
-static float IMUBiasz = 0.0;
 static float BankFilt = 0.0;
 static float alternategzBias = 0.0;
 static float Pitch;
@@ -271,7 +268,6 @@ static float CASraw;
 static float deltaCAS;
 static float CASprim;
 static float CAS = 0.0;
-//static float prevCAS;
 static float Rhocorr;
 static float TAS;
 static float TASprim;
@@ -279,7 +275,7 @@ static float ALTraw;
 static float deltaALT;
 static float Vzbaro;
 static float ALT = 0.0;
-//static float prevALT;
+static float Up,Vp,Wp;
 
 #define NCAS 7 // CAS alpha/beta filter coeff
 #define alphaCAS (2.0 * (2.0 * NCAS - 1.0) / NCAS / (NCAS + 1))
@@ -874,10 +870,17 @@ static void processIMU(void *pvParameters)
 				BIASInFLASH = true;
 				}
 			// estimate gravity in body frame taking into account centrifugal corrections
-			if (TAS>10.0) Vbi.x = TAS; else Vbi.x = 0.0;
-			Vbi.y = 0;
+			if ( TAS > 10.0 ) {
+				Vbi.x = Up;
+				Vbi.y = Vp;
+				Vbi.z = Wp;
+			} else {
+				Vbi.x = 0.0;
+				Vbi.y = 0.0;
+				Vbi.z = 0.0;				
+			}
             //Ziprim := (uiprim * sin(Pitch) + cos(Pitch) * sin(Roll) * viprim + cos(Pitch) * cos(Roll) * wiprim);
-			Vbi.z = 0;//could be improved using Ziprim
+
 			gravISUNEDBODY.x = accelISUNEDBODY.x - gyroISUNEDBODY.y * Vbi.z + gyroISUNEDBODY.z * Vbi.y;
 			gravISUNEDBODY.y = accelISUNEDBODY.y - gyroISUNEDBODY.z * Vbi.x + gyroISUNEDBODY.x * Vbi.z;
 			gravISUNEDBODY.z = accelISUNEDBODY.z + gyroISUNEDBODY.y * Vbi.x - gyroISUNEDBODY.x * Vbi.y;
@@ -1195,6 +1198,32 @@ void clientLoop(void *pvParameters)
 }
 
 void readSensors(void *pvParameters){
+	float CL;
+	float prevCL = 0.0;
+	float dAoA;
+	float AoARaw;
+	float AoA = 0.0;
+	float AoB = 0.0;
+	float CLA = 1.0; // Need right value from Matthieu
+	float KAoB = 125; // Need right value from Matthieu
+	float KGx = 1.0; // Need value from Matthieu
+	float WingLoad;
+	float cosRoll;
+	float sinRoll;
+	float cosPitch;
+	float sinPitch;
+	float Vh;
+	float DHeading;
+	float cosDHeading;
+	float sinDHeading;
+	
+	#define FreqAoA 1.5 // Hz
+	#define fcAoA1 (10.0/(10.0+FreqAoA))
+	#define fcAoA2 (1-fcAoA1)
+	#define FreqBeta 1.0 // Hz
+	#define fcAoB1 (10.0/(10.0+FreqBeta))
+	#define fcAoB2 (1-fcAoB1)
+	
 	int client_sync_dataIdx = 0;
 	while (1)
 	{
@@ -1259,79 +1288,51 @@ void readSensors(void *pvParameters){
 		const gnss_data_t *gnss2 = s2UbloxGnssDecoder.getGNSSData(2);
 		// select gnss with better fix
 		const gnss_data_t *chosenGnss = (gnss2->fix >= gnss1->fix) ? gnss2 : gnss1;
-		
-		/*
-		
-		#4 Compute glider sink rate from speed polar
-		AccNorm := sqrt( Ax * Ax + Ay * Ay + Az * Az );
-		LF := AccNorm / Gravity;
-		sqrtLF := sqrt( LF );
-		sqrtRWL := sqrt( RWL );
-		Sink := a0 * LF * sqrtLF * sqrtRWL + a1 * LF * CAS + a2 * sqrtLF / sqrtRWL * CAS * CAS;
-
-		#5  Compute Alpha and Beta angles (angles between BODY axis and relative airflow)
-		CL := Az * 2 * Gravity / Rho0 * WL / CAS / CAS;
-		dAlpha := ( CL - prevCL ) / CLA;
-		prevCL := CL;
-		# AlphaRaw := Ax + Sink / CAS + Alpha0 MSC 03/10/22
-		AlphaRaw := Ax / Az - Sink / LF / CAS
-		Alpha := FcAlpha * ( Alpha + dAlpha )  + ( 1 - FcAlpha ) * AlphaRaw;
-		Beta := FcBeta * Beta + (1.0 - FcBeta) * (Kbeta * WL * (Ay-Ay_Off) / DynPres  - Kbetar * Gz / TAS- Kbetap * Gx / TAS);
-
-		#6  Compute trajectory pneumatic speeds components in body frame NEDBODY
-		# Vh corresponds to the trajectory horizontal speed and Vzbaro corresponds to the vertical speed
-		Vh := TAS * cos( Pitch + cos(Roll) * Alpha + sin(Roll) * Beta );
-		# Pitch and Roll correspond to the attitude of the glider and DHeading corresponds to the heading deviation due to the Beta and Alpha.
-		DHeading=(Beta * cosRoll - Alpha * sinRoll ) / ( cosPitch + Beta * sinPitch * sinRoll +Alpha * sinPitch * cosRoll )
-		# applying DCM from earth to body frame (using Pitch, Roll and DHeading Yaw angles) to Vh and Vzbaro trajectory components in earth frame to reproject speed in TE referential onto body axis. 
-		Up := cosPitch * cos(DHeading) * Vh - sinPitch * Vzbaro
-		Vp := ( sinRoll * sinPitch * cos(DHeading) - cosRoll * sin(DHeading) ) * Vh + sinRoll * cosPitch * Vzbaro
-		Wp := ( cosRoll * sinPitch * cos(DHeading) + sinRoll * sin(DHeading) ) * Vh + cosRoll * cosPitch * Vzbaro
-		*/
 
 		Rho = (100.0 * statP / 287.058 / (273.15 + OATemp));
 		CASraw = sqrt(2 * dynP / RhoSLISA);
 		deltaCAS = CASraw - CAS;
 		CASprim = CASprim + betaCAS * deltaCAS;
 		CAS = CAS + alphaCAS * deltaCAS + CASprim * dtdynP;
-		//prevCAS = CAS; Ce n'est pas nécessaire de recycler la CAS dans un filtre alpha/beta
+	
 		Rhocorr = sqrt(RhoSLISA/Rho);
 		TAS = Rhocorr * CAS;
 		TASprim = Rhocorr * CASprim;
-		//ALTraw = (1.0 - pow( (statP-(QNH.get()-1013.25))/1013.25 , (1.0/5.25516) ) ) * (273.15 + OATemp) / 0.0065;
 		ALTraw = (1.0 - pow( (statP-(QNH.get()-1013.25)) * 0.000986923 , 0.1902891634 ) ) * (273.15 + OATemp) * 153.846153846;		
 		deltaALT = ALTraw - ALT;
 		Vzbaro = Vzbaro + betaALT * deltaALT;
 		ALT = ALT + alphaALT * deltaALT + Vzbaro * dtstat;
-		//prevALT = ALT; Même punition que pour la CAS
 		
-		float currentSink;
-		float CL;
-		float prevCL = 0.0;
-		float dAlpha;
-		float AlphaRaw;
-		float LF;
-		float Alpha = 0.0;
-		float Beta = 0.0;
-		float WL = 40.0; // Need right value from XCVario settings
-		float CLA = 1.0; // Need right value
-		float Kbeta = 125; // Need right value
+		WingLoad = gross_weight.get() / polar_wingarea.get();
 
-		#define FreqAlpha 1.0 // Hz
-		#define fcAlpha1 (10.0/(10.0+FreqAlpha))
-		#define fcAlpha2 (1-fcAlpha1)
-		#define FreqBeta 1.0 // Hz
-		#define fcBeta1 (10.0/(10.0+FreqBeta))
-		#define fcBeta2 (1-fcBeta1)
+		if ( CAS > 10 ) {
+			CL = accelISUNEDBODY.z * 2 / RhoSLISA * WingLoad / CAS / CAS;
+			dAoA = ( CL - prevCL ) / CLA;
+			prevCL = CL;
+			AoARaw = -(accelISUNEDBODY.x / accelISUNEDBODY.z) + 1.0 / Speed2Fly.cw( CAS );
+			AoA = fcAoA1 * AoARaw  + fcAoA2 * ( AoA + dAoA );
+			AoB = fcAoB1 * AoB + fcAoB2 * ( KAoB * WingLoad * accelISUNEDBODY.y / dynP - KGx * gyroISUNEDBODY.x / TAS);			
+		} else {
+			AoA = 0.0;
+			AoB = 0.0;
+		}
 
-		currentSink = Speed2Fly.sink(CAS*3.6); // compute current sink rate under load factor.
-		CL = accelISUNEDBODY.z * 2 * GRAVITY / RhoSLISA * WL / CAS / CAS;
-		dAlpha = ( CL - prevCL ) / CLA;
-		prevCL = CL;
-		LF = accelISUNEDBODY.z / GRAVITY;
-		AlphaRaw = (accelISUNEDBODY.x / accelISUNEDBODY.z) - (currentSink / LF / CAS); // need to make sure currentSink has the right sign
-		Alpha = fcAlpha1 * AlphaRaw  + fcAlpha2 * ( Alpha + dAlpha );
-		Beta = fcBeta1 * Beta + fcBeta2 * Kbeta * WL * accelISUNEDBODY.y / dynP;		
+		cosRoll = cos( Roll );
+		sinRoll = sin( Roll );
+		cosPitch = cos( Pitch );
+		sinPitch = sin( Pitch );
+		
+		// Compute trajectory pneumatic speeds components in body frame NEDBODY
+		// Vh corresponds to the trajectory horizontal speed and Vzbaro corresponds to the vertical speed
+		Vh = TAS * cos( Pitch + cosRoll * AoA + sinRoll * AoB );
+		// Pitch and Roll correspond to the attitude of the glider and DHeading corresponds to the heading deviation due to the Beta and Alpha.
+		DHeading =(AoB * cosRoll - AoA * sinRoll ) / ( cosPitch + AoB * sinPitch * sinRoll + AoA * sinPitch * cosRoll );
+		cosDHeading = cos( DHeading );
+		sinDHeading = sin( DHeading );
+		// applying DCM from earth to body frame (using Pitch, Roll and DHeading Yaw angles) to Vh and Vzbaro trajectory components in earth frame to reproject speed in TE referential onto body axis. 
+		Up = cosPitch * cosDHeading * Vh - sinPitch * Vzbaro;
+		Vp = ( sinRoll * sinPitch * cosDHeading - cosRoll * sinDHeading ) * Vh + sinRoll * cosPitch * Vzbaro;
+		Wp = ( cosRoll * sinPitch * cosDHeading + sinRoll * sinDHeading ) * Vh + cosRoll * cosPitch * Vzbaro;
 		
 		if ( SENstream && BIAS_Init > 0 ) {
 		/* Sensor data
@@ -1370,21 +1371,25 @@ void readSensors(void *pvParameters){
 			TASprim in cm/s²,
 			ALT in cm,
 			Vzbaro in cm/s,
-			Alpha angle in mrad,
-			Beta  angle in mrad
+			AoA angle in mrad,
+			AoB angle in mrad,
+			Up BODY NED pneumatic speed in cm/s,
+			Vp BODY NED pneumatic speed in cm/s,
+			Wp BODY NED pneumatic speed in cm/s
 			<CR><LF>		
 		*/
 	
 		
-			sprintf(str,"$S,%lld,%i,%lld,%i,%i,%i,%i,%1d,%2d,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",
+			sprintf(str,"$S,%lld,%i,%lld,%i,%i,%i,%i,%1d,%2d,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",
 				statTime, (int32_t)(statP*100.0), teTime,(int32_t)(teP*100.0), (int16_t)(dynP*10), (int16_t)(OATemp*10.0), (int16_t)(MPUtempcel*10.0), chosenGnss->fix, chosenGnss->numSV,
 				(int64_t)(chosenGnss->time*1000.0), (int32_t)(chosenGnss->coordinates.altitude*100), (int16_t)(chosenGnss->speed.x*100), (int16_t)(chosenGnss->speed.y*100), (int16_t)(chosenGnss->speed.z*100),
 				(int16_t)(Pitch*1000.0), (int16_t)(Roll*1000.0), (int16_t)(Yaw*1000.0),(int16_t)(free_Pitch*1000.0), (int16_t)(free_Roll*1000.0), (int16_t)(free_Yaw*1000.0),
-				(int32_t)(IMUBiasx*100000.0), (int32_t)(IMUBiasy*100000.0), (int32_t)(IMUBiasz*100000.0), (int32_t)(alternategzBias*100000.0), (int32_t)(AccelGravModuleFilt*100000.0),(int32_t)(GRAVITY*100000.0),
+				(int32_t)(BiasQuatGx*100000.0), (int32_t)(BiasQuatGy*100000.0), (int32_t)(BiasQuatGz*100000.0), (int32_t)(alternategzBias*100000.0), (int32_t)(AccelGravModuleFilt*100000.0),(int32_t)(GRAVITY*100000.0),
 				(int32_t)(BiasQuatGx*100000.0), (int32_t)(BiasQuatGy*100000.0), (int32_t)(BiasQuatGz*100000.0),
 				(int32_t)(GyroModulePrimLevel*100000.0), (int32_t)(AccelModulePrimLevel*100000.0),
 				(int16_t)(CAS*100), (int16_t)(CASprim*100), (int16_t)(TAS*100), (int16_t)(TASprim*100), (int32_t)(ALT*100), (int16_t)(Vzbaro*100),
-				(int16_t)(Alpha*1000), (int16_t)(Beta*1000) );
+				(int16_t)(AoA*1000), (int16_t)(AoB*1000),
+				(int16_t)(Up*100), (int16_t)(Vp*100), (int16_t)(Wp*100) );
 			Router::sendXCV(str);
 		}		
 		
