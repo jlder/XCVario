@@ -1490,7 +1490,7 @@ void readSensors(void *pvParameters){
 				statTime, (int32_t)(statP*100.0), teTime,(int32_t)(teP*100.0), (int16_t)(dynP*10), (int16_t)(OATemp*10.0), (int16_t)(MPUtempcel*10.0), chosenGnss->fix, chosenGnss->numSV,
 				(int64_t)(chosenGnss->time*1000.0), (int32_t)(chosenGnss->coordinates.altitude*100), (int16_t)(chosenGnss->speed.x*100), (int16_t)(chosenGnss->speed.y*100), (int16_t)(chosenGnss->speed.z*100),
 				(int32_t)(Pitch*1000.0), (int32_t)(Roll*1000.0), (int32_t)(Yaw*1000.0),(int32_t)(free_Pitch*1000.0), (int32_t)(free_Roll*1000.0), (int32_t)(free_Yaw*1000.0),
-				(int32_t)(IMUBiasx*100000.0), (int32_t)(IMUBiasy*100000.0), (int32_t)(IMUBiasz*100000.0), (int32_t)(alternategzBias*100000.0), (int32_t)(AccelGravModuleFilt*100000.0),(int32_t)(GRAVITY*100000.0),
+				(int32_t)(BiasQuatGx*100000.0), (int32_t)(BiasQuatGy*100000.0), (int32_t)(BiasQuatGz*100000.0), (int32_t)(alternategzBias*100000.0), (int32_t)(AccelGravModuleFilt*100000.0),(int32_t)(GRAVITY*100000.0),
 				(int32_t)(GyroModulePrimLevel*100000.0), (int32_t)(AccelModulePrimLevel*100000.0),
 				(int32_t)(CAS*100), (int32_t)(CASprim*100), (int32_t)(TAS*100), (int32_t)(TASprim*100), (int32_t)(ALT*100), (int32_t)(Vzbaro*100),
 				(int32_t)(AoA*1000), (int32_t)(AoB*1000),
