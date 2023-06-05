@@ -171,7 +171,7 @@ mpud::float_axes_t gyroRPS;
 mpud::float_axes_t gyroISUNEDMPU;
 mpud::float_axes_t gyroISUNEDBODY;
 mpud::float_axes_t gyroCorr;
-static float AccelGravModuleFilt = 9.807;
+static float AccelGravModuleFilt = 0.0;
 static int32_t gyrobiastemptimer = 0;
 static float integralFBx = 0.0;
 static float integralFBy = 0.0;
@@ -621,8 +621,16 @@ void MahonyUpdateIMU(float dt, float gxraw, float gyraw, float gzraw,
 
 float gx, gy, gz;
 float AccelGravModule, QuatModule, recipNorm;
-float halfvx, halfvy, halfvz, halfex, halfey, halfez, qa, qb, qc, free_halfvx, free_halfvy, free_halfvz;
-float GravityModuleErr, dynKp, dynKi;
+float halfvx = 0.0;
+float halfvy = 0.0;
+float halfvz = 0.0;
+float halfex = 0.0;
+float halfey = 0.0;
+float halfez = 0.0;
+float qa, qb, qc, free_halfvx, free_halfvy, free_halfvz;
+float GravityModuleErr = 0.0;
+float dynKp = Kp;
+float dynKi = Ki;
 float deltaBiasGz;
 	
 	// To estimate gyro Bias:
@@ -658,7 +666,7 @@ float deltaBiasGz;
 	
 	// When wing are ~ leveled , Gz bias should be the long term variation of ( Gz - GNSS route* ) *: GNSS route is optional
 	// test for wing leveled is using asymetrical filter with fast rise and slower decay
-	#define fcGrav 3.0 // 3Hz low pass to filter for testing stability criteria
+	#define fcGrav 0.3 // ~3Hz low pass to filter for testing stability criteria
 	#define fcGrav1 ( fcGrav /( fcGrav + PERIOD40HZ ))
 	#define fcGrav2 ( 1.0 - fcGrav1 )
 	if ( BankFilt < abs(halfvy) ) {
@@ -703,9 +711,9 @@ float deltaBiasGz;
 	// gyros are corrected using estimated bias and estimaded error with vertical from accelerometer (gravity)
 	//
 	// correct raw gyro with estimated gyro bias
-	gx = gxraw + Bias_Gx; // error on x should be added to gyro
-	gy = gyraw + Bias_Gy; // error on y should be added to gyro
-	gz = gzraw - Bias_Gz; // error on z should be removed to gyro
+	gx = gxraw;// + Bias_Gx; // error on x should be added to gyro
+	gy = gyraw;// + Bias_Gy; // error on y should be added to gyro
+	gz = gzraw;// - Bias_Gz; // error on z should be removed to gyro
 	// Compute feedback error only if accelerometer measurement is valid (avoids NaN in accelerometer normalisation)
 	AccelGravModule = sqrt( ax * ax + ay * ay + az * az );
 	if ( AccelGravModule != 0.0) {
@@ -759,7 +767,13 @@ float deltaBiasGz;
 		gy = gy + dynKp * halfey;
 		gz = gz + dynKp * halfez;
 	}
-
+	if (SPDstream ){
+		sprintf(str,"$IMU,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f\r\n",
+			Bias_Gx,Bias_Gy,-Bias_Gz,AccelGravModule,GRAVITY,AccelGravModuleFilt,GravityModuleErr,dynKp,dynKi,halfex,halfey,halfez,integralFBx,integralFBy,integralFBz); 
+		Router::sendXCV(str);
+	}
+			
+			
 	// Integrate rate of change of IMU quaternion
 	gx = gx * 0.5 * dt;
 	gy = gy * 0.5 * dt;
@@ -1274,7 +1288,8 @@ void readSensors(void *pvParameters){
 	
 	float deltaEnergy;
 	float EnergyPrim = 0.0;
-	float EnergyFilt = altitude.get();
+	ALTbi = altitude.get()
+	float EnergyFilt = ALTbi;
 	
 	#define FreqAlpha 1.5 // Hz
 	#define fcAoA1 (10.0/(10.0+FreqAlpha))
@@ -1389,12 +1404,10 @@ void readSensors(void *pvParameters){
 			AoA = 0.0;
 			AoB = 0.0;
 		}
-			//sprintf(str,"$AoB,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f\r\n",
-			//KAoB, WingLoad, accelISUNEDBODY.y, dynP, KGx, gyroCorr.x, TAS );
-			//WingLoad, accelISUNEDBODY.z, CL, dAoA,-(accelISUNEDBODY.x / accelISUNEDBODY.z),Speed2Fly.cw( CAS ),Speed2Fly.getN(), AoARaw, AoA,accelISUNEDBODY.y,AoB  );
+			//sprintf(str,"$AoA,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f\r\n",
+			//CL, accelISUNEDBODY.z, RhoSLISA, WingLoad, CAS, dAoA, prevCL, CLA, AoARaw, accelISUNEDBODY.x, accelISUNEDBODY.z, Speed2Fly.cw( CAS ),Speed2Fly.getN(), fcAoA1, fcAoA2); 
 			//Router::sendXCV(str);
-			//AoA = 0.0;
-			//AoB = 0.0;			
+			
 		// Compute trajectory pneumatic speeds components in body frame NEDBODY
 		// Vh corresponds to the trajectory horizontal speed and Vzbaro corresponds to the vertical speed in earth frame
 		Vh = TAS * cos( Pitch + cosRoll * AoA + sinRoll * AoB );
