@@ -662,7 +662,7 @@ float deltaBiasGz;
 	#define fcGrav1 ( fcGrav /( fcGrav + PERIOD40HZ ))
 	#define fcGrav2 ( 1.0 - fcGrav1 )
 	if ( BankFilt < abs(halfvy) ) {
-		BankFilt = halfvy;
+		BankFilt = abs(halfvy);
 	} else {
 		BankFilt = fcGrav1 * BankFilt + fcGrav2 * abs(halfvy);	// low pass filter on estimated Bank to reduce noise
 	}
@@ -1269,7 +1269,7 @@ void readSensors(void *pvParameters){
 	float AoA = 0.0;
 	float AoB = 0.0;
 	float CLA = 5.75; // CLA=2*PI/(1+2/AR) = 5.75 for LS6 5.98 for Ventus 3
-	float KAoB = 200; // 200 for LS6  170 for Ventus 3
+	float KAoB = 200; // 3.5 for LS6  2.97 for Ventus 3
 	float KGx = 4.1; // 4.1 for LS6 and 12 for Ventus 3
 	
 	float deltaEnergy;
@@ -1389,11 +1389,12 @@ void readSensors(void *pvParameters){
 			AoA = 0.0;
 			AoB = 0.0;
 		}
-			//sprintf(str,"$AoA,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f\r\n",
+			//sprintf(str,"$AoB,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f\r\n",
+			//KAoB, WingLoad, accelISUNEDBODY.y, dynP, KGx, gyroCorr.x, TAS );
 			//WingLoad, accelISUNEDBODY.z, CL, dAoA,-(accelISUNEDBODY.x / accelISUNEDBODY.z),Speed2Fly.cw( CAS ),Speed2Fly.getN(), AoARaw, AoA,accelISUNEDBODY.y,AoB  );
 			//Router::sendXCV(str);
-			AoA = 0.0;
-			AoB = 0.0;			
+			//AoA = 0.0;
+			//AoB = 0.0;			
 		// Compute trajectory pneumatic speeds components in body frame NEDBODY
 		// Vh corresponds to the trajectory horizontal speed and Vzbaro corresponds to the vertical speed in earth frame
 		Vh = TAS * cos( Pitch + cosRoll * AoA + sinRoll * AoB );
