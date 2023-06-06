@@ -669,7 +669,7 @@ float deltaBiasGz;
 
 	// When wing are ~ leveled , Gz bias should be the long term variation of ( Gz - GNSS route* ) *: GNSS route is optional
 	// test for wing leveled is using asymetrical filter with fast rise and slower decay
-	#define fcGrav 0.3 // ~3Hz low pass to filter for testing stability criteria
+	#define fcGrav 0.1 // ~10Hz low pass to filter for testing stability criteria
 	#define fcGrav1 ( fcGrav /( fcGrav + PERIOD40HZ ))
 	#define fcGrav2 ( 1.0 - fcGrav1 )
 /*	if ( BankFilt < abs(halfvy) ) {
@@ -721,10 +721,12 @@ float deltaBiasGz;
 	AccelGravModule = sqrt( ax * ax + ay * ay + az * az );
 	if ( AccelGravModule != 0.0) {
 		// gyro should be corrected using error between vertical from IMU quaternion and observered vertical from accels.
-		// accels are good proxy for vertical when the module of acceleration is close to local gravity (GRAVITY)
+		// Accels are good proxy for vertical :
+		// when the flight mechanic forces apply, this is true when the module of acceleration is close to local gravity (GRAVITY)
+		// when on the ground, additional condition on gyro stability is required to insure accels can be used to observe vertical. 
 		// gyro correction is performed with PI feedback using Kp and Ki (proportional & integral) coefficients.
 		// these coefficients are adjusted dynamicaly (dynKp and dynKi) in function acceleration module proximity to GRAVITY
-		// when error is lower than a threshold (Nlimit), maximum Kp and Ki coefficients are used
+		// when error is lower than a threshold, maximum Kp and Ki coefficients are used
 		// when error is higher than threshold, reduced coefficients are used.
 		//
 		// acceleration module filtered with asymetrical low pass filter (fast rise and slower decay) 
@@ -733,10 +735,17 @@ float deltaBiasGz;
 		} else {
 			AccelGravModuleFilt = fcGrav1 * AccelGravModuleFilt + fcGrav2 * abs(AccelGravModule - GRAVITY);
 		}
-		// compute error between acceleration module and local gravity (GRAVITY) in relation to Nlimit
-		GravityModuleErr = Nlimit - AccelGravModuleFilt;
+		if ( TAS > 15 ) {
+			// when moving compute error between acceleration module and local gravity (GRAVITY) in relation to Nlimit
+			GravityModuleErr = Nlimit - AccelGravModuleFilt;
+		} else
+		{
+			// when on ground compute error using both accel and gyro module variation and 0. threshold
+			#define Gyroprimlimit 0.3
+			GravityModuleErr =  (Nlimit - AccelGravModuleFilt) + (GyroModulePrimLevel - Gyroprimlimit);
+		}
 		// if GravityModuleErr positive, high confidence in accels
-		if ( GravityModuleErr > 0.0 ) {
+		if  ( GravityModuleErr > 0.0 ) {
 			dynKp = Kp;
 			dynKi = Ki;
 		} else {
@@ -909,7 +918,29 @@ static void processIMU(void *pvParameters)
 			accelISUNEDBODY.x = C_T * accelISUNEDMPU.x + STmultSS * accelISUNEDMPU.y + STmultCS * accelISUNEDMPU.z - ( gyroCorr.y * gyroCorr.y + gyroCorr.z * gyroCorr.z ) * DistCGVario;
 			accelISUNEDBODY.y = C_S * accelISUNEDMPU.y - S_S * accelISUNEDMPU.z;
 			accelISUNEDBODY.z = -S_T * accelISUNEDMPU.x + SSmultCT * accelISUNEDMPU.y + CTmultCS * accelISUNEDMPU.z;
-		}		
+		}
+		// compute acceleration module variation
+		deltaAccelModule = sqrt( accelISUNEDBODY.x * accelISUNEDBODY.x + accelISUNEDBODY.y * accelISUNEDBODY.y + accelISUNEDBODY.z * accelISUNEDBODY.z ) - AccelModuleFilt;
+		// filter gyro with alfa/beta
+		AccelModulePrimFilt = AccelModulePrimFilt + betaAccelModule * deltaAccelModule;
+		AccelModuleFilt = AccelModuleFilt + alfaAccelModule * deltaAccelModule + AccelModulePrimFilt * dtGyr;
+		// aysmétric filter with fast raise and slow decay
+		if ( AccelModulePrimLevel < abs(AccelModulePrimFilt) ) {
+			AccelModulePrimLevel = abs(AccelModulePrimFilt);
+		} else {
+			AccelModulePrimLevel = fcAL1 * AccelModulePrimLevel +  fcAL2 * abs(AccelModulePrimFilt);
+		}			
+		// compute gyro module variation
+		deltaGyroModule =  sqrt( gyroCorr.x * gyroCorr.x + gyroCorr.y * gyroCorr.y + gyroCorr.z * gyroCorr.z ) - GyroModuleFilt;
+		// filter gyro with alfa/beta
+		GyroModulePrimFilt = GyroModulePrimFilt + betaGyroModule * deltaGyroModule;
+		GyroModuleFilt = GyroModuleFilt + alfaGyroModule * deltaGyroModule + GyroModulePrimFilt * dtGyr;
+		// aysmétric filter with fast raise and slow decay
+		if ( GyroModulePrimLevel < abs(GyroModulePrimFilt) ) {
+			GyroModulePrimLevel = abs(GyroModulePrimFilt);
+		} else {
+			GyroModulePrimLevel = fcGL1 * GyroModulePrimLevel +  fcGL2 * abs(GyroModulePrimFilt);
+		}			
 
 		// if moving (speed > 10 m/s or ground bias estimation has ran more than "10" times TODO when operational BIAS_Init should be up to 10)
 		// Update IMU quaternion, compute accelerations and speeds
@@ -983,29 +1014,6 @@ static void processIMU(void *pvParameters)
 				
 		} else {
 			// Not moving
-			// compute acceleration module variation
-			deltaAccelModule = sqrt( accelISUNEDBODY.x * accelISUNEDBODY.x + accelISUNEDBODY.y * accelISUNEDBODY.y + accelISUNEDBODY.z * accelISUNEDBODY.z ) - AccelModuleFilt;
-			// filter gyro with alfa/beta
-			AccelModulePrimFilt = AccelModulePrimFilt + betaAccelModule * deltaAccelModule;
-			AccelModuleFilt = AccelModuleFilt + alfaAccelModule * deltaAccelModule + AccelModulePrimFilt * dtGyr;
-			// aysmétric filter with fast raise and slow decay
-			if ( AccelModulePrimLevel < abs(AccelModulePrimFilt) ) {
-				AccelModulePrimLevel = abs(AccelModulePrimFilt);
-			} else {
-				AccelModulePrimLevel = fcAL1 * AccelModulePrimLevel +  fcAL2 * abs(AccelModulePrimFilt);
-			}			
-			// compute gyro module variation
-			deltaGyroModule =  sqrt( gyroCorr.x * gyroCorr.x + gyroCorr.y * gyroCorr.y + gyroCorr.z * gyroCorr.z ) - GyroModuleFilt;
-			// filter gyro with alfa/beta
-			GyroModulePrimFilt = GyroModulePrimFilt + betaGyroModule * deltaGyroModule;
-			GyroModuleFilt = GyroModuleFilt + alfaGyroModule * deltaGyroModule + GyroModulePrimFilt * dtGyr;
-			// aysmétric filter with fast raise and slow decay
-			if ( GyroModulePrimLevel < abs(GyroModulePrimFilt) ) {
-				GyroModulePrimLevel = abs(GyroModulePrimFilt);
-			} else {
-				GyroModulePrimLevel = fcGL1 * GyroModulePrimLevel +  fcGL2 * abs(GyroModulePrimFilt);
-			}	
-			
 			// When there is MPU temperature control and temperature is locked   or   when there is no temperature control
 			if ( (HAS_MPU_TEMP_CONTROL && (MPU.getSiliconTempStatus() == MPU_T_LOCKED)) || !HAS_MPU_TEMP_CONTROL ) {
 				// count cycles when temperature is locked
@@ -1475,6 +1483,9 @@ void readSensors(void *pvParameters){
 			Pitch in milli rad,
 			Roll in milli rad,
 			Yaw in milli rad,
+			free_Pitch in milli rad,
+			free_Roll in milli rad,
+			free_Yaw in milli rad,
 			CAS in cm/s,
 			TAS in cm/s,
 			ALT in cm,
@@ -1492,10 +1503,10 @@ void readSensors(void *pvParameters){
 			<CR><LF>		
 		*/
 	
-			sprintf(str,"$S1,%lld,%i,%i,%i,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",
+			sprintf(str,"$S1,%lld,%i,%i,%i,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",
 				statTime, (int32_t)(statP*100.0),(int32_t)(teP*100.0), (int16_t)(dynP*10), 
 				(int64_t)(chosenGnss->time*1000.0), (int16_t)(chosenGnss->speed.x*100), (int16_t)(chosenGnss->speed.y*100), (int16_t)(chosenGnss->speed.z*100), (int16_t)(GNSSRouteraw*10),
-				(int32_t)(Pitch*1000.0), (int32_t)(Roll*1000.0), (int32_t)(Yaw*1000.0),
+				(int32_t)(Pitch*1000.0), (int32_t)(Roll*1000.0), (int32_t)(Yaw*1000.0),(int32_t)(free_Pitch*1000.0), (int32_t)(free_Roll*1000.0), (int32_t)(free_Yaw*1000.0),
 				(int32_t)(CAS*100), (int32_t)(TAS*100), (int32_t)(ALT*100), (int32_t)(Vzbaro*100),
 				(int32_t)(AoA*1000), (int32_t)(AoB*1000),
 				(int32_t)(Ub*100), (int32_t)(Vb*100), (int32_t)(Wb*100),
