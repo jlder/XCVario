@@ -308,6 +308,7 @@ static float ALT = 0.0;
 static float Ubi;
 static float Vbi;
 static float Wbi;
+static float Vzbi;
 static float UiPrimF;
 static float ViPrimF;
 static float WiPrimF;
@@ -1404,9 +1405,6 @@ void readSensors(void *pvParameters){
 			AoA = 0.0;
 			AoB = 0.0;
 		}
-			//sprintf(str,"$AoA,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f\r\n",
-			//CL, accelISUNEDBODY.z, RhoSLISA, WingLoad, CAS, dAoA, prevCL, CLA, AoARaw, accelISUNEDBODY.x, accelISUNEDBODY.z, Speed2Fly.cw( CAS ),Speed2Fly.getN(), fcAoA1, fcAoA2); 
-			//Router::sendXCV(str);
 			
 		// Compute trajectory pneumatic speeds components in body frame NEDBODY
 		// Vh corresponds to the trajectory horizontal speed and Vzbaro corresponds to the vertical speed in earth frame
@@ -1435,12 +1433,13 @@ void readSensors(void *pvParameters){
 		Ubi = fcVelbi1 * ( Ubi + UiPrimF * dtstat ) + fcVelbi2 * Ub;
 		Vbi = fcVelbi1 * ( Vbi + ViPrimF * dtstat ) + fcVelbi2 * Vb;
 		Wbi = fcVelbi1 * ( Wbi + WiPrimF * dtstat ) + fcVelbi2 * Wb;
+		Vzbi = sinPitch * Ubi + sinRoll * cosPitch * Vbi + cosRoll * cosPitch * Wbi;
 		
 		// baro inertial altitude
 		#define PeriodAltbi 2.0 // period in second for baro/inertial altitude. Baro/inertial velocity improves baro sensor response
 		#define fcAltbi1 ( PeriodAltbi / ( PeriodAltbi + PERIOD10HZ ))
 		#define fcAltbi2 ( 1.0 - fcAltbi1 )		
-		ALTbi = fcAltbi1 * ( ALTbi - ( sinPitch * Ubi + sinRoll * cosPitch * Vbi + cosRoll * cosPitch * Wbi ) * dtstat ) + fcAltbi2	* ALT;
+		ALTbi = fcAltbi1 * ( ALTbi - Vzbi * dtstat ) + fcAltbi2	* ALT;
 		
 		// energy calculation
 		#define NEnergy 6.0 // pneumatic velocity variation alpha/beta filter coeff (period ~0.6 s)
@@ -1478,19 +1477,20 @@ void readSensors(void *pvParameters){
 			Wb in cm/s,
 			Ubi in cm/s,
 			Vbi in cm/s,
-			Wbi in cm/s, 
+			Wbi in cm/s,
+			Vzbi in cm/s,			
 			TotalEnergy in cm/s
 			<CR><LF>		
 		*/
 	
-			sprintf(str,"$S1,%lld,%i,%i,%i,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",
+			sprintf(str,"$S1,%lld,%i,%i,%i,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",
 				statTime, (int32_t)(statP*100.0),(int32_t)(teP*100.0), (int16_t)(dynP*10), 
 				(int64_t)(chosenGnss->time*1000.0), (int16_t)(chosenGnss->speed.x*100), (int16_t)(chosenGnss->speed.y*100), (int16_t)(chosenGnss->speed.z*100), (int16_t)(GNSSRouteraw*10),
 				(int32_t)(Pitch*1000.0), (int32_t)(Roll*1000.0), (int32_t)(Yaw*1000.0),
 				(int32_t)(CAS*100), (int32_t)(TAS*100), (int32_t)(ALT*100), (int32_t)(Vzbaro*100),
 				(int32_t)(AoA*1000), (int32_t)(AoB*1000),
 				(int32_t)(Ub*100), (int32_t)(Vb*100), (int32_t)(Wb*100),
-				(int32_t)(Ubi*100), (int32_t)(Vbi*100), (int32_t)(Wbi*100), 				
+				(int32_t)(Ubi*100), (int32_t)(Vbi*100), (int32_t)(Wbi*100), (int32_t)(Vzbi*100),				
 				(int32_t)(TotalEnergy*100) );
 			Router::sendXCV(str);
 		}
