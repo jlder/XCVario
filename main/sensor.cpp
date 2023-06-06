@@ -297,6 +297,7 @@ static float deltaALT;
 static float ALTPrim = 0.0;
 static float Vzbaro = 0.0;
 static float ALT = 0.0;
+static float EnergyFilt = 0.0;
 #define NCAS 7.0 // CAS alpha/beta filter coeff
 #define alphaCAS (2.0 * (2.0 * NCAS - 1.0) / NCAS / (NCAS + 1.0))
 #define betaCAS (6.0 / NCAS / (NCAS + 1.0) / PERIOD10HZ)
@@ -305,14 +306,14 @@ static float ALT = 0.0;
 #define betaALT (6.0 / NALT / (NALT + 1.0) / PERIOD10HZ)
 #define RhoSLISA 1.225
 
-static float Ubi;
-static float Vbi;
-static float Wbi;
-static float Vzbi;
-static float UiPrimF;
-static float ViPrimF;
-static float WiPrimF;
-static float ALTbi;
+static float Ubi = 0.0;
+static float Vbi = 0.0;
+static float Wbi = 0.0;
+static float Vzbi = 0.0;
+static float UiPrimF = 0.0;
+static float ViPrimF = 0.0;
+static float WiPrimF = 0.0;
+static float ALTbi = 0.0;
 
 static float TotalEnergy = 0.0;
 #define NVztot 7.0 // CAS alpha/beta filter coeff
@@ -611,7 +612,7 @@ void MahonyUpdateIMU(float dt, float gxraw, float gyraw, float gzraw,
 					float ax, float ay, float az, 
 					float &Bias_Gx, float &Bias_Gy, float &Bias_Gz ) {
 
-#define Nbias 2000.0 // very long period for extracting error rate of change between IMU quaternion and free quaternion
+#define Nbias 8000.0 // very long period for extracting error rate of change between IMU quaternion and free quaternion
 #define alphaBias (2.0 * (2.0 * Nbias - 1.0) / Nbias / (Nbias + 1.0))
 #define betaBias (6.0 / Nbias / (Nbias + 1.0) / PERIOD40HZ)
 #define Nlimit 0.15 // stability criteria for gravity estimation from accels in m/s²
@@ -664,19 +665,20 @@ float deltaBiasGz;
 	// error from cross product is half total error, 2.0 factor is applied to obtain bias
 	Bias_Gx = 2.0 * errx_prim;
 	Bias_Gy = 2.0 * erry_prim;
-	
+	Bias_Gz = 2.0 * errz_prim;
+
 	// When wing are ~ leveled , Gz bias should be the long term variation of ( Gz - GNSS route* ) *: GNSS route is optional
 	// test for wing leveled is using asymetrical filter with fast rise and slower decay
 	#define fcGrav 0.3 // ~3Hz low pass to filter for testing stability criteria
 	#define fcGrav1 ( fcGrav /( fcGrav + PERIOD40HZ ))
 	#define fcGrav2 ( 1.0 - fcGrav1 )
-	if ( BankFilt < abs(halfvy) ) {
+/*	if ( BankFilt < abs(halfvy) ) {
 		BankFilt = abs(halfvy);
 	} else {
 		BankFilt = fcGrav1 * BankFilt + fcGrav2 * abs(halfvy);	// low pass filter on estimated Bank to reduce noise
 	}
 	if ( BankFilt < WingLevel  ) {
-		#define NGz 1200.0 // Very long period alpha/beta for Gz bias estimation. 
+		#define NGz 3000.0 // Very long period alpha/beta for Gz bias estimation. 
 		#define alphaGz (2.0 * (2.0 * NGz - 1.0) / NGz / (NGz + 1.0))
 		#define betaGz (6.0 / NGz / (NGz + 1.0) / PERIOD40HZ)		
         deltaBiasGz = (gzraw - GNSSRoutePrim) - (Bias_Gz - Bias_GzOffset);
@@ -684,7 +686,7 @@ float deltaBiasGz;
         Bias_Gz = Bias_Gz + alphaGz * deltaBiasGz + GzPrim * dt;
 	} else {
 		Bias_GzOffset = gzraw - Bias_Gz;
-	}
+	} */
 	
 	// Update free quaternion by integrating rate of change
 	gx = gxraw * 0.5 * dt;
@@ -892,9 +894,9 @@ static void processIMU(void *pvParameters)
 			gyroISUNEDBODY.y = C_S * gyroISUNEDMPU.y - S_S * gyroISUNEDMPU.z;
 			gyroISUNEDBODY.z = -S_T * gyroISUNEDMPU.x + SSmultCT  * gyroISUNEDMPU.y + CTmultCS * gyroISUNEDMPU.z;
 			// correct gyro with flight gyro estimation
-			gyroCorr.x = gyroISUNEDBODY.x + BiasQuatGx;  // error on x should be added
-			gyroCorr.y = gyroISUNEDBODY.y + BiasQuatGy;  // error on y should be added
-			gyroCorr.z = gyroISUNEDBODY.z - BiasQuatGz;  // error on z should be removed
+			gyroCorr.x = gyroISUNEDBODY.x;// + BiasQuatGx;  // error on x should be added
+			gyroCorr.y = gyroISUNEDBODY.y;// + BiasQuatGy;  // error on y should be added
+			gyroCorr.z = gyroISUNEDBODY.z;// - BiasQuatGz;  // error on z should be removed
 		}
 		// get accel data
 		if( MPU.acceleration(&accelRaw) == ESP_OK ){
@@ -1289,8 +1291,8 @@ void readSensors(void *pvParameters){
 	
 	float deltaEnergy;
 	float EnergyPrim = 0.0;
-	ALTbi = altitude.get();
-	float EnergyFilt = ALTbi+ TAS * TAS / GRAVITY / 2.0;
+	
+	int16_t FirsTimeSensor = 2;
 	
 	#define FreqAlpha 1.5 // Hz
 	#define fcAoA1 (10.0/(10.0+FreqAlpha))
@@ -1384,7 +1386,14 @@ void readSensors(void *pvParameters){
 		Rhocorr = sqrt(RhoSLISA/Rho);
 		TAS = Rhocorr * CAS;
 		TASprim = Rhocorr * CASprim;
-		ALTraw = (1.0 - pow( (statP-(QNH.get()-1013.25)) * 0.000986923 , 0.1902891634 ) ) * (273.15 + OATemp) * 153.846153846;		
+		ALTraw = (1.0 - pow( (statP-(QNH.get()-1013.25)) * 0.000986923 , 0.1902891634 ) ) * (273.15 + OATemp) * 153.846153846;
+		if ( FirsTimeSensor > 0 ) { // initialize Altitude and Energy filters
+			ALT = ALTraw;
+			ALTbi = ALT;
+			EnergyFilt = ALTbi+ TAS * TAS / 9.807 / 2.0;
+			dtstat = 0.1;
+			FirsTimeSensor--;
+		}
 		deltaALT = ALTraw - ALT;
 		ALTPrim = ALTPrim + betaALT * deltaALT;
 		ALT = ALT + alphaALT * deltaALT + ALTPrim * dtstat;
@@ -1490,7 +1499,7 @@ void readSensors(void *pvParameters){
 				(int32_t)(CAS*100), (int32_t)(TAS*100), (int32_t)(ALT*100), (int32_t)(Vzbaro*100),
 				(int32_t)(AoA*1000), (int32_t)(AoB*1000),
 				(int32_t)(Ub*100), (int32_t)(Vb*100), (int32_t)(Wb*100),
-				(int32_t)(Ubi*100), (int32_t)(Vbi*100), (int32_t)(Wbi*100), (int32_t)(Vzbi*100),				
+				(int32_t)(Ubi*100), (int32_t)(Vbi*100),(int32_t)(Wbi*100), (int32_t)(Vzbi*100),				
 				(int32_t)(TotalEnergy*100) );
 			Router::sendXCV(str);
 		}
