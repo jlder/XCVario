@@ -1288,8 +1288,8 @@ void readSensors(void *pvParameters){
 	
 	float deltaEnergy;
 	float EnergyPrim = 0.0;
-	ALTbi = altitude.get()
-	float EnergyFilt = ALTbi;
+	ALTbi = altitude.get();
+	float EnergyFilt = ALTbi+ TAS * TAS / GRAVITY / 2.0;
 	
 	#define FreqAlpha 1.5 // Hz
 	#define fcAoA1 (10.0/(10.0+FreqAlpha))
