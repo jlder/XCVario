@@ -1393,7 +1393,7 @@ void readSensors(void *pvParameters){
 
 		// compute AoA (Angle of attack) and AoB (Angle od slip)
 		WingLoad = gross_weight.get() / polar_wingarea.get();  // should be only computed when pilot change weight settings in XCVario
-		if ( CAS > 10 && dynP > 0.0 && accelISUNEDBODY.z != 0.0 ) { // compute AoA and AoB only when speed is above 10 m/s
+		if ( (dynP > 100.0) && (accelISUNEDBODY.z > 3.0) ) { // compute AoA and AoB only when dynamic pressure is above 100 Pa and accel z above 3 m/s²
 			CL = -accelISUNEDBODY.z * 2 / RhoSLISA * WingLoad / CAS / CAS;
 			dAoA = ( CL - prevCL ) / CLA;
 			prevCL = CL;
