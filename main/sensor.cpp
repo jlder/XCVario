@@ -1426,8 +1426,12 @@ void readSensors(void *pvParameters){
 			CL = -accelISUNEDBODY.z * 2 / RhoSLISA * WingLoad / CAS / CAS;
 			dAoA = ( CL - prevCL ) / CLA;
 			prevCL = CL;
-			AoARaw = -(accelISUNEDBODY.x / accelISUNEDBODY.z) + Speed2Fly.cw( CAS ) / Speed2Fly.getN();
-			AoA = fcAoA1 * ( AoA + dAoA ) + fcAoA2 * AoARaw ;
+			if (abs(accelISUNEDBODY.z) > 1.0) { //when not close to Az=0, hybridation of aoa from drag & aoa from lift
+				AoARaw = -(accelISUNEDBODY.x / accelISUNEDBODY.z) + Speed2Fly.cw( CAS ) / Speed2Fly.getN();
+				AoA = fcAoA1 * ( AoA + dAoA ) + fcAoA2 * AoARaw ;
+			}  else { //when  close to Az=0, only aoa from lift considered
+                AoA = ( AoA + dAoA ) ;
+            }			
 			AoB = fcAoB1 * AoB + fcAoB2 * ( KAoB * WingLoad * accelISUNEDBODY.y / dynP - KGx * gyroCorr.x / TAS);	
 		} else {
 			AoA = 0.0;
