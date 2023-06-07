@@ -693,7 +693,7 @@ float deltaGz;
 		GzPrim = GzPrim + betaBiasGz * deltaGz ;
 		GzF = GzF + alphaBiasGz  * deltaGz + GzPrim * dt;
 		BiasGz = BiasGz +  alphaBiasGz  * deltaGz + GzPrim * dt;
-		Bias_Gz = -BiasGz ;
+		Bias_Gz = BiasGz ; // TODO need to check bias sign
 		if ( Bias_Gz > GzMaxBias ) Bias_Gz = GzMaxBias ;
 		if ( Bias_Gz < -GzMaxBias ) Bias_Gz = -GzMaxBias ;
 	} else {
