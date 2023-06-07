@@ -177,6 +177,10 @@ static float integralFBx = 0.0;
 static float integralFBy = 0.0;
 static float integralFBz = 0.0;
 static float BankFilt = 0.0;
+static float GzPrim = 0.0;
+static float GzF = 0.0;
+
+static float BiasGz = 0.0;
 static float Pitch = 0.0;
 static float Roll = 0.0;
 static float Yaw = 0.0;
@@ -206,7 +210,6 @@ static float errz_prim = 0.0;
 static float BiasQuatGx = 0.0;
 static float BiasQuatGy = 0.0;
 static float BiasQuatGz = 0.0;
-static float Bias_GzOffset = 0.0;
 static float Kgain = 1.0;
 static float cosRoll = 1.0;
 static float sinRoll = 0.0;
@@ -224,7 +227,6 @@ static float ViPrim = 0.0;
 static float WiPrim = 0.0;
 // variables for gravity estimation
 mpud::float_axes_t GravIMU;	
-float GzPrim = 0.0;
 
 // installation and calibration variables
 mpud::float_axes_t currentAccelBias;
@@ -633,7 +635,7 @@ float qa, qb, qc, free_halfvx, free_halfvy, free_halfvz;
 float GravityModuleErr = 0.0;
 float dynKp = Kp;
 float dynKi = Ki;
-float deltaBiasGz;
+float deltaGz;
 	
 	// To estimate gyro Bias:
 	// - compute error between vertical vector from IMU quaternion and free quaternion
@@ -665,28 +667,38 @@ float deltaBiasGz;
 	// error from cross product is half total error, 2.0 factor is applied to obtain bias
 	Bias_Gx = 2.0 * errx_prim;
 	Bias_Gy = 2.0 * erry_prim;
-	Bias_Gz = 2.0 * errz_prim;
+	//Bias_Gz = 2.0 * errz_prim;
 
-	// When wing are ~ leveled , Gz bias should be the long term variation of ( Gz - GNSS route* ) *: GNSS route is optional
+	// When wing are ~ leveled , Gz bias should be the long term variation of ( Gz - d(GNSS route)/dt * ) *: GNSS route is optional
 	// test for wing leveled is using asymetrical filter with fast rise and slower decay
 	#define fcGrav 0.1 // ~10Hz low pass to filter for testing stability criteria
 	#define fcGrav1 ( fcGrav /( fcGrav + PERIOD40HZ ))
 	#define fcGrav2 ( 1.0 - fcGrav1 )
-/*	if ( BankFilt < abs(halfvy) ) {
+	#define Gyroprimlimit 0.3
+	if ( BankFilt < abs(halfvy) ) {
 		BankFilt = abs(halfvy);
 	} else {
 		BankFilt = fcGrav1 * BankFilt + fcGrav2 * abs(halfvy);	// low pass filter on estimated Bank to reduce noise
 	}
-	if ( BankFilt < WingLevel  ) {
-		#define NGz 3000.0 // Very long period alpha/beta for Gz bias estimation. 
-		#define alphaGz (2.0 * (2.0 * NGz - 1.0) / NGz / (NGz + 1.0))
-		#define betaGz (6.0 / NGz / (NGz + 1.0) / PERIOD40HZ)		
-        deltaBiasGz = (gzraw - GNSSRoutePrim) - (Bias_Gz - Bias_GzOffset);
-		GzPrim = GzPrim + betaGz * deltaBiasGz;
-        Bias_Gz = Bias_Gz + alphaGz * deltaBiasGz + GzPrim * dt;
+	if ( ( (TAS > 15.0) && (BankFilt < WingLevel) ) || ( (TAS<15.0) && (GyroModulePrimLevel < Gyroprimlimit)) ) {
+		#define NGzBias 10000
+		#define alphaBiasGz (2.0 * (2.0 * NGzBias - 1.0) / NGzBias / (NGzBias + 1.0))
+		#define betaBiasGz (6.0 / NGzBias / (NGzBias + 1.0) / PERIOD40HZ)
+		#define GzMaxBias 1
+		#define GzMaxInputDev (5.0 * GzMaxBias * PERIOD40HZ)
+		deltaGz = (gzraw - GNSSRoutePrim) - GzF;
+		// Limit Gz delta to GzF +- GzMaxInputDev 
+		//If ( deltaGz > GzMaxInputDev )  deltaGz = GzMaxInputDev ;
+		//If ( deltaGz < -GzMaxInputDev ) deltaGz = - GzMaxInputDev ;
+		GzPrim = GzPrim + betaBiasGz * deltaGz ;
+		GzF = GzF + alphaBiasGz  * deltaGz + GzPrim * dt;
+		BiasGz = BiasGz +  alphaBiasGz  * deltaGz + GzPrim * dt;
+		Bias_Gz = -BiasGz ;
+		if ( Bias_Gz > GzMaxBias ) Bias_Gz = GzMaxBias ;
+		if ( Bias_Gz < -GzMaxBias ) Bias_Gz = -GzMaxBias ;
 	} else {
-		Bias_GzOffset = gzraw - Bias_Gz;
-	} */
+		GzF = gzraw - GNSSRoutePrim;
+	}
 	
 	// Update free quaternion by integrating rate of change
 	gx = gxraw * 0.5 * dt;
@@ -741,7 +753,6 @@ float deltaBiasGz;
 		} else
 		{
 			// when on ground compute error using both accel and gyro module variation and 0. threshold
-			#define Gyroprimlimit 0.3
 			GravityModuleErr =  (Nlimit - AccelGravModuleFilt) + (GyroModulePrimLevel - Gyroprimlimit);
 		}
 		// if GravityModuleErr positive, high confidence in accels
@@ -781,7 +792,7 @@ float deltaBiasGz;
 	}
 	if (SPDstream ){
 		sprintf(str,"$IMU,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f\r\n",
-			Bias_Gx,Bias_Gy,-Bias_Gz,AccelGravModule,GRAVITY,AccelGravModuleFilt,GravityModuleErr,dynKp,dynKi,halfex,halfey,halfez,integralFBx,integralFBy,integralFBz); 
+			Bias_Gx,Bias_Gy,Bias_Gz,AccelGravModule,GRAVITY,AccelGravModuleFilt,GravityModuleErr,dynKp,dynKi,halfex,halfey,halfez,integralFBx,integralFBy,integralFBz); 
 		Router::sendXCV(str);
 	}
 			
@@ -1411,7 +1422,7 @@ void readSensors(void *pvParameters){
 
 		// compute AoA (Angle of attack) and AoB (Angle od slip)
 		WingLoad = gross_weight.get() / polar_wingarea.get();  // should be only computed when pilot change weight settings in XCVario
-		if ( (dynP > 100.0) && (accelISUNEDBODY.z > 3.0) ) { // compute AoA and AoB only when dynamic pressure is above 100 Pa and accel z above 3 m/s²
+		if ( (dynP > 100.0) && (accelISUNEDBODY.z > 1.0) ) { // compute AoA and AoB only when dynamic pressure is above 100 Pa and accel z above 1 m/s²
 			CL = -accelISUNEDBODY.z * 2 / RhoSLISA * WingLoad / CAS / CAS;
 			dAoA = ( CL - prevCL ) / CLA;
 			prevCL = CL;
@@ -1453,7 +1464,7 @@ void readSensors(void *pvParameters){
 		Vzbi = sinPitch * Ubi + sinRoll * cosPitch * Vbi + cosRoll * cosPitch * Wbi;
 		
 		// baro inertial altitude
-		#define PeriodAltbi 2.0 // period in second for baro/inertial altitude. Baro/inertial velocity improves baro sensor response
+		#define PeriodAltbi 1.0 // period in second for baro/inertial altitude. Baro/inertial velocity improves baro sensor response
 		#define fcAltbi1 ( PeriodAltbi / ( PeriodAltbi + PERIOD10HZ ))
 		#define fcAltbi2 ( 1.0 - fcAltbi1 )		
 		ALTbi = fcAltbi1 * ( ALTbi - Vzbi * dtstat ) + fcAltbi2	* ALT;
