@@ -226,7 +226,8 @@ static float UiPrim = 0.0;
 static float ViPrim = 0.0;
 static float WiPrim = 0.0;
 // variables for gravity estimation
-mpud::float_axes_t GravIMU;	
+mpud::float_axes_t GravIMU;
+mpud::float_axes_t gravISUNEDBODY;
 
 // installation and calibration variables
 mpud::float_axes_t currentAccelBias;
@@ -574,18 +575,18 @@ void drawDisplay(void *pvParameters){
 // depending on mode calculate value for Audio and set values accordingly
 void doAudio(){
 	polar_sink = Speed2Fly.sink( ias.get() );
-	float netto = te_vario.get() - polar_sink;
+	float netto = TotalEnergy /*te_vario.get()*/ - polar_sink;
 	as2f = Speed2Fly.speed( netto, !Switch::getCruiseState() );
 	s2f_delta = s2f_delta + ((as2f - ias.get()) - s2f_delta)* (1/(s2f_delay.get()*10)); // low pass damping moved to the correct place
 	// ESP_LOGI( FNAME, "te: %f, polar_sink: %f, netto %f, s2f: %f  delta: %f", aTES2F, polar_sink, netto, as2f, s2f_delta );
 	if( vario_mode.get() == VARIO_NETTO || (Switch::getCruiseState() &&  (vario_mode.get() == CRUISE_NETTO)) ){
 		if( netto_mode.get() == NETTO_RELATIVE )
-			Audio::setValues( te_vario.get() - polar_sink + Speed2Fly.circlingSink( ias.get() ), s2f_delta );
+			Audio::setValues( TotalEnergy/*te_vario.get()*/ - polar_sink + Speed2Fly.circlingSink( ias.get() ), s2f_delta );
 		else if( netto_mode.get() == NETTO_NORMAL )
-			Audio::setValues( te_vario.get() - polar_sink, s2f_delta );
+			Audio::setValues( TotalEnergy/*te_vario.get()*/ - polar_sink, s2f_delta );
 	}
 	else {
-		Audio::setValues( te_vario.get(), s2f_delta );
+		Audio::setValues( TotalEnergy /*te_vario.get()*/, s2f_delta );
 	}
 }
 
@@ -618,8 +619,8 @@ void MahonyUpdateIMU(float dt, float gxraw, float gyraw, float gzraw,
 #define alphaBias (2.0 * (2.0 * Nbias - 1.0) / Nbias / (Nbias + 1.0))
 #define betaBias (6.0 / Nbias / (Nbias + 1.0) / PERIOD40HZ)
 #define Nlimit 0.15 // stability criteria for gravity estimation from accels in m/s²
-#define Kp 2.5 // proportional feedback to sync quaternion
-#define Ki 0.15 // integral feedback to sync quaternion
+#define Kp 1.5 //2.5 // proportional feedback to sync quaternion
+#define Ki 0.1 //0.15 // integral feedback to sync quaternion
 
 #define WingLevel 0.04 // max lateral gravity acceleration (normalized acceleration) to consider wings are ~ < 5° bank. Value is half sinus of angle
 
@@ -671,7 +672,7 @@ float deltaGz;
 
 	// When wing are ~ leveled , Gz bias should be the long term variation of ( Gz - d(GNSS route)/dt * ) *: GNSS route is optional
 	// test for wing leveled is using asymetrical filter with fast rise and slower decay
-	#define fcGrav 0.1 // ~10Hz low pass to filter for testing stability criteria
+	#define fcGrav 0.5 // 2Hz low pass to filter for testing stability criteria
 	#define fcGrav1 ( fcGrav /( fcGrav + PERIOD40HZ ))
 	#define fcGrav2 ( 1.0 - fcGrav1 )
 	#define Gyroprimlimit 0.3
@@ -729,6 +730,7 @@ float deltaGz;
 	gx = gxraw;// + Bias_Gx; // error on x should be added to gyro
 	gy = gyraw;// + Bias_Gy; // error on y should be added to gyro
 	gz = gzraw;// - Bias_Gz; // error on z should be removed to gyro
+	
 	// Compute feedback error only if accelerometer measurement is valid (avoids NaN in accelerometer normalisation)
 	AccelGravModule = sqrt( ax * ax + ay * ay + az * az );
 	if ( AccelGravModule != 0.0) {
@@ -743,17 +745,16 @@ float deltaGz;
 		//
 		// acceleration module filtered with asymetrical low pass filter (fast rise and slower decay) 
 		if ( AccelGravModuleFilt < abs(AccelGravModule - GRAVITY) ) {
-			AccelGravModuleFilt = abs(AccelGravModule - GRAVITY);
+			AccelGravModuleFilt = 8 * abs(AccelGravModule - GRAVITY);
 		} else {
 			AccelGravModuleFilt = fcGrav1 * AccelGravModuleFilt + fcGrav2 * abs(AccelGravModule - GRAVITY);
 		}
 		if ( TAS > 15 ) {
 			// when moving compute error between acceleration module and local gravity (GRAVITY) in relation to Nlimit
 			GravityModuleErr = Nlimit - AccelGravModuleFilt;
-		} else
-		{
-			// when on ground compute error using both accel and gyro module variation and 0. threshold
-			GravityModuleErr =  (Nlimit - AccelGravModuleFilt) + (GyroModulePrimLevel - Gyroprimlimit);
+		} else {
+			// when on ground compute error using both accel and gyro module variation
+			GravityModuleErr =  (Nlimit - AccelGravModuleFilt) + (Gyroprimlimit - GyroModulePrimLevel);
 		}
 		// if GravityModuleErr positive, high confidence in accels
 		if  ( GravityModuleErr > 0.0 ) {
@@ -790,7 +791,7 @@ float deltaGz;
 		gy = gy + dynKp * halfey;
 		gz = gz + dynKp * halfez;
 	}
-			
+
 	// Integrate rate of change of IMU quaternion
 	gx = gx * 0.5 * dt;
 	gy = gy * 0.5 * dt;
@@ -811,7 +812,13 @@ float deltaGz;
 		q1 *= recipNorm;
 		q2 *= recipNorm;
 		q3 *= recipNorm;
-	}	
+	}
+	if (SPDstream) {
+		sprintf(str,"$IMU,%lld,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f\r\n",
+				gyroTime, (Nlimit - AccelGravModuleFilt), (Gyroprimlimit - GyroModulePrimLevel), GravityModuleErr, dynKp, dynKi, Pitch*100, free_Pitch*100, UiPrim, Ubi );
+		Router::sendXCV(str);
+	}
+
 }
 
 static void processIMU(void *pvParameters)
@@ -883,11 +890,6 @@ static void processIMU(void *pvParameters)
 	float RollInit = 0.0;
 	float YawInit = 0.0;
 	
-		
-	mpud::float_axes_t gravISUNEDBODY;
-
-	// TODO estimation of gyro gain
-	
 	while (1) {
 
 		TickType_t xLastWakeTime_mpu =xTaskGetTickCount();
@@ -910,7 +912,7 @@ static void processIMU(void *pvParameters)
 			// correct gyro with flight gyro estimation
 			gyroCorr.x = gyroISUNEDBODY.x;// + BiasQuatGx;  // error on x should be added
 			gyroCorr.y = gyroISUNEDBODY.y;// + BiasQuatGy;  // error on y should be added
-			gyroCorr.z = gyroISUNEDBODY.z;// - BiasQuatGz;  // error on z should be removed
+			gyroCorr.z = gyroISUNEDBODY.z;// + BiasQuatGz;  // error on z should be removed
 		}
 		// get accel data
 		if( MPU.acceleration(&accelRaw) == ESP_OK ){
@@ -1011,11 +1013,14 @@ static void processIMU(void *pvParameters)
 			UiPrim = accelISUNEDBODY.x - GravIMU.x - gyroCorr.y * Wbi + gyroCorr.z * Vbi;
 			ViPrim = accelISUNEDBODY.y - GravIMU.y - gyroCorr.z * Ubi + gyroCorr.x * Wbi;			
 			WiPrim = accelISUNEDBODY.z - GravIMU.z + gyroCorr.y * Ubi - gyroCorr.x * Vbi;
-
-			// Kinetic acceleration LP filtering for energy calculation
-			UiPrimF = 0.75 * UiPrimF + 0.25 * UiPrim;
-			ViPrimF = 0.75 * ViPrimF + 0.25 * ViPrim;
-			WiPrimF = 0.75 * WiPrimF + 0.25 * WiPrim;
+			
+			// baro interial speed in body frame
+			#define PeriodVelbi 3.0 // period in second for baro/inertial velocity. period long enough to reduce effect of baro wind gradients
+			#define fcVelbi1 ( PeriodVelbi / ( PeriodVelbi + PERIOD40HZ ))
+			#define fcVelbi2 ( 1.0 - fcVelbi1 )
+			Ubi = fcVelbi1 * ( Ubi + UiPrim * dtGyr ) + fcVelbi2 * Ub;
+			Vbi = fcVelbi1 * ( Vbi + ViPrim * dtGyr ) + fcVelbi2 * Vb;
+			Wbi = fcVelbi1 * ( Wbi + WiPrim * dtGyr ) + fcVelbi2 * Wb;
 				
 		} else {
 			// Not moving
@@ -1444,6 +1449,9 @@ void readSensors(void *pvParameters){
 		Vb = ( sinRoll * sinPitch * cosDHeading - cosRoll * sinDHeading ) * Vh + sinRoll * cosPitch * Vzbaro;
 		Wb = ( cosRoll * sinPitch * cosDHeading + sinRoll * sinDHeading ) * Vh + cosRoll * cosPitch * Vzbaro;
 		
+		// baro interial vertical speed in earth frame
+		Vzbi = sinPitch * Ubi + sinRoll * cosPitch * Vbi + cosRoll * cosPitch * Wbi;		
+		
 		// energy variation calculation d(E/mg)/dt = d(ALT + 1/2 1/g TAS²)/dt
 		// to remove unwanted pneumatic variations, mainly due to wind gradients, use long period (~3-4 s) complementary filter to provide baro/inertial velocity
 		// to compensate for slow/delayed baro altitude response, use short period (~1 s) complementary filter to provide baro/inertial altitude
@@ -1451,16 +1459,7 @@ void readSensors(void *pvParameters){
 		// ALTbi is computed from baro altitude and baro inertial vertical speed in earth frame
 		// baro inertial vertical speed in earth frame is obtained from rotation of baro inertial speed in Body frame
 		// TASbi is the sum of  baro inertial speeds square, in Body frame
-		
-		// baro interial speed in earth frame
-		#define PeriodVelbi 4.0 // period in second for baro/inertial velocity. period long enough to reduce effect of baro wind gradients
-		#define fcVelbi1 ( PeriodVelbi / ( PeriodVelbi + PERIOD10HZ ))
-		#define fcVelbi2 ( 1.0 - fcVelbi1 )
-		Ubi = fcVelbi1 * ( Ubi + UiPrimF * dtstat ) + fcVelbi2 * Ub;
-		Vbi = fcVelbi1 * ( Vbi + ViPrimF * dtstat ) + fcVelbi2 * Vb;
-		Wbi = fcVelbi1 * ( Wbi + WiPrimF * dtstat ) + fcVelbi2 * Wb;
-		Vzbi = sinPitch * Ubi + sinRoll * cosPitch * Vbi + cosRoll * cosPitch * Wbi;
-		
+	
 		// baro inertial altitude
 		#define PeriodAltbi 1.0 // period in second for baro/inertial altitude. Baro/inertial velocity improves baro sensor response
 		#define fcAltbi1 ( PeriodAltbi / ( PeriodAltbi + PERIOD10HZ ))
@@ -1468,7 +1467,7 @@ void readSensors(void *pvParameters){
 		ALTbi = fcAltbi1 * ( ALTbi - Vzbi * dtstat ) + fcAltbi2	* ALT;
 		
 		// energy calculation
-		#define NEnergy 6.0 // pneumatic velocity variation alpha/beta filter coeff (period ~0.6 s)
+		#define NEnergy 10.0 // pneumatic velocity variation alpha/beta filter coeff (period ~1.0 s)
 		#define alphaEnergy (2.0 * (2.0 * NEnergy - 1.0) / NEnergy / (NEnergy + 1.0))
 		#define betaEnergy (6.0 / NEnergy / (NEnergy + 1.0) / PERIOD10HZ)	
 		deltaEnergy = ( ALTbi + (Ubi * Ubi + Vbi * Vbi + Wbi * Wbi) / 2.0 / GRAVITY ) - EnergyFilt;
@@ -1492,6 +1491,9 @@ void readSensors(void *pvParameters){
 			Pitch in milli rad,
 			Roll in milli rad,
 			Yaw in milli rad,
+			Gravity estimation x in milli m/s²,
+			Gravity estimation y in milli m/s²,
+			Gravity estimation z in milli m/s²,			
 			CAS in cm/s,
 			TAS in cm/s,
 			ALT in cm,
@@ -1512,10 +1514,11 @@ void readSensors(void *pvParameters){
 			<CR><LF>		
 		*/
 	
-			sprintf(str,"$S1,%lld,%i,%i,%i,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",
+			sprintf(str,"$S1,%lld,%i,%i,%i,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",
 				statTime, (int32_t)(statP*100.0),(int32_t)(teP*100.0), (int16_t)(dynP*10), 
 				(int64_t)(chosenGnss->time*1000.0), (int16_t)(chosenGnss->speed.x*100), (int16_t)(chosenGnss->speed.y*100), (int16_t)(chosenGnss->speed.z*100), (int16_t)(GNSSRouteraw*10),
 				(int32_t)(Pitch*1000.0), (int32_t)(Roll*1000.0), (int32_t)(Yaw*1000.0),
+				(int32_t)(gravISUNEDBODY.x*1000), (int32_t)(gravISUNEDBODY.y*1000), (int32_t)(gravISUNEDBODY.z*1000),				
 				(int32_t)(CAS*100), (int32_t)(TAS*100), (int32_t)(ALT*100), (int32_t)(Vzbaro*100),
 				(int32_t)(AoA*1000), (int32_t)(AoB*1000),
 				(int32_t)(UiPrim*100), (int32_t)(ViPrim*100), (int32_t)(WiPrim*100),
