@@ -693,7 +693,7 @@ float deltaGz;
 		GzPrim = GzPrim + betaBiasGz * deltaGz ;
 		GzF = GzF + alphaBiasGz  * deltaGz + GzPrim * dt;
 		BiasGz = BiasGz +  alphaBiasGz  * deltaGz + GzPrim * dt;
-		Bias_Gz = BiasGz ; // TODO need to check bias sign
+		Bias_Gz = -BiasGz ;
 		if ( Bias_Gz > GzMaxBias ) Bias_Gz = GzMaxBias ;
 		if ( Bias_Gz < -GzMaxBias ) Bias_Gz = -GzMaxBias ;
 	} else {
@@ -790,12 +790,6 @@ float deltaGz;
 		gy = gy + dynKp * halfey;
 		gz = gz + dynKp * halfez;
 	}
-	if (SPDstream ){
-		sprintf(str,"$IMU,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f\r\n",
-			Bias_Gx,Bias_Gy,Bias_Gz,AccelGravModule,GRAVITY,AccelGravModuleFilt,GravityModuleErr,dynKp,dynKi,halfex,halfey,halfez,integralFBx,integralFBy,integralFBz); 
-		Router::sendXCV(str);
-	}
-			
 			
 	// Integrate rate of change of IMU quaternion
 	gx = gx * 0.5 * dt;
@@ -1003,7 +997,7 @@ static void processIMU(void *pvParameters)
 			if (free_Yaw < 0.0 ) free_Yaw = free_Yaw + 2.0 * M_PI;
 			if (free_Yaw > 2.0 * M_PI) free_Yaw = free_Yaw - 2.0 * M_PI;
 
-			// compute sin and cos for Roll and Pitch from IMU quaternion since theyr are used in multiple calculations
+			// compute sin and cos for Roll and Pitch from IMU quaternion since they are used in multiple calculations
 			cosRoll = cos( Roll );
 			sinRoll = sin( Roll );
 			cosPitch = cos( Pitch );
@@ -1498,15 +1492,15 @@ void readSensors(void *pvParameters){
 			Pitch in milli rad,
 			Roll in milli rad,
 			Yaw in milli rad,
-			free_Pitch in milli rad,
-			free_Roll in milli rad,
-			free_Yaw in milli rad,
 			CAS in cm/s,
 			TAS in cm/s,
 			ALT in cm,
 			Vzbaro in cm/s,
 			AoA angle in mrad,
 			AoB  angle in mrad,
+			UiPrim in cm/s²,
+			ViPrim in cm/s²,
+			WiPrim in cm/s²,			
 			Ub in cm/s,
 			Vb in cm/s,
 			Wb in cm/s,
@@ -1521,9 +1515,10 @@ void readSensors(void *pvParameters){
 			sprintf(str,"$S1,%lld,%i,%i,%i,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",
 				statTime, (int32_t)(statP*100.0),(int32_t)(teP*100.0), (int16_t)(dynP*10), 
 				(int64_t)(chosenGnss->time*1000.0), (int16_t)(chosenGnss->speed.x*100), (int16_t)(chosenGnss->speed.y*100), (int16_t)(chosenGnss->speed.z*100), (int16_t)(GNSSRouteraw*10),
-				(int32_t)(Pitch*1000.0), (int32_t)(Roll*1000.0), (int32_t)(Yaw*1000.0),(int32_t)(free_Pitch*1000.0), (int32_t)(free_Roll*1000.0), (int32_t)(free_Yaw*1000.0),
+				(int32_t)(Pitch*1000.0), (int32_t)(Roll*1000.0), (int32_t)(Yaw*1000.0),
 				(int32_t)(CAS*100), (int32_t)(TAS*100), (int32_t)(ALT*100), (int32_t)(Vzbaro*100),
 				(int32_t)(AoA*1000), (int32_t)(AoB*1000),
+				(int32_t)(UiPrim*100), (int32_t)(ViPrim*100), (int32_t)(WiPrim*100),
 				(int32_t)(Ub*100), (int32_t)(Vb*100), (int32_t)(Wb*100),
 				(int32_t)(Ubi*100), (int32_t)(Vbi*100),(int32_t)(Wbi*100), (int32_t)(Vzbi*100),				
 				(int32_t)(TotalEnergy*100) );
@@ -1547,7 +1542,7 @@ void readSensors(void *pvParameters){
 		*/
 			sprintf(str,"$S2,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",
 				(int16_t)(OATemp*10.0), (int16_t)(MPUtempcel*10.0), chosenGnss->fix, chosenGnss->numSV,
-				(int32_t)(BiasQuatGx*100000.0), (int32_t)(BiasQuatGy*100000.0), (int32_t)(-BiasQuatGz*100000.0),
+				(int32_t)(BiasQuatGx*100000.0), (int32_t)(BiasQuatGy*100000.0), (int32_t)(BiasQuatGz*100000.0),
 				(int32_t)(GRAVITY*10000.0),(int16_t)BIAS_Init,
 				(int32_t)(free_Pitch*1000.0), (int32_t)(free_Roll*1000.0), (int32_t)(free_Yaw*1000.0)
 				);
