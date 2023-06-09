@@ -953,12 +953,12 @@ static void processIMU(void *pvParameters)
 			// only consider centrifugal forces if TAS > 10 m/s
 			if ( TAS > 10.0 ) {
 			// estimate gravity in body frame taking into account centrifugal corrections
-				gravISUNEDBODY.x = accelISUNEDBODY.x - gyroCorr.y * Wbi + gyroCorr.z * Vbi;
+				gravISUNEDBODY.x = accelISUNEDBODY.x - gyroCorr.y * Wbi + gyroCorr.z * Vbi - UiPrim;
 				gravISUNEDBODY.y = accelISUNEDBODY.y - gyroCorr.z * Ubi + gyroCorr.x * Wbi;
 				gravISUNEDBODY.z = accelISUNEDBODY.z + gyroCorr.y * Ubi - gyroCorr.x * Wbi;
 			} else {
 				// estimate gravity in body frame using accels only
-				gravISUNEDBODY.x = accelISUNEDBODY.x;
+				gravISUNEDBODY.x = accelISUNEDBODY.x - Uiprim;
 				gravISUNEDBODY.y = accelISUNEDBODY.y;
 				gravISUNEDBODY.z = accelISUNEDBODY.z;
 			}
