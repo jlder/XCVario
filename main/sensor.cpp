@@ -156,7 +156,7 @@ float GyroModuleFilt = 0.0;
 float GyroModulePrimLevel = 0.0;
 float deltaAccelModule = 0.0;	// accel module alfa/beta filter for gyro stability test
 float AccelModulePrimFilt = 0.0;
-float AccelModuleFilt = 9.807;
+float AccelModuleFilt = 0.0;
 float AccelModulePrimLevel = 0.0;
 
 
@@ -172,6 +172,8 @@ mpud::float_axes_t gyroISUNEDMPU;
 mpud::float_axes_t gyroISUNEDBODY;
 mpud::float_axes_t gyroCorr;
 static float AccelGravModuleFilt = 0.0;
+static float ModuleKineticAccel = 0.0;
+static float ModuleKineticAccelF = 0.0;
 static int32_t gyrobiastemptimer = 0;
 static float integralFBx = 0.0;
 static float integralFBy = 0.0;
@@ -619,8 +621,8 @@ void MahonyUpdateIMU(float dt, float gxraw, float gyraw, float gzraw,
 #define alphaBias (2.0 * (2.0 * Nbias - 1.0) / Nbias / (Nbias + 1.0))
 #define betaBias (6.0 / Nbias / (Nbias + 1.0) / PERIOD40HZ)
 #define Nlimit 0.15 // stability criteria for gravity estimation from accels in m/s²
-#define Kp 1.5 //2.5 // proportional feedback to sync quaternion
-#define Ki 0.1 //0.15 // integral feedback to sync quaternion
+#define Kp 2.0 //2.5 // proportional feedback to sync quaternion
+#define Ki 0.15 //0.15 // integral feedback to sync quaternion
 
 #define WingLevel 0.04 // max lateral gravity acceleration (normalized acceleration) to consider wings are ~ < 5° bank. Value is half sinus of angle
 
@@ -672,7 +674,7 @@ float deltaGz;
 
 	// When wing are ~ leveled , Gz bias should be the long term variation of ( Gz - d(GNSS route)/dt * ) *: GNSS route is optional
 	// test for wing leveled is using asymetrical filter with fast rise and slower decay
-	#define fcGrav 0.5 // 2Hz low pass to filter for testing stability criteria
+	#define fcGrav 0.67 // 1.5Hz low pass to filter for testing stability criteria
 	#define fcGrav1 ( fcGrav /( fcGrav + PERIOD40HZ ))
 	#define fcGrav2 ( 1.0 - fcGrav1 )
 	#define Gyroprimlimit 0.3
@@ -688,9 +690,6 @@ float deltaGz;
 		#define GzMaxBias 1
 		#define GzMaxInputDev (5.0 * GzMaxBias * PERIOD40HZ)
 		deltaGz = (gzraw - GNSSRoutePrim) - GzF;
-		// Limit Gz delta to GzF +- GzMaxInputDev 
-		//If ( deltaGz > GzMaxInputDev )  deltaGz = GzMaxInputDev ;
-		//If ( deltaGz < -GzMaxInputDev ) deltaGz = - GzMaxInputDev ;
 		GzPrim = GzPrim + betaBiasGz * deltaGz ;
 		GzF = GzF + alphaBiasGz  * deltaGz + GzPrim * dt;
 		BiasGz = BiasGz +  alphaBiasGz  * deltaGz + GzPrim * dt;
@@ -729,7 +728,7 @@ float deltaGz;
 	// correct raw gyro with estimated gyro bias
 	gx = gxraw;// + Bias_Gx; // error on x should be added to gyro
 	gy = gyraw;// + Bias_Gy; // error on y should be added to gyro
-	gz = gzraw;// - Bias_Gz; // error on z should be removed to gyro
+	gz = gzraw;// + Bias_Gz; // error on z should be added to gyro
 	
 	// Compute feedback error only if accelerometer measurement is valid (avoids NaN in accelerometer normalisation)
 	AccelGravModule = sqrt( ax * ax + ay * ay + az * az );
@@ -744,28 +743,25 @@ float deltaGz;
 		// when error is higher than threshold, reduced coefficients are used.
 		//
 		// acceleration module filtered with asymetrical low pass filter (fast rise and slower decay) 
-		if ( AccelGravModuleFilt < abs(AccelGravModule - GRAVITY) ) {
-			AccelGravModuleFilt = 8 * abs(AccelGravModule - GRAVITY);
+		ModuleKineticAccel = sqrt( UiPrim*UiPrim + ViPrim*ViPrim + WiPrim*WiPrim );
+		if ( ModuleKineticAccelF < ModuleKineticAccel ) {
+			ModuleKineticAccelF = ModuleKineticAccel;
 		} else {
-			AccelGravModuleFilt = fcGrav1 * AccelGravModuleFilt + fcGrav2 * abs(AccelGravModule - GRAVITY);
+			ModuleKineticAccelF = fcGrav1 * ModuleKineticAccelF +  fcGrav2 * ModuleKineticAccel;
 		}
-		if ( TAS > 15 ) {
-			// when moving compute error between acceleration module and local gravity (GRAVITY) in relation to Nlimit
-			GravityModuleErr = Nlimit - AccelGravModuleFilt;
-		} else {
-			// when on ground compute error using both accel and gyro module variation
-			GravityModuleErr =  (Nlimit - AccelGravModuleFilt) + (Gyroprimlimit - GyroModulePrimLevel);
-		}
-		// if GravityModuleErr positive, high confidence in accels
+		// IMU stability criteria is using filtered module of kinetic acceleration refernced to Nlimit which is teh stability threshold
+		GravityModuleErr = Nlimit - ModuleKineticAccelF;
+		
+		// if GravityModuleErr positive, high confidence in accels (kinetic accels module below Nlimit)
 		if  ( GravityModuleErr > 0.0 ) {
 			dynKp = Kp;
 			dynKi = Ki;
 		} else {
 			// if GravityModuleErr negative, low confidence in accels
-			// limit error magnitude
-			if ( GravityModuleErr < -4.0 ) GravityModuleErr = -4.0;
+			// limit magnitude of error
+			if ( GravityModuleErr < -1.0 ) GravityModuleErr = -1.0;
 			// compute dynamic gain function of error magnitude
-			Kgain = pow( 10.0, GravityModuleErr * 1.5 );
+			Kgain = pow( 10.0, GravityModuleErr * 8 );
 			dynKp = Kgain * Kp;
 			dynKi = Kgain * Ki;
 		}		
@@ -814,8 +810,8 @@ float deltaGz;
 		q3 *= recipNorm;
 	}
 	if (SPDstream) {
-		sprintf(str,"$IMU,%lld,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f\r\n",
-				gyroTime, (Nlimit - AccelGravModuleFilt), (Gyroprimlimit - GyroModulePrimLevel), GravityModuleErr, dynKp, dynKi, Pitch*100, free_Pitch*100, UiPrim, Ubi );
+		sprintf(str,"$IMU,%lld,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f\r\n",
+				gyroTime, (Nlimit - ModuleKineticAccelF), GravityModuleErr, dynKp, dynKi, Pitch*100, free_Pitch*100, UiPrim, Ubi );
 		Router::sendXCV(str);
 	}
 
@@ -831,10 +827,10 @@ static void processIMU(void *pvParameters)
 // - Ublox GNSS data. 
 
 	// MPU data
-	#define NAccel 7.0 // accel alpha/beta filter coeff
-	#define NGyro 7.0 // gyro alpha/beta coeff
+	#define NAccel 6.0 // accel alpha/beta filter coeff
 	#define alfaAccelModule (2.0 * (2.0 * NAccel - 1.0) / NAccel / (NAccel + 1.0))
 	#define betaAccelModule (6.0 / NAccel / (NAccel + 1.0) / PERIOD40HZ)
+	#define NGyro 6.0 // gyro alpha/beta coeff
 	#define alfaGyroModule (2.0 * (2.0 * NGyro - 1.0) / NGyro / (NGyro + 1.0))
 	#define betaGyroModule (6.0 / NGyro / (NGyro + 1.0) / PERIOD40HZ)
 	#define fcAccelLevel 3.0 // 3Hz low pass to filter 
@@ -845,13 +841,7 @@ static void processIMU(void *pvParameters)
 	#define fcGL2 (1.0-fcGL1)
 	#define GroundAccelprimlimit 0.9 // m/s²
 	#define	GroundGyroprimlimit 0.3 // rad/s²
-	#define PeriodAccP 2.5 // period in second for Kinetic acceleration² and pneumatic acceleration complementary filter
-	#define fcAccP1 (40.0/(40.0 + (1.0/PeriodAccP)))
-	#define fcAccP2 (1.0-fcAccP1)	
-	#define PeriodAcc 5.0 // period in second for Kinetic baro internial acceleration and pneumatic speed complementary filter
-	#define fcAcc1 (40.0/(40.0 + (1.0/PeriodAcc)))
-	#define fcAcc2 (1.0-fcAcc1)	
-
+	
 	mpud::raw_axes_t accelRaw;
 	mpud::raw_axes_t gyroRaw;
 	
@@ -936,7 +926,9 @@ static void processIMU(void *pvParameters)
 			AccelModulePrimLevel = abs(AccelModulePrimFilt);
 		} else {
 			AccelModulePrimLevel = fcAL1 * AccelModulePrimLevel +  fcAL2 * abs(AccelModulePrimFilt);
-		}			
+		}	
+
+		
 		// compute gyro module variation
 		deltaGyroModule =  sqrt( gyroCorr.x * gyroCorr.x + gyroCorr.y * gyroCorr.y + gyroCorr.z * gyroCorr.z ) - GyroModuleFilt;
 		// filter gyro with alfa/beta
@@ -1015,7 +1007,7 @@ static void processIMU(void *pvParameters)
 			WiPrim = accelISUNEDBODY.z - GravIMU.z + gyroCorr.y * Ubi - gyroCorr.x * Vbi;
 			
 			// baro interial speed in body frame
-			#define PeriodVelbi 3.0 // period in second for baro/inertial velocity. period long enough to reduce effect of baro wind gradients
+			#define PeriodVelbi 2.0 // period in second for baro/inertial velocity. period long enough to reduce effect of baro wind gradients
 			#define fcVelbi1 ( PeriodVelbi / ( PeriodVelbi + PERIOD40HZ ))
 			#define fcVelbi2 ( 1.0 - fcVelbi1 )
 			Ubi = fcVelbi1 * ( Ubi + UiPrim * dtGyr ) + fcVelbi2 * Ub;
@@ -1461,7 +1453,7 @@ void readSensors(void *pvParameters){
 		// TASbi is the sum of  baro inertial speeds square, in Body frame
 	
 		// baro inertial altitude
-		#define PeriodAltbi 1.0 // period in second for baro/inertial altitude. Baro/inertial velocity improves baro sensor response
+		#define PeriodAltbi 0.5 // period in second for baro/inertial altitude. Baro/inertial velocity improves baro sensor response
 		#define fcAltbi1 ( PeriodAltbi / ( PeriodAltbi + PERIOD10HZ ))
 		#define fcAltbi2 ( 1.0 - fcAltbi1 )		
 		ALTbi = fcAltbi1 * ( ALTbi - Vzbi * dtstat ) + fcAltbi2	* ALT;
