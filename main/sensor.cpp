@@ -277,7 +277,8 @@ static int32_t cur_gyro_bias[3];
 bool IMUstream = false; // IMU FT stream
 bool SENstream = false; // Sensors FT stream
 bool CALstream = false; // accel calibration stream
-bool SPDstream = false; // speed FT stream
+bool TSTstream = false; // Test stream
+bool LABtest = false; // LAB switch to limit to one ground bias evaluation
 float localGravity = 9.807; // local gravity used during accel calibration. Value is entered using BT $CAL command
 uint16_t BIAS_Init = 0; // Bias initialization status (0= no init, n = nth bias calculation
 bool BIASInFLASH = false; // New BIAS stored in FLASH
@@ -749,7 +750,7 @@ float deltaGz;
 		} else {
 			ModuleKineticAccelF = fcGrav1 * ModuleKineticAccelF +  fcGrav2 * ModuleKineticAccel;
 		}
-		// IMU stability criteria is using filtered module of kinetic acceleration refernced to Nlimit which is teh stability threshold
+		// IMU stability criteria is using filtered module of kinetic acceleration refernced to Nlimit which is the stability threshold
 		GravityModuleErr = Nlimit - ModuleKineticAccelF;
 		
 		// if GravityModuleErr positive, high confidence in accels (kinetic accels module below Nlimit)
@@ -809,7 +810,7 @@ float deltaGz;
 		q2 *= recipNorm;
 		q3 *= recipNorm;
 	}
-	if (SPDstream) {
+	if (TSTstream) {
 		sprintf(str,"$IMU,%lld,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f\r\n",
 				gyroTime, (Nlimit - ModuleKineticAccelF), GravityModuleErr, dynKp, dynKi, Pitch*100, free_Pitch*100, UiPrim, Ubi );
 		Router::sendXCV(str);
@@ -943,7 +944,7 @@ static void processIMU(void *pvParameters)
 
 		// if moving (speed > 10 m/s or ground bias estimation has ran more than "10" times TODO when operational BIAS_Init should be up to 10)
 		// Update IMU quaternion, compute accelerations and speeds
-		if (TAS > 10.0  || BIAS_Init > 0 ) {  // used 0 instead of 10 for test purpose on the ground when TAS = 0
+		if (TAS > 10.0  || BIAS_Init > 10 || (BIAS_Init>0 && LABtest)) {  // used 0 instead of 10 for test purpose on the ground when TAS = 0
 			// first time in movement, if biais initialiazation was achieved more than once, store bias and local gravity in FLASH
 			if ( !BIASInFLASH && BIAS_Init > 1 ) {
 				gyro_bias.set(GroundGyroBias);
@@ -958,7 +959,7 @@ static void processIMU(void *pvParameters)
 				gravISUNEDBODY.z = accelISUNEDBODY.z + gyroCorr.y * Ubi - gyroCorr.x * Wbi;
 			} else {
 				// estimate gravity in body frame using accels only
-				gravISUNEDBODY.x = accelISUNEDBODY.x - Uiprim;
+				gravISUNEDBODY.x = accelISUNEDBODY.x - UiPrim;
 				gravISUNEDBODY.y = accelISUNEDBODY.y;
 				gravISUNEDBODY.z = accelISUNEDBODY.z;
 			}

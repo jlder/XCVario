@@ -556,38 +556,56 @@ void Protocols::parseNMEA( const char *str ){
 			IMUstream = false; // no FT stream
 			SENstream = false;
 			CALstream = false;
-			SPDstream = false;			
+			TSTstream = false; 
+			sprintf(strx,"OK for $FT0\r\n");
+			Router::sendXCV(strx);	
 		}
 		else if (str[3] == '1') {
 			IMUstream = true; // IMU stream
 			SENstream = false;
 			CALstream = false;			
-			SPDstream = false;
+			TSTstream = false; 
+			sprintf(strx,"OK for $FT1\r\n");
+			Router::sendXCV(strx);
 		}
 		else if (str[3] == '2') {
 			IMUstream = false; // SEN stream
 			SENstream = true;
 			CALstream = false;			
-			SPDstream = false;			
+			TSTstream = false; 
+			LABtest = false;
+			sprintf(strx,"OK for $FT2\r\n");
+			Router::sendXCV(strx);			
 		}
 		else if (str[3] == '3') {
 			IMUstream = true; // IMU and SEN stream
 			SENstream = true;
 			CALstream = false;			
-			SPDstream = false;			
+			TSTstream = false; 
+			sprintf(strx,"OK for $FT3\r\n");
+			Router::sendXCV(strx);			
 		}
 		else if (str[3] == '4') {
 			IMUstream = false;
 			SENstream = false;			
 			CALstream = true; // Accel calibration stream
-			SPDstream = false;			
+			TSTstream = false; 
+			sprintf(strx,"OK for $FT4\r\n");
+			Router::sendXCV(strx);			
 		}
 		else if (str[3] == '5') {
 			IMUstream = false;
 			SENstream = false;
 			CALstream = false; 			
-			SPDstream = true; // Speed and accel data stream
+			TSTstream = true;
+			sprintf(strx,"OK for $FT5\r\n");
+			Router::sendXCV(strx);			
 		}
+		else if (str[3] == '6') {
+			LABtest = true;
+			sprintf(strx,"OK for $FT6\r\n");
+			Router::sendXCV(strx);			
+		}		
 	} else if( !strncmp( str, "$SETACC", 7 ) ) {
 		mpud::float_axes_t AccBias;	
 		mpud::float_axes_t AccGain;
