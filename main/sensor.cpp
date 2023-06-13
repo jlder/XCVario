@@ -942,7 +942,7 @@ static void processIMU(void *pvParameters)
 
 		// Update IMU
 		// only consider centrifugal forces if TAS > 10 m/s
-		if ( TAS > 10.0 ) {
+		if ( TAS > 15.0 ) {
 		// estimate gravity in body frame taking into account centrifugal corrections
 			gravISUNEDBODY.x = accelISUNEDBODY.x - gyroCorr.y * Wbi + gyroCorr.z * Vbi;
 			gravISUNEDBODY.y = accelISUNEDBODY.y - gyroCorr.z * Ubi + gyroCorr.x * Wbi;
@@ -1043,7 +1043,7 @@ static void processIMU(void *pvParameters)
 								RollInit += atan(accelISUNEDBODY.y / accelISUNEDBODY.z);
 								PitchInit += asin(accelISUNEDBODY.x/GRAVITY);
 							} else {
-								// If not bias yet, after 25 seconds calculate average bias, gravity and roll/pitch
+								// If no bias yet, after 25 seconds calculate average bias, gravity and roll/pitch
 								// If already have bias, calulate after 2 minutes to avoid risk of perturbation before takeoff
 								if ( (BIAS_Init == 0 && gyrostable > 1000) || (BIAS_Init > 0 && gyrostable > 4800) ) {
 									GroundGyroBias.x = GxBias / averagecount;
@@ -1083,7 +1083,7 @@ static void processIMU(void *pvParameters)
 			}
 			
 			// If required stream accel calibration data
-			if ( CALstream && BIAS_Init > 0 ) {
+			if ( CALstream ) {
 				// If gyro are stable
 				if ( GyroModulePrimLevel < GroundGyroprimlimit ) {
 					if ( gyromodulestable == 0 ) {
@@ -1092,9 +1092,9 @@ static void processIMU(void *pvParameters)
 						accelAvgz = -accelG.x*9.807;
 						gyromodulestable = 1;
 					} else {
-						accelAvgx = 0.95 * accelAvgx + 0.05 * (-accelG.z*9.807);
-						accelAvgy = 0.95 * accelAvgy + 0.05 * (-accelG.y*9.807);
-						accelAvgz = 0.95 * accelAvgz + 0.05 * (-accelG.x*9.807);
+						accelAvgx = 0.9 * accelAvgx + 0.1 * (-accelG.z*9.807);
+						accelAvgy = 0.9 * accelAvgy + 0.1 * (-accelG.y*9.807);
+						accelAvgz = 0.9 * accelAvgz + 0.1 * (-accelG.x*9.807);
 					}					
 					// store max and min
 					if ( accelAvgx > accelMaxx ) accelMaxx = accelAvgx;
@@ -1138,7 +1138,7 @@ static void processIMU(void *pvParameters)
 			}	
 		} else {
 			// if moving ( TAS > 15 m/s )
-			// if bias and gravtity have been estimated more than once store last bias and gravity in FLASH
+			// if bias and gravtity have been estimated more than once, store last available bias and gravity in FLASH
 			if ( BIAS_Init > 1  ) {
 				gyro_bias.set(GroundGyroBias);
 				gravity.set(GRAVITY);
