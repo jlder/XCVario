@@ -174,6 +174,9 @@ mpud::float_axes_t gyroCorr;
 static float AccelGravModuleFilt = 0.0;
 static float ModuleKineticAccel = 0.0;
 static float ModuleKineticAccelF = 0.0;
+static float ModuleKineticAccelMin = 0.0;
+static float ModuleKineticAccelMax = 1.0;
+static float KineticThreshold = 0.1;
 static int32_t gyrobiastemptimer = 0;
 static float integralFBx = 0.0;
 static float integralFBy = 0.0;
@@ -639,6 +642,24 @@ float GravityModuleErr = 0.0;
 float dynKp = Kp;
 float dynKi = Ki;
 float deltaGz;
+
+	// Kinetic acceleration module filtered with asymetrical low pass filter (fast rise and slower decay)
+	#define fcKinAcc 0.67 // 0.67 s ~ 1.5Hz low pass to filter kinetic accel decay
+	#define fcKinAcc1 ( fcKinAcc /( fcKinAcc + PERIOD40HZ ))
+	#define fcKinAcc2 ( 1.0 - fcKinAcc1 )
+	#define fcKinAccMinMax 60 // 60s low pass to filter kinetic min and max estimation
+	#define fcKinAccMinMax1 ( fcKinAccMinMax /( fcKinAccMinMax + PERIOD40HZ ))
+	#define fcKinAccMinMax2 ( 1.0 - fcKinAccMinMax1 )	
+	ModuleKineticAccel = sqrt( UiPrim*UiPrim + ViPrim*ViPrim + WiPrim*WiPrim );
+	if ( ModuleKineticAccelF < ModuleKineticAccel ) {
+		ModuleKineticAccelF = ModuleKineticAccel;
+	} else {
+		ModuleKineticAccelF = fcKinAcc1 * ModuleKineticAccelF +  fcKinAcc2 * ModuleKineticAccel;
+	}
+	// Kinetic acceleration min and max
+	if ( ModuleKineticAccelF < ModuleKineticAccelMin  ) ModuleKineticAccelMin = fcKinAccMinMax1 * ModuleKineticAccelMin + fcKinAccMinMax2 * ModuleKineticAccelF;
+	if ( ModuleKineticAccelF > ModuleKineticAccelMax  ) ModuleKineticAccelMax = fcKinAccMinMax1 * ModuleKineticAccelMax + fcKinAccMinMax2 * ModuleKineticAccelF;
+	KineticThreshold = ModuleKineticAccelMin + 0.1; 
 	
 	// To estimate gyro Bias:
 	// - compute error between vertical vector from IMU quaternion and free quaternion
@@ -664,9 +685,6 @@ float deltaGz;
 	delta_erry = free_halfey - filt_erry;
 	erry_prim = erry_prim + betaBias * delta_erry; // error rate of change for y
 	filt_erry = filt_erry + alphaBias * delta_erry + erry_prim * dt;
-	delta_errz = free_halfez - filt_errz;
-	errz_prim = errz_prim + betaBias * delta_errz; // error rate of change for z
-	filt_errz = filt_errz + alphaBias * delta_errz + errz_prim * dt;
 	// error from cross product is half total error, 2.0 factor is applied to obtain bias
 	Bias_Gx = 2.0 * errx_prim;
 	Bias_Gy = 2.0 * erry_prim;
@@ -674,14 +692,14 @@ float deltaGz;
 
 	// When wing are ~ leveled , Gz bias should be the long term variation of ( Gz - d(GNSS route)/dt * ) *: GNSS route is optional
 	// test for wing leveled is using asymetrical filter with fast rise and slower decay
-	#define fcGrav 0.67 // 1.5Hz low pass to filter for testing stability criteria
-	#define fcGrav1 ( fcGrav /( fcGrav + PERIOD40HZ ))
-	#define fcGrav2 ( 1.0 - fcGrav1 )
+	#define fcBank 0.67 // 1.5Hz low pass to filter for testing stability criteria
+	#define fcBank1 ( fcBank /( fcBank + PERIOD40HZ ))
+	#define fcBank2 ( 1.0 - fcBank1 )
 	#define Gyroprimlimit 0.3
 	if ( BankFilt < abs(halfvy) ) {
 		BankFilt = abs(halfvy);
 	} else {
-		BankFilt = fcGrav1 * BankFilt + fcGrav2 * abs(halfvy);	// low pass filter on estimated Bank to reduce noise
+		BankFilt = fcBank1 * BankFilt + fcBank2 * abs(halfvy);	// low pass filter on estimated Bank to reduce noise
 	}
 	if ( ( (TAS > 15.0) && (BankFilt < WingLevel) ) || ( (TAS<15.0) && (GyroModulePrimLevel < Gyroprimlimit)) ) {
 		#define NGzBias 10000
@@ -742,13 +760,7 @@ float deltaGz;
 		// when error is lower than a threshold, maximum Kp and Ki coefficients are used
 		// when error is higher than threshold, reduced coefficients are used.
 		//
-		// acceleration module filtered with asymetrical low pass filter (fast rise and slower decay) 
-		ModuleKineticAccel = sqrt( UiPrim*UiPrim + ViPrim*ViPrim + WiPrim*WiPrim );
-		if ( ModuleKineticAccelF < ModuleKineticAccel ) {
-			ModuleKineticAccelF = ModuleKineticAccel;
-		} else {
-			ModuleKineticAccelF = fcGrav1 * ModuleKineticAccelF +  fcGrav2 * ModuleKineticAccel;
-		}
+
 		// IMU stability criteria is using filtered module of kinetic acceleration refernced to Nlimit which is the stability threshold
 		GravityModuleErr = Nlimit - ModuleKineticAccelF;
 		
@@ -1546,14 +1558,18 @@ void readSensors(void *pvParameters){
 			Number of ground bias estimations,
 			free quaternion Pitch in milli rad,
 			free quaternion Roll in milli rad,
-			free quaternion Yaw in milli rad			
+			free quaternion Yaw in milli rad,
+			Kinetic accel min in milli m/s²,
+			Kinetic accel max in milli m/s²,
+			Kinetic threshold in milli m/s²
 		*/
-			sprintf(str,"$S2,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",
+			sprintf(str,"$S2,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",
 				(int16_t)(OATemp*10.0), (int16_t)(MPUtempcel*10.0), chosenGnss->fix, chosenGnss->numSV,
 				(int32_t)(GroundGyroBias.x*100000.0), (int32_t)(GroundGyroBias.y*100000.0), (int32_t)(GroundGyroBias.z*100000.0),				
 				(int32_t)(BiasQuatGx*100000.0), (int32_t)(BiasQuatGy*100000.0), (int32_t)(BiasQuatGz*100000.0),
 				(int32_t)(GRAVITY*10000.0),(int16_t)BIAS_Init,
-				(int32_t)(free_Pitch*1000.0), (int32_t)(free_Roll*1000.0), (int32_t)(free_Yaw*1000.0)
+				(int32_t)(free_Pitch*1000.0), (int32_t)(free_Roll*1000.0), (int32_t)(free_Yaw*1000.0),
+				(int32_t)(ModuleKineticAccelMin*1000.0), (int32_t)(ModuleKineticAccelMax*1000.0), (int32_t)(KineticThreshold*1000.0)
 				);
 			Router::sendXCV(str);
 		}		
