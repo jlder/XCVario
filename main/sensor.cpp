@@ -281,7 +281,6 @@ bool TSTstream = false; // Test stream
 bool LABtest = false; // LAB switch to limit to one ground bias evaluation
 float localGravity = 9.807; // local gravity used during accel calibration. Value is entered using BT $CAL command
 uint16_t BIAS_Init = 0; // Bias initialization status (0= no init, n = nth bias calculation
-bool BIASInFLASH = false; // New BIAS stored in FLASH
 
 static float GRAVITY = 9.807;
 
@@ -928,7 +927,6 @@ static void processIMU(void *pvParameters)
 		} else {
 			AccelModulePrimLevel = fcAL1 * AccelModulePrimLevel +  fcAL2 * abs(AccelModulePrimFilt);
 		}	
-
 		
 		// compute gyro module variation
 		deltaGyroModule =  sqrt( gyroCorr.x * gyroCorr.x + gyroCorr.y * gyroCorr.y + gyroCorr.z * gyroCorr.z ) - GyroModuleFilt;
@@ -940,155 +938,150 @@ static void processIMU(void *pvParameters)
 			GyroModulePrimLevel = abs(GyroModulePrimFilt);
 		} else {
 			GyroModulePrimLevel = fcGL1 * GyroModulePrimLevel +  fcGL2 * abs(GyroModulePrimFilt);
-		}			
+		}
 
-		// if moving (speed > 10 m/s or ground bias estimation has ran more than "10" times TODO when operational BIAS_Init should be up to 10)
-		// Update IMU quaternion, compute accelerations and speeds
-		if (TAS > 10.0  || BIAS_Init > 10 || (BIAS_Init>0 && LABtest)) {  // used 0 instead of 10 for test purpose on the ground when TAS = 0
-			// first time in movement, if biais initialiazation was achieved more than once, store bias and local gravity in FLASH
-			if ( !BIASInFLASH && BIAS_Init > 1 ) {
-				gyro_bias.set(GroundGyroBias);
-				gravity.set(GRAVITY);
-				BIASInFLASH = true;
-			}
-			// only consider centrifugal forces if TAS > 10 m/s
-			if ( TAS > 10.0 ) {
-			// estimate gravity in body frame taking into account centrifugal corrections
-				gravISUNEDBODY.x = accelISUNEDBODY.x - gyroCorr.y * Wbi + gyroCorr.z * Vbi;
-				gravISUNEDBODY.y = accelISUNEDBODY.y - gyroCorr.z * Ubi + gyroCorr.x * Wbi;
-				gravISUNEDBODY.z = accelISUNEDBODY.z + gyroCorr.y * Ubi - gyroCorr.x * Wbi;
-			} else {
-				// estimate gravity in body frame using accels only
-				gravISUNEDBODY.x = accelISUNEDBODY.x;
-				gravISUNEDBODY.y = accelISUNEDBODY.y;
-				gravISUNEDBODY.z = accelISUNEDBODY.z;
-			}
-
-			// Update IMU quaternion
-			// gyroISUNEDBODY corresponds to raw gyro and BiasQuatGx,y,z to the gyros bias
-			MahonyUpdateIMU( dtGyr, gyroISUNEDBODY.x, gyroISUNEDBODY.y, gyroISUNEDBODY.z,
-							-gravISUNEDBODY.x, -gravISUNEDBODY.y, -gravISUNEDBODY.z,
-							BiasQuatGx, BiasQuatGy, BiasQuatGz );
-							
-			// Euler angles from IMU quaternion
-			if ( abs(q1 * q3 - q0 * q2) < 0.5 ) {
-				Pitch = asin(-2.0 * (q1 * q3 - q0 * q2));
-			} else {
-				Pitch = M_PI / 2.0 * signbit((q0 * q2 - q1 * q3 ));
-			}
-			Roll = atan2((q0 * q1 + q2 * q3), (0.5 - q1 * q1 - q2 * q2));
-			Yaw = atan2(2.0 * (q1 * q2 + q0 * q3), (q0 * q0 + q1 * q1 - q2 * q2 - q3 * q3));
-			if (Yaw < 0.0 ) Yaw = Yaw + 2.0 * M_PI;
-			if (Yaw > 2.0 * M_PI) Yaw = Yaw - 2.0 * M_PI;
-			
-			// Euler angles from free drifting quaternion
-			if ( abs(free_q1 * free_q3 - free_q0 * free_q2) < 0.5 ) {
-				free_Pitch = asin(-2.0 * (free_q1 * free_q3 - free_q0 * free_q2));
-			} else {
-				free_Pitch = M_PI / 2.0 * signbit((free_q0 * free_q2 - free_q1 * free_q3 ));
-			}
-			free_Roll = atan2((free_q0 * free_q1 + free_q2 * free_q3), (0.5 - free_q1 * free_q1 - free_q2 * free_q2));
-			free_Yaw = atan2(2.0 * (free_q1 * free_q2 + free_q0 * free_q3), (free_q0 * free_q0 + free_q1 * free_q1 - free_q2 * free_q2 - free_q3 * free_q3));
-			if (free_Yaw < 0.0 ) free_Yaw = free_Yaw + 2.0 * M_PI;
-			if (free_Yaw > 2.0 * M_PI) free_Yaw = free_Yaw - 2.0 * M_PI;
-
-			// compute sin and cos for Roll and Pitch from IMU quaternion since they are used in multiple calculations
-			cosRoll = cos( Roll );
-			sinRoll = sin( Roll );
-			cosPitch = cos( Pitch );
-			sinPitch = sin( Pitch );
-
-			// compute kinetic acceleration from accels, gravity from IMU and centrifugal forces from accels and baro inertial speeds
-			GravIMU.x = -GRAVITY * 2.0 * (q1 * q3 - q0 * q2);
-			GravIMU.y = -GRAVITY * 2.0 * (q2 * q3 + q0 * q1);
-			GravIMU.z = -GRAVITY * (q0 * q0 - q1 * q1 - q2 * q2 + q3 * q3);
-			// Kinetic accelerations
-			UiPrim = accelISUNEDBODY.x - GravIMU.x - gyroCorr.y * Wbi + gyroCorr.z * Vbi;
-			ViPrim = accelISUNEDBODY.y - GravIMU.y - gyroCorr.z * Ubi + gyroCorr.x * Wbi;			
-			WiPrim = accelISUNEDBODY.z - GravIMU.z + gyroCorr.y * Ubi - gyroCorr.x * Vbi;
-			
-			// baro interial speed in body frame
-			#define PeriodVelbi 2.0 // period in second for baro/inertial velocity. period long enough to reduce effect of baro wind gradients
-			#define fcVelbi1 ( PeriodVelbi / ( PeriodVelbi + PERIOD40HZ ))
-			#define fcVelbi2 ( 1.0 - fcVelbi1 )
-			Ubi = fcVelbi1 * ( Ubi + UiPrim * dtGyr ) + fcVelbi2 * Ub;
-			Vbi = fcVelbi1 * ( Vbi + ViPrim * dtGyr ) + fcVelbi2 * Vb;
-			Wbi = fcVelbi1 * ( Wbi + WiPrim * dtGyr ) + fcVelbi2 * Wb;
-				
+		// Update IMU
+		// only consider centrifugal forces if TAS > 10 m/s
+		if ( TAS > 10.0 ) {
+		// estimate gravity in body frame taking into account centrifugal corrections
+			gravISUNEDBODY.x = accelISUNEDBODY.x - gyroCorr.y * Wbi + gyroCorr.z * Vbi;
+			gravISUNEDBODY.y = accelISUNEDBODY.y - gyroCorr.z * Ubi + gyroCorr.x * Wbi;
+			gravISUNEDBODY.z = accelISUNEDBODY.z + gyroCorr.y * Ubi - gyroCorr.x * Wbi;
 		} else {
-			// Not moving
-			// When there is MPU temperature control and temperature is locked   or   when there is no temperature control
-			if ( (HAS_MPU_TEMP_CONTROL && (MPU.getSiliconTempStatus() == MPU_T_LOCKED)) || !HAS_MPU_TEMP_CONTROL ) {
-				// count cycles when temperature is locked
-				gyrobiastemptimer++;
-				// detect if gyro and accel variations is below stability threshold using an alpha/beta filter to estimate variation over short period of time
-				// if temperature conditions has been stable for more than 30 seconds (1200 = 30x40hz) but less than 20 minutes and there is very little angular and acceleration variation
-				// filter acceleration module with alfa/beta filter
-				if ( (gyrobiastemptimer > 1200) && (GyroModulePrimLevel < GroundGyroprimlimit) && (AccelModulePrimLevel < GroundAccelprimlimit) ) {
-					gyrostable++;
-					// during first 2.5 seconds, initialize gyro data
-					if ( gyrostable < 100 ) {
-						GxBias = gyroRPS.x;
-						GyBias = gyroRPS.y;
-						GzBias = gyroRPS.z;
-						Gravx = accelISUNEDBODY.x;
-						Gravy = accelISUNEDBODY.y;
-						Gravz = accelISUNEDBODY.z;
-						RollInit = atan(accelISUNEDBODY.y / accelISUNEDBODY.z);
-						PitchInit = asin(accelISUNEDBODY.x/GRAVITY);						
-						averagecount = 1;
+			// estimate gravity in body frame using accels only
+			gravISUNEDBODY.x = accelISUNEDBODY.x;
+			gravISUNEDBODY.y = accelISUNEDBODY.y;
+			gravISUNEDBODY.z = accelISUNEDBODY.z;
+		}
+
+		// Update quaternion
+		// gyroISUNEDBODY corresponds to raw gyro and BiasQuatGx,y,z to the gyros bias
+		MahonyUpdateIMU( dtGyr, gyroISUNEDBODY.x, gyroISUNEDBODY.y, gyroISUNEDBODY.z,
+						-gravISUNEDBODY.x, -gravISUNEDBODY.y, -gravISUNEDBODY.z,
+						BiasQuatGx, BiasQuatGy, BiasQuatGz );
 						
-					} else {
-						// between 2.5 seconds and 22.5 seconds, accumulate gyro data
-						if ( gyrostable <900 ) {
-							averagecount++;
-							GxBias += gyroRPS.x;
-							GyBias += gyroRPS.y;
-							GzBias += gyroRPS.z;
-							Gravx += accelISUNEDBODY.x;
-							Gravy += accelISUNEDBODY.y;
-							Gravz += accelISUNEDBODY.z;
-							RollInit += atan(accelISUNEDBODY.y / accelISUNEDBODY.z);
-							PitchInit += asin(accelISUNEDBODY.x/GRAVITY);
+		// Compute Euler angles from IMU quaternion
+		if ( abs(q1 * q3 - q0 * q2) < 0.5 ) {
+			Pitch = asin(-2.0 * (q1 * q3 - q0 * q2));
+		} else {
+			Pitch = M_PI / 2.0 * signbit((q0 * q2 - q1 * q3 ));
+		}
+		Roll = atan2((q0 * q1 + q2 * q3), (0.5 - q1 * q1 - q2 * q2));
+		Yaw = atan2(2.0 * (q1 * q2 + q0 * q3), (q0 * q0 + q1 * q1 - q2 * q2 - q3 * q3));
+		if (Yaw < 0.0 ) Yaw = Yaw + 2.0 * M_PI;
+		if (Yaw > 2.0 * M_PI) Yaw = Yaw - 2.0 * M_PI;
+		
+		// Compute Euler angles from free drifting quaternion
+		if ( abs(free_q1 * free_q3 - free_q0 * free_q2) < 0.5 ) {
+			free_Pitch = asin(-2.0 * (free_q1 * free_q3 - free_q0 * free_q2));
+		} else {
+			free_Pitch = M_PI / 2.0 * signbit((free_q0 * free_q2 - free_q1 * free_q3 ));
+		}
+		free_Roll = atan2((free_q0 * free_q1 + free_q2 * free_q3), (0.5 - free_q1 * free_q1 - free_q2 * free_q2));
+		free_Yaw = atan2(2.0 * (free_q1 * free_q2 + free_q0 * free_q3), (free_q0 * free_q0 + free_q1 * free_q1 - free_q2 * free_q2 - free_q3 * free_q3));
+		if (free_Yaw < 0.0 ) free_Yaw = free_Yaw + 2.0 * M_PI;
+		if (free_Yaw > 2.0 * M_PI) free_Yaw = free_Yaw - 2.0 * M_PI;
+
+		// compute sin and cos for Roll and Pitch from IMU quaternion since they are used in multiple calculations
+		cosRoll = cos( Roll );
+		sinRoll = sin( Roll );
+		cosPitch = cos( Pitch );
+		sinPitch = sin( Pitch );
+
+		// compute kinetic acceleration from accels, gravity from IMU and centrifugal forces from accels and baro inertial speeds
+		// gravity estimation using IMU quaternion
+		GravIMU.x = -GRAVITY * 2.0 * (q1 * q3 - q0 * q2);
+		GravIMU.y = -GRAVITY * 2.0 * (q2 * q3 + q0 * q1);
+		GravIMU.z = -GRAVITY * (q0 * q0 - q1 * q1 - q2 * q2 + q3 * q3);
+		// Kinetic accelerations using accelerations, corrected with gravity and centrifugal accels
+		UiPrim = accelISUNEDBODY.x - GravIMU.x - gyroCorr.y * Wbi + gyroCorr.z * Vbi;
+		ViPrim = accelISUNEDBODY.y - GravIMU.y - gyroCorr.z * Ubi + gyroCorr.x * Wbi;			
+		WiPrim = accelISUNEDBODY.z - GravIMU.z + gyroCorr.y * Ubi - gyroCorr.x * Vbi;
+		
+		// Compute baro interial speed in body frame
+		#define PeriodVelbi 2.0 // period in second for baro/inertial velocity. period long enough to reduce effect of baro wind gradients
+		#define fcVelbi1 ( PeriodVelbi / ( PeriodVelbi + PERIOD40HZ ))
+		#define fcVelbi2 ( 1.0 - fcVelbi1 )
+		Ubi = fcVelbi1 * ( Ubi + UiPrim * dtGyr ) + fcVelbi2 * Ub;
+		Vbi = fcVelbi1 * ( Vbi + ViPrim * dtGyr ) + fcVelbi2 * Vb;
+		Wbi = fcVelbi1 * ( Wbi + WiPrim * dtGyr ) + fcVelbi2 * Wb;
+
+		// When TAS < 15 m/s the vario is considered potentially stable on ground
+		if ( TAS < 15.0 ) {
+			// Estimate gyro bias and gravity up to 10 times, except if doing Lab test then only one estimation is performed
+			if ( (BIAS_Init < 10 && !LABtest) || BIAS_Init < 1 ) {
+				// When MPU temperature is controled and temperature is locked   or   when there is no temperature control
+				if ( (HAS_MPU_TEMP_CONTROL && (MPU.getSiliconTempStatus() == MPU_T_LOCKED)) || !HAS_MPU_TEMP_CONTROL ) {
+					// count cycles when temperature is locked
+					gyrobiastemptimer++;
+					// detect if gyro and accel variations is below stability threshold using an alpha/beta filter to estimate variation over short period of time
+					// if temperature conditions has been stable for more than 30 seconds (1200 = 30x40hz) and there is very little angular and acceleration variation
+					if ( (gyrobiastemptimer > 1200) && (GyroModulePrimLevel < GroundGyroprimlimit) && (AccelModulePrimLevel < GroundAccelprimlimit) ) {
+						gyrostable++;
+						// during first 2.5 seconds, initialize gyro data
+						if ( gyrostable < 100 ) {
+							GxBias = gyroRPS.x;
+							GyBias = gyroRPS.y;
+							GzBias = gyroRPS.z;
+							Gravx = accelISUNEDBODY.x;
+							Gravy = accelISUNEDBODY.y;
+							Gravz = accelISUNEDBODY.z;
+							RollInit = atan(accelISUNEDBODY.y / accelISUNEDBODY.z);
+							PitchInit = asin(accelISUNEDBODY.x/GRAVITY);						
+							averagecount = 1;
+							
 						} else {
-							// If not bias yet, after 25 seconds calculate average bias, gravity and roll/pitch
-							// If already have bias, calulate after 2 minutes to avoid risk of perturbation before takeoff
-							if ( (BIAS_Init == 0 && gyrostable > 1000) || (BIAS_Init > 0 && gyrostable > 4800) ) {
-								GroundGyroBias.x = GxBias / averagecount;
-								GroundGyroBias.y = GyBias / averagecount;
-								GroundGyroBias.z = GzBias / averagecount;
-								Gravx /= averagecount;
-								Gravy /= averagecount;
-								Gravz /= averagecount;
-								GRAVITY = sqrt(Gravx*Gravx+Gravy*Gravy+Gravz*Gravz);
-								AccelGravModuleFilt = GRAVITY;
-								RollInit  /= averagecount;
-								PitchInit /= averagecount;
-								YawInit   = 0.0;
-								// Initialisation du quaternion
-								q0=((cos(RollInit/2.0)*cos(PitchInit/2.0)*cos(YawInit/2.0)+sin(RollInit/2.0)*sin(PitchInit/2.0)*sin(YawInit/2.0)));
-								q1=((sin(RollInit/2.0)*cos(PitchInit/2.0)*cos(YawInit/2.0)-cos(RollInit/2.0)*sin(PitchInit/2.0)*sin(YawInit/2.0)));
-								q2=((cos(RollInit/2.0)*sin(PitchInit/2.0)*cos(YawInit/2.0)+sin(RollInit/2.0)*cos(PitchInit/2.0)*sin(YawInit/2.0)));
-								q3=((cos(RollInit/2.0)*cos(PitchInit/2.0)*sin(YawInit/2.0)-sin(RollInit/2.0)*sin(PitchInit/2.0)*cos(YawInit/2.0)));
-								free_q0 = q0;
-								free_q1 = q1;
-								free_q2 = q2;
-								free_q3 = q3;
-								
-								BIAS_Init++;
-								if ( BIAS_Init == 1 ) {
-									gyro_bias.set(GroundGyroBias);
-									gravity.set(GRAVITY);
-									BIASInFLASH = false;
-								}								
-								gyrostable = 0;
-							}
-						} 
+							// between 2.5 seconds and 22.5 seconds, accumulate gyro data
+							if ( gyrostable <900 ) {
+								averagecount++;
+								GxBias += gyroRPS.x;
+								GyBias += gyroRPS.y;
+								GzBias += gyroRPS.z;
+								Gravx += accelISUNEDBODY.x;
+								Gravy += accelISUNEDBODY.y;
+								Gravz += accelISUNEDBODY.z;
+								RollInit += atan(accelISUNEDBODY.y / accelISUNEDBODY.z);
+								PitchInit += asin(accelISUNEDBODY.x/GRAVITY);
+							} else {
+								// If not bias yet, after 25 seconds calculate average bias, gravity and roll/pitch
+								// If already have bias, calulate after 2 minutes to avoid risk of perturbation before takeoff
+								if ( (BIAS_Init == 0 && gyrostable > 1000) || (BIAS_Init > 0 && gyrostable > 4800) ) {
+									GroundGyroBias.x = GxBias / averagecount;
+									GroundGyroBias.y = GyBias / averagecount;
+									GroundGyroBias.z = GzBias / averagecount;
+									Gravx /= averagecount;
+									Gravy /= averagecount;
+									Gravz /= averagecount;
+									GRAVITY = sqrt(Gravx*Gravx+Gravy*Gravy+Gravz*Gravz);
+									AccelGravModuleFilt = GRAVITY;
+									RollInit  /= averagecount;
+									PitchInit /= averagecount;
+									YawInit   = 0.0;
+									// Initialisation du quaternion
+									q0=((cos(RollInit/2.0)*cos(PitchInit/2.0)*cos(YawInit/2.0)+sin(RollInit/2.0)*sin(PitchInit/2.0)*sin(YawInit/2.0)));
+									q1=((sin(RollInit/2.0)*cos(PitchInit/2.0)*cos(YawInit/2.0)-cos(RollInit/2.0)*sin(PitchInit/2.0)*sin(YawInit/2.0)));
+									q2=((cos(RollInit/2.0)*sin(PitchInit/2.0)*cos(YawInit/2.0)+sin(RollInit/2.0)*cos(PitchInit/2.0)*sin(YawInit/2.0)));
+									q3=((cos(RollInit/2.0)*cos(PitchInit/2.0)*sin(YawInit/2.0)-sin(RollInit/2.0)*sin(PitchInit/2.0)*cos(YawInit/2.0)));
+									free_q0 = q0;
+									free_q1 = q1;
+									free_q2 = q2;
+									free_q3 = q3;
+									
+									BIAS_Init++;
+									if ( BIAS_Init == 1 ) {
+										gyro_bias.set(GroundGyroBias);
+										gravity.set(GRAVITY);
+									}								
+									gyrostable = 0;
+								}
+							} 
+						}
+					} else {
+						gyrostable = 0; // reset gyro stability counter if temperature not stable or movement detected
 					}
-				} else {
-					gyrostable = 0; // reset gyro stability counter if temperature not stable or movement detected
 				}
-			} 
+			}
+			
 			// If required stream accel calibration data
 			if ( CALstream && BIAS_Init > 0 ) {
 				// If gyro are stable
@@ -1143,7 +1136,14 @@ static void processIMU(void *pvParameters)
 				}
 				Router::sendXCV(str);
 			}	
-		} 			
+		} else {
+			// if moving ( TAS > 15 m/s )
+			// if bias and gravtity have been estimated more than once store last bias and gravity in FLASH
+			if ( BIAS_Init > 1  ) {
+				gyro_bias.set(GroundGyroBias);
+				gravity.set(GRAVITY);
+			}
+		}
 		
 		// If required stream IMU data
 		if ( IMUstream  ) {
@@ -1384,7 +1384,7 @@ void readSensors(void *pvParameters){
 		const gnss_data_t *chosenGnss = (gnss2->fix >= gnss1->fix) ? gnss2 : gnss1;
 		GNSSRouteraw = chosenGnss->route;
 		
-		// alpha/beta filter on GNSS route to reduce noise and get route variaytion
+		// alpha/beta filter on GNSS route to reduce noise and get route variation
 		// GNSSRoute and GNSSRoutePrim are only computed if TAS > 15 m/s
 		if ( TAS > 15.0 ) {
 			deltaGNSSRoute = GNSSRouteraw - GNSSRoute;
