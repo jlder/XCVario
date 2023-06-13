@@ -688,7 +688,7 @@ float deltaGz;
 		#define NGzBias 10000
 		#define alphaBiasGz (2.0 * (2.0 * NGzBias - 1.0) / NGzBias / (NGzBias + 1.0))
 		#define betaBiasGz (6.0 / NGzBias / (NGzBias + 1.0) / PERIOD40HZ)
-		#define GzMaxBias 1
+		#define GzMaxBias 0.001 // 1 mrad/s
 		#define GzMaxInputDev (5.0 * GzMaxBias * PERIOD40HZ)
 		deltaGz = (gzraw - GNSSRoutePrim) - GzF;
 		GzPrim = GzPrim + betaBiasGz * deltaGz ;
@@ -1383,10 +1383,19 @@ void readSensors(void *pvParameters){
 		// select gnss with better fix
 		const gnss_data_t *chosenGnss = (gnss2->fix >= gnss1->fix) ? gnss2 : gnss1;
 		GNSSRouteraw = chosenGnss->route;
-		// alpha/beta filter on GNSS route to reduce noise and get derivative
-		deltaGNSSRoute = GNSSRouteraw - GNSSRoute;
-		GNSSRoutePrim = GNSSRoutePrim + betaGNSSRoute * deltaGNSSRoute;
-		GNSSRoute = GNSSRoute + alphaGNSSRoute * deltaGNSSRoute + GNSSRoutePrim * PERIOD10HZ;	//TODO consider changing 0.1 with actual GNSS time difference	
+		
+		// alpha/beta filter on GNSS route to reduce noise and get route variaytion
+		// GNSSRoute and GNSSRoutePrim are only computed if TAS > 15 m/s
+		if ( TAS > 15.0 ) {
+			deltaGNSSRoute = GNSSRouteraw - GNSSRoute;
+			if ( deltaGNSSRoute > 180.0 ) deltaGNSSRoute = deltaGNSSRoute - 360.0;
+			if ( deltaGNSSRoute < 180.0 ) deltaGNSSRoute = deltaGNSSRoute + 360.0;			
+			GNSSRoutePrim = GNSSRoutePrim + betaGNSSRoute * deltaGNSSRoute;
+			GNSSRoute = GNSSRoute + alphaGNSSRoute * deltaGNSSRoute + GNSSRoutePrim * PERIOD10HZ;	//TODO consider changing 0.1 with actual GNSS time difference
+		} else {
+			GNSSRoutePrim = 0.0;
+			GNSSRoute = 0.0;
+		}
 
 		// compute CAS, ALT and Vzbaro using alpha/beta filters.  TODO consider using atmospher.h functions
 		Rho = (100.0 * statP / 287.058 / (273.15 + OATemp));
