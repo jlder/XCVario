@@ -891,6 +891,7 @@ static void processIMU(void *pvParameters)
 	float PitchInit = 0.0;
 	float RollInit = 0.0;
 	float YawInit = 0.0;
+	int16_t AttitudeInit = 0;
 	
 	while (1) {
 
@@ -952,71 +953,92 @@ static void processIMU(void *pvParameters)
 			GyroModulePrimLevel = fcGL1 * GyroModulePrimLevel +  fcGL2 * abs(GyroModulePrimFilt);
 		}
 
-		// Update IMU
-		// only consider centrifugal forces if TAS > 10 m/s
-		if ( TAS > 15.0 ) {
-		// estimate gravity in body frame taking into account centrifugal corrections
-			gravISUNEDBODY.x = accelISUNEDBODY.x - gyroCorr.y * Wbi + gyroCorr.z * Vbi;
-			gravISUNEDBODY.y = accelISUNEDBODY.y - gyroCorr.z * Ubi + gyroCorr.x * Wbi;
-			gravISUNEDBODY.z = accelISUNEDBODY.z + gyroCorr.y * Ubi - gyroCorr.x * Wbi;
-		} else {
-			// estimate gravity in body frame using accels only
-			gravISUNEDBODY.x = accelISUNEDBODY.x;
-			gravISUNEDBODY.y = accelISUNEDBODY.y;
-			gravISUNEDBODY.z = accelISUNEDBODY.z;
-		}
+		if ( AttitudeInit < 10 ) {
+			if ( AttitudeInit == 0 ) {
+				RollInit = atan(accelISUNEDBODY.y / accelISUNEDBODY.z);
+				PitchInit = asin(accelISUNEDBODY.x/GRAVITY);
+				YawInit   = 0.0;
+			} else {
+				RollInit = 0.8 * RollInit + 0.2 * atan(accelISUNEDBODY.y / accelISUNEDBODY.z);
+				PitchInit = 0.8 * PitchInit + 0.2 * asin(accelISUNEDBODY.x/GRAVITY);
+			}
 
-		// Update quaternion
-		// gyroISUNEDBODY corresponds to raw gyro and BiasQuatGx,y,z to the gyros bias
-		MahonyUpdateIMU( dtGyr, gyroISUNEDBODY.x, gyroISUNEDBODY.y, gyroISUNEDBODY.z,
-						-gravISUNEDBODY.x, -gravISUNEDBODY.y, -gravISUNEDBODY.z,
-						BiasQuatGx, BiasQuatGy, BiasQuatGz );
-						
-		// Compute Euler angles from IMU quaternion
-		if ( abs(q1 * q3 - q0 * q2) < 0.5 ) {
-			Pitch = asin(-2.0 * (q1 * q3 - q0 * q2));
+			q0=((cos(RollInit/2.0)*cos(PitchInit/2.0)*cos(YawInit/2.0)+sin(RollInit/2.0)*sin(PitchInit/2.0)*sin(YawInit/2.0)));
+			q1=((sin(RollInit/2.0)*cos(PitchInit/2.0)*cos(YawInit/2.0)-cos(RollInit/2.0)*sin(PitchInit/2.0)*sin(YawInit/2.0)));
+			q2=((cos(RollInit/2.0)*sin(PitchInit/2.0)*cos(YawInit/2.0)+sin(RollInit/2.0)*cos(PitchInit/2.0)*sin(YawInit/2.0)));
+			q3=((cos(RollInit/2.0)*cos(PitchInit/2.0)*sin(YawInit/2.0)-sin(RollInit/2.0)*sin(PitchInit/2.0)*cos(YawInit/2.0)));
+			free_q0 = q0;
+			free_q1 = q1;
+			free_q2 = q2;
+			free_q3 = q3;
+			AttitudeInit++;
 		} else {
-			Pitch = M_PI / 2.0 * signbit((q0 * q2 - q1 * q3 ));
-		}
-		Roll = atan2((q0 * q1 + q2 * q3), (0.5 - q1 * q1 - q2 * q2));
-		Yaw = atan2(2.0 * (q1 * q2 + q0 * q3), (q0 * q0 + q1 * q1 - q2 * q2 - q3 * q3));
-		if (Yaw < 0.0 ) Yaw = Yaw + 2.0 * M_PI;
-		if (Yaw > 2.0 * M_PI) Yaw = Yaw - 2.0 * M_PI;
-		
-		// Compute Euler angles from free drifting quaternion
-		if ( abs(free_q1 * free_q3 - free_q0 * free_q2) < 0.5 ) {
-			free_Pitch = asin(-2.0 * (free_q1 * free_q3 - free_q0 * free_q2));
-		} else {
-			free_Pitch = M_PI / 2.0 * signbit((free_q0 * free_q2 - free_q1 * free_q3 ));
-		}
-		free_Roll = atan2((free_q0 * free_q1 + free_q2 * free_q3), (0.5 - free_q1 * free_q1 - free_q2 * free_q2));
-		free_Yaw = atan2(2.0 * (free_q1 * free_q2 + free_q0 * free_q3), (free_q0 * free_q0 + free_q1 * free_q1 - free_q2 * free_q2 - free_q3 * free_q3));
-		if (free_Yaw < 0.0 ) free_Yaw = free_Yaw + 2.0 * M_PI;
-		if (free_Yaw > 2.0 * M_PI) free_Yaw = free_Yaw - 2.0 * M_PI;
+			// Update IMU
+			// only consider centrifugal forces if TAS > 10 m/s
+			if ( TAS > 15.0 ) {
+			// estimate gravity in body frame taking into account centrifugal corrections
+				gravISUNEDBODY.x = accelISUNEDBODY.x - gyroCorr.y * Wbi + gyroCorr.z * Vbi;
+				gravISUNEDBODY.y = accelISUNEDBODY.y - gyroCorr.z * Ubi + gyroCorr.x * Wbi;
+				gravISUNEDBODY.z = accelISUNEDBODY.z + gyroCorr.y * Ubi - gyroCorr.x * Wbi;
+			} else {
+				// estimate gravity in body frame using accels only
+				gravISUNEDBODY.x = accelISUNEDBODY.x;
+				gravISUNEDBODY.y = accelISUNEDBODY.y;
+				gravISUNEDBODY.z = accelISUNEDBODY.z;
+			}
 
-		// compute sin and cos for Roll and Pitch from IMU quaternion since they are used in multiple calculations
-		cosRoll = cos( Roll );
-		sinRoll = sin( Roll );
-		cosPitch = cos( Pitch );
-		sinPitch = sin( Pitch );
+			// Update quaternion
+			// gyroISUNEDBODY corresponds to raw gyro and BiasQuatGx,y,z to the gyros bias
+			MahonyUpdateIMU( dtGyr, gyroISUNEDBODY.x, gyroISUNEDBODY.y, gyroISUNEDBODY.z,
+							-gravISUNEDBODY.x, -gravISUNEDBODY.y, -gravISUNEDBODY.z,
+							BiasQuatGx, BiasQuatGy, BiasQuatGz );
+							
+			// Compute Euler angles from IMU quaternion
+			if ( abs(q1 * q3 - q0 * q2) < 0.5 ) {
+				Pitch = asin(-2.0 * (q1 * q3 - q0 * q2));
+			} else {
+				Pitch = M_PI / 2.0 * signbit((q0 * q2 - q1 * q3 ));
+			}
+			Roll = atan2((q0 * q1 + q2 * q3), (0.5 - q1 * q1 - q2 * q2));
+			Yaw = atan2(2.0 * (q1 * q2 + q0 * q3), (q0 * q0 + q1 * q1 - q2 * q2 - q3 * q3));
+			if (Yaw < 0.0 ) Yaw = Yaw + 2.0 * M_PI;
+			if (Yaw > 2.0 * M_PI) Yaw = Yaw - 2.0 * M_PI;
+			
+			// Compute Euler angles from free drifting quaternion
+			if ( abs(free_q1 * free_q3 - free_q0 * free_q2) < 0.5 ) {
+				free_Pitch = asin(-2.0 * (free_q1 * free_q3 - free_q0 * free_q2));
+			} else {
+				free_Pitch = M_PI / 2.0 * signbit((free_q0 * free_q2 - free_q1 * free_q3 ));
+			}
+			free_Roll = atan2((free_q0 * free_q1 + free_q2 * free_q3), (0.5 - free_q1 * free_q1 - free_q2 * free_q2));
+			free_Yaw = atan2(2.0 * (free_q1 * free_q2 + free_q0 * free_q3), (free_q0 * free_q0 + free_q1 * free_q1 - free_q2 * free_q2 - free_q3 * free_q3));
+			if (free_Yaw < 0.0 ) free_Yaw = free_Yaw + 2.0 * M_PI;
+			if (free_Yaw > 2.0 * M_PI) free_Yaw = free_Yaw - 2.0 * M_PI;
 
-		// compute kinetic acceleration from accels, gravity from IMU and centrifugal forces from accels and baro inertial speeds
-		// gravity estimation using IMU quaternion
-		GravIMU.x = -GRAVITY * 2.0 * (q1 * q3 - q0 * q2);
-		GravIMU.y = -GRAVITY * 2.0 * (q2 * q3 + q0 * q1);
-		GravIMU.z = -GRAVITY * (q0 * q0 - q1 * q1 - q2 * q2 + q3 * q3);
-		// Kinetic accelerations using accelerations, corrected with gravity and centrifugal accels
-		UiPrim = accelISUNEDBODY.x - GravIMU.x - gyroCorr.y * Wbi + gyroCorr.z * Vbi;
-		ViPrim = accelISUNEDBODY.y - GravIMU.y - gyroCorr.z * Ubi + gyroCorr.x * Wbi;			
-		WiPrim = accelISUNEDBODY.z - GravIMU.z + gyroCorr.y * Ubi - gyroCorr.x * Vbi;
-		
-		// Compute baro interial speed in body frame
-		#define PeriodVelbi 2.0 // period in second for baro/inertial velocity. period long enough to reduce effect of baro wind gradients
-		#define fcVelbi1 ( PeriodVelbi / ( PeriodVelbi + PERIOD40HZ ))
-		#define fcVelbi2 ( 1.0 - fcVelbi1 )
-		Ubi = fcVelbi1 * ( Ubi + UiPrim * dtGyr ) + fcVelbi2 * Ub;
-		Vbi = fcVelbi1 * ( Vbi + ViPrim * dtGyr ) + fcVelbi2 * Vb;
-		Wbi = fcVelbi1 * ( Wbi + WiPrim * dtGyr ) + fcVelbi2 * Wb;
+			// compute sin and cos for Roll and Pitch from IMU quaternion since they are used in multiple calculations
+			cosRoll = cos( Roll );
+			sinRoll = sin( Roll );
+			cosPitch = cos( Pitch );
+			sinPitch = sin( Pitch );
+
+			// compute kinetic acceleration from accels, gravity from IMU and centrifugal forces from accels and baro inertial speeds
+			// gravity estimation using IMU quaternion
+			GravIMU.x = -GRAVITY * 2.0 * (q1 * q3 - q0 * q2);
+			GravIMU.y = -GRAVITY * 2.0 * (q2 * q3 + q0 * q1);
+			GravIMU.z = -GRAVITY * (q0 * q0 - q1 * q1 - q2 * q2 + q3 * q3);
+			// Kinetic accelerations using accelerations, corrected with gravity and centrifugal accels
+			UiPrim = accelISUNEDBODY.x - GravIMU.x - gyroCorr.y * Wbi + gyroCorr.z * Vbi;
+			ViPrim = accelISUNEDBODY.y - GravIMU.y - gyroCorr.z * Ubi + gyroCorr.x * Wbi;			
+			WiPrim = accelISUNEDBODY.z - GravIMU.z + gyroCorr.y * Ubi - gyroCorr.x * Vbi;
+			
+			// Compute baro interial speed in body frame
+			#define PeriodVelbi 2.0 // period in second for baro/inertial velocity. period long enough to reduce effect of baro wind gradients
+			#define fcVelbi1 ( PeriodVelbi / ( PeriodVelbi + PERIOD40HZ ))
+			#define fcVelbi2 ( 1.0 - fcVelbi1 )
+			Ubi = fcVelbi1 * ( Ubi + UiPrim * dtGyr ) + fcVelbi2 * Ub;
+			Vbi = fcVelbi1 * ( Vbi + ViPrim * dtGyr ) + fcVelbi2 * Vb;
+			Wbi = fcVelbi1 * ( Wbi + WiPrim * dtGyr ) + fcVelbi2 * Wb;
+		}
 
 		// When TAS < 15 m/s the vario is considered potentially stable on ground
 		if ( TAS < 15.0 ) {
@@ -1038,8 +1060,6 @@ static void processIMU(void *pvParameters)
 							Gravx = accelISUNEDBODY.x;
 							Gravy = accelISUNEDBODY.y;
 							Gravz = accelISUNEDBODY.z;
-							RollInit = atan(accelISUNEDBODY.y / accelISUNEDBODY.z);
-							PitchInit = asin(accelISUNEDBODY.x/GRAVITY);						
 							averagecount = 1;
 							
 						} else {
@@ -1052,8 +1072,6 @@ static void processIMU(void *pvParameters)
 								Gravx += accelISUNEDBODY.x;
 								Gravy += accelISUNEDBODY.y;
 								Gravz += accelISUNEDBODY.z;
-								RollInit += atan(accelISUNEDBODY.y / accelISUNEDBODY.z);
-								PitchInit += asin(accelISUNEDBODY.x/GRAVITY);
 							} else {
 								// If no bias yet, after 25 seconds calculate average bias, gravity and roll/pitch
 								// If already have bias, calulate after 2 minutes to avoid risk of perturbation before takeoff
@@ -1066,19 +1084,6 @@ static void processIMU(void *pvParameters)
 									Gravz /= averagecount;
 									GRAVITY = sqrt(Gravx*Gravx+Gravy*Gravy+Gravz*Gravz);
 									AccelGravModuleFilt = GRAVITY;
-									RollInit  /= averagecount;
-									PitchInit /= averagecount;
-									YawInit   = 0.0;
-									// Initialisation du quaternion
-									q0=((cos(RollInit/2.0)*cos(PitchInit/2.0)*cos(YawInit/2.0)+sin(RollInit/2.0)*sin(PitchInit/2.0)*sin(YawInit/2.0)));
-									q1=((sin(RollInit/2.0)*cos(PitchInit/2.0)*cos(YawInit/2.0)-cos(RollInit/2.0)*sin(PitchInit/2.0)*sin(YawInit/2.0)));
-									q2=((cos(RollInit/2.0)*sin(PitchInit/2.0)*cos(YawInit/2.0)+sin(RollInit/2.0)*cos(PitchInit/2.0)*sin(YawInit/2.0)));
-									q3=((cos(RollInit/2.0)*cos(PitchInit/2.0)*sin(YawInit/2.0)-sin(RollInit/2.0)*sin(PitchInit/2.0)*cos(YawInit/2.0)));
-									free_q0 = q0;
-									free_q1 = q1;
-									free_q2 = q2;
-									free_q3 = q3;
-									
 									BIAS_Init++;
 									if ( BIAS_Init == 1 ) {
 										gyro_bias.set(GroundGyroBias);
