@@ -209,9 +209,6 @@ static float delta_erry = 0.0;
 static float filt_erry = 0.0;
 static float erry_prim = 0.0;
 static float free_halfez = 0.0;
-static float delta_errz = 0.0;
-static float filt_errz = 0.0;
-static float errz_prim = 0.0;
 static float BiasQuatGx = 0.0;
 static float BiasQuatGy = 0.0;
 static float BiasQuatGz = 0.0;
@@ -318,9 +315,6 @@ static float Ubi = 0.0;
 static float Vbi = 0.0;
 static float Wbi = 0.0;
 static float Vzbi = 0.0;
-static float UiPrimF = 0.0;
-static float ViPrimF = 0.0;
-static float WiPrimF = 0.0;
 static float ALTbi = 0.0;
 
 static float TotalEnergy = 0.0;
@@ -628,6 +622,7 @@ void MahonyUpdateIMU(float dt, float gxraw, float gyraw, float gzraw,
 #define Ki 0.15 //0.15 // integral feedback to sync quaternion
 
 #define WingLevel 0.04 // max lateral gravity acceleration (normalized acceleration) to consider wings are ~ < 5° bank. Value is half sinus of angle
+#define GMaxBias 0.001 // 1 mrad/s
 
 float gx, gy, gz;
 float AccelGravModule, QuatModule, recipNorm;
@@ -644,10 +639,10 @@ float dynKi = Ki;
 float deltaGz;
 
 	// Kinetic acceleration module filtered with asymetrical low pass filter (fast rise and slower decay)
-	#define fcKinAcc 0.67 // 0.67 s ~ 1.5Hz low pass to filter kinetic accel decay
+	#define fcKinAcc 0.1 // 0.1s ~ 10Hz low pass to filter kinetic accel decay
 	#define fcKinAcc1 ( fcKinAcc /( fcKinAcc + PERIOD40HZ ))
 	#define fcKinAcc2 ( 1.0 - fcKinAcc1 )
-	#define fcKinAccMinMax 60 // 60s low pass to filter kinetic min and max estimation
+	#define fcKinAccMinMax 40 // very low pass to filter kinetic min and max estimation
 	#define fcKinAccMinMax1 ( fcKinAccMinMax /( fcKinAccMinMax + PERIOD40HZ ))
 	#define fcKinAccMinMax2 ( 1.0 - fcKinAccMinMax1 )	
 	ModuleKineticAccel = sqrt( UiPrim*UiPrim + ViPrim*ViPrim + WiPrim*WiPrim );
@@ -659,7 +654,13 @@ float deltaGz;
 	// Kinetic acceleration min and max
 	if ( ModuleKineticAccelF < ModuleKineticAccelMin  ) ModuleKineticAccelMin = fcKinAccMinMax1 * ModuleKineticAccelMin + fcKinAccMinMax2 * ModuleKineticAccelF;
 	if ( ModuleKineticAccelF > ModuleKineticAccelMax  ) ModuleKineticAccelMax = fcKinAccMinMax1 * ModuleKineticAccelMax + fcKinAccMinMax2 * ModuleKineticAccelF;
-	KineticThreshold = ModuleKineticAccelMin + 0.1; 
+	KineticThreshold = ModuleKineticAccelMin + 0.05; 
+
+	if (TSTstream) {
+		sprintf(str,"$KIN,%lld,%.6f,%.6f,%.6f,%.6f,%.6f\r\n",
+				gyroTime, ModuleKineticAccel, ModuleKineticAccelF, ModuleKineticAccelMin, ModuleKineticAccelMax, KineticThreshold );
+		Router::sendXCV(str);
+	}
 	
 	// To estimate gyro Bias:
 	// - compute error between vertical vector from IMU quaternion and free quaternion
@@ -688,7 +689,10 @@ float deltaGz;
 	// error from cross product is half total error, 2.0 factor is applied to obtain bias
 	Bias_Gx = 2.0 * errx_prim;
 	Bias_Gy = 2.0 * erry_prim;
-	//Bias_Gz = 2.0 * errz_prim;
+	if ( Bias_Gx > GMaxBias ) Bias_Gx = GMaxBias ;
+	if ( Bias_Gx < -GMaxBias ) Bias_Gx = -GMaxBias;	
+	if ( Bias_Gy > GMaxBias ) Bias_Gy = GMaxBias ;
+	if ( Bias_Gy < -GMaxBias ) Bias_Gy = -GMaxBias;
 
 	// When wing are ~ leveled , Gz bias should be the long term variation of ( Gz - d(GNSS route)/dt * ) *: GNSS route is optional
 	// test for wing leveled is using asymetrical filter with fast rise and slower decay
@@ -705,15 +709,13 @@ float deltaGz;
 		#define NGzBias 10000
 		#define alphaBiasGz (2.0 * (2.0 * NGzBias - 1.0) / NGzBias / (NGzBias + 1.0))
 		#define betaBiasGz (6.0 / NGzBias / (NGzBias + 1.0) / PERIOD40HZ)
-		#define GzMaxBias 0.001 // 1 mrad/s
-		#define GzMaxInputDev (5.0 * GzMaxBias * PERIOD40HZ)
 		deltaGz = (gzraw - GNSSRoutePrim) - GzF;
 		GzPrim = GzPrim + betaBiasGz * deltaGz ;
 		GzF = GzF + alphaBiasGz  * deltaGz + GzPrim * dt;
 		BiasGz = BiasGz +  alphaBiasGz  * deltaGz + GzPrim * dt;
 		Bias_Gz = -BiasGz ;
-		if ( Bias_Gz > GzMaxBias ) Bias_Gz = GzMaxBias ;
-		if ( Bias_Gz < -GzMaxBias ) Bias_Gz = -GzMaxBias ;
+		if ( Bias_Gz > GMaxBias ) Bias_Gz = GMaxBias ;
+		if ( Bias_Gz < -GMaxBias ) Bias_Gz = -GMaxBias;
 	} else {
 		GzF = gzraw - GNSSRoutePrim;
 	}
@@ -820,11 +822,6 @@ float deltaGz;
 		q1 *= recipNorm;
 		q2 *= recipNorm;
 		q3 *= recipNorm;
-	}
-	if (TSTstream) {
-		sprintf(str,"$IMU,%lld,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f\r\n",
-				gyroTime, (Nlimit - ModuleKineticAccelF), GravityModuleErr, dynKp, dynKi, Pitch*100, free_Pitch*100, UiPrim, Ubi );
-		Router::sendXCV(str);
 	}
 
 }
@@ -1406,7 +1403,7 @@ void readSensors(void *pvParameters){
 		if ( TAS > 15.0 ) {
 			deltaGNSSRoute = GNSSRouteraw - GNSSRoute;
 			if ( deltaGNSSRoute > 180.0 ) deltaGNSSRoute = deltaGNSSRoute - 360.0;
-			if ( deltaGNSSRoute < 180.0 ) deltaGNSSRoute = deltaGNSSRoute + 360.0;			
+			if ( deltaGNSSRoute < -180.0 ) deltaGNSSRoute = deltaGNSSRoute + 360.0;			
 			GNSSRoutePrim = GNSSRoutePrim + betaGNSSRoute * deltaGNSSRoute;
 			GNSSRoute = GNSSRoute + alphaGNSSRoute * deltaGNSSRoute + GNSSRoutePrim * PERIOD10HZ;	//TODO consider changing 0.1 with actual GNSS time difference
 		} else {
