@@ -227,6 +227,15 @@ static float Wb = 0.0;
 static float UiPrim = 0.0;
 static float ViPrim = 0.0;
 static float WiPrim = 0.0;
+static float deltaUiPrim = 0.0;
+static float UiPrimPrim = 0.0;
+static float UiPrimF = 0.0;
+static float deltaViPrim = 0.0;
+static float ViPrimPrim = 0.0;
+static float ViPrimF = 0.0;
+static float deltaWiPrim = 0.0;
+static float WiPrimPrim = 0.0;
+static float WiPrimF = 0.0;
 // variables for gravity estimation
 mpud::float_axes_t GravIMU;
 mpud::float_axes_t gravISUNEDBODY;
@@ -271,6 +280,18 @@ static float MPUtempcel; // MPU chip temperature
 static float GNSSRouteraw;
 static float GNSSRoutePrim = 0.0;
 static float GNSSRoute = 0.0;
+static float deltaUb = 0.0;
+static float UbPrim = 0.0;
+static float UbF = 0.0;
+static float deltaVb = 0.0;
+static float VbPrim = 0.0;
+static float VbF = 0.0;
+static float deltaWb = 0.0;
+static float WbPrim = 0.0;
+static float WbF = 0.0;
+static float UbiPrim = 0.0;
+static float VbiPrim = 0.0;
+static float WbiPrim = 0.0;
 
 static int32_t cur_gyro_bias[3];
 
@@ -1027,6 +1048,22 @@ static void processIMU(void *pvParameters)
 			UiPrim = accelISUNEDBODY.x - GravIMU.x - gyroCorr.y * Wbi + gyroCorr.z * Vbi;
 			ViPrim = accelISUNEDBODY.y - GravIMU.y - gyroCorr.z * Ubi + gyroCorr.x * Wbi;			
 			WiPrim = accelISUNEDBODY.z - GravIMU.z + gyroCorr.y * Ubi - gyroCorr.x * Vbi;
+			// KInectic accels alpha/beta filter
+			#define NKinAcc 160.0 // accel kinetic alpha/beta filter coeff
+			#define alphaKinAcc (2.0 * (2.0 * NKinAcc - 1.0) / NKinAcc / (NKinAcc + 1.0))
+			#define betaKinAcc (6.0 / NKinAcc / (NKinAcc + 1.0) / PERIOD40HZ)			
+			deltaUiPrim = UiPrim - UiPrimF;
+			UiPrimPrim = UiPrimPrim + betaKinAcc * deltaUiPrim;
+			UiPrimF = UiPrimF + alphaKinAcc * deltaUiPrim + UiPrimPrim * dtGyr;
+			deltaViPrim = ViPrim - ViPrimF;
+			ViPrimPrim = ViPrimPrim + betaKinAcc * deltaViPrim;
+			ViPrimF = ViPrimF + alphaKinAcc * deltaViPrim + ViPrimPrim * dtGyr;
+			deltaWiPrim = WiPrim - WiPrimF;
+			WiPrimPrim = WiPrimPrim + betaKinAcc * deltaWiPrim;
+			WiPrimF = WiPrimF + alphaKinAcc * deltaWiPrim + WiPrimPrim * dtGyr;	
+
+
+			
 			
 			// Compute baro interial speed in body frame
 			#define PeriodVelbi 2.0 // period in second for baro/inertial velocity. period long enough to reduce effect of baro wind gradients
@@ -1035,6 +1072,17 @@ static void processIMU(void *pvParameters)
 			Ubi = fcVelbi1 * ( Ubi + UiPrim * dtGyr ) + fcVelbi2 * Ub;
 			Vbi = fcVelbi1 * ( Vbi + ViPrim * dtGyr ) + fcVelbi2 * Vb;
 			Wbi = fcVelbi1 * ( Wbi + WiPrim * dtGyr ) + fcVelbi2 * Wb;
+
+			UbiPrim = fcVelbi1 * ( UbiPrim + UiPrimPrim * dtGyr ) + fcVelbi2 * UbPrim;
+			VbiPrim = fcVelbi1 * ( VbiPrim + ViPrimPrim * dtGyr ) + fcVelbi2 * VbPrim;			
+			WbiPrim = fcVelbi1 * ( WbiPrim + WiPrimPrim * dtGyr ) + fcVelbi2 * WbPrim;
+			
+			if (TSTstream) {
+				sprintf(str,"$UVW,%lld,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f\r\n",
+					gyroTime, UiPrim, UiPrim-(UiPrimF-UbPrim), UbiPrim,  ViPrim, ViPrim-(ViPrimF-VbPrim), VbiPrim, WiPrim, WiPrim-(WiPrimF-WbPrim), WbiPrim );
+				Router::sendXCV(str);
+			}		
+			
 		}
 
 		// When TAS < 15 m/s the vario is considered potentially stable on ground
@@ -1465,6 +1513,20 @@ void readSensors(void *pvParameters){
 		Vb = ( sinRoll * sinPitch * cosDHeading - cosRoll * sinDHeading ) * Vh + sinRoll * cosPitch * Vzbaro;
 		Wb = ( cosRoll * sinPitch * cosDHeading + sinRoll * sinDHeading ) * Vh + cosRoll * cosPitch * Vzbaro;
 		
+		// Baro acceleration derivative alpha/beta filter
+		#define NBaroAcc 40.0 // accel kinetic alpha/beta filter coeff
+		#define alphaBaroAcc (2.0 * (2.0 * NBaroAcc - 1.0) / NBaroAcc / (NBaroAcc + 1.0))
+		#define betaBaroAcc (6.0 / NBaroAcc / (NBaroAcc + 1.0) / PERIOD40HZ)			
+		deltaUb = Ub - UbF;
+		UbPrim = UbPrim + betaBaroAcc * deltaUb;
+		UbF = UbF + alphaBaroAcc * deltaUb + UbPrim * dtstat;
+		deltaVb = Vb - VbF;
+		VbPrim = VbPrim + betaBaroAcc * deltaVb;
+		VbF = VbF + alphaBaroAcc * deltaVb + VbPrim * dtstat;			
+		deltaWb = Wb - WbF;
+		WbPrim = WbPrim + betaBaroAcc * deltaWb;
+		WbF = WbF + alphaBaroAcc * deltaWb + WbPrim * dtstat;
+			
 		// baro interial vertical speed in earth frame
 		Vzbi = sinPitch * Ubi + sinRoll * cosPitch * Vbi + cosRoll * cosPitch * Wbi;		
 		
