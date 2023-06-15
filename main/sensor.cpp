@@ -774,7 +774,7 @@ float deltaGz;
 	// Compute feedback error only if accelerometer measurement is valid (avoids NaN in accelerometer normalisation)
 	AccelGravModule = sqrt( ax * ax + ay * ay + az * az );
 	if ( AccelGravModule != 0.0) {
-		// gyro should be corrected using error between vertical from IMU quaternion and observered vertical from accels.
+		/* // gyro should be corrected using error between vertical from IMU quaternion and observered vertical from accels.
 		// Accels are good proxy for vertical :
 		// when the flight mechanic forces apply, this is true when the module of acceleration is close to local gravity (GRAVITY)
 		// when on the ground, additional condition on gyro stability is required to insure accels can be used to observe vertical. 
@@ -797,6 +797,46 @@ float deltaGz;
 			if ( GravityModuleErr < -1.0 ) GravityModuleErr = -1.0;
 			// compute dynamic gain function of error magnitude
 			Kgain = pow( 10.0, GravityModuleErr * 8 );
+			dynKp = Kgain * Kp;
+			dynKi = Kgain * Ki;
+		} */
+
+		// gyro should be corrected using error between vertical from IMU quaternion and observered vertical from accels.
+		// Accels are good proxy for vertical :
+		// when the flight mechanic forces apply, this is true when the module of acceleration is close to local gravity (GRAVITY)
+		// when on the ground, additional condition on gyro stability is required to insure accels can be used to observe vertical. 
+		// gyro correction is performed with PI feedback using Kp and Ki (proportional & integral) coefficients.
+		// these coefficients are adjusted dynamicaly (dynKp and dynKi) in function acceleration module proximity to GRAVITY
+		// when error is lower than a threshold, maximum Kp and Ki coefficients are used
+		// when error is higher than threshold, reduced coefficients are used.
+		//
+		// acceleration module filtered with asymetrical low pass filter (fast rise and slower decay) 
+		if ( AccelGravModuleFilt < abs(AccelGravModule - GRAVITY) ) {
+			AccelGravModuleFilt = abs(AccelGravModule - GRAVITY); // immediate rise
+		} else {
+			#define fcGrav 0.33 // 3Hz low pass to filter for testing stability criteria during decays
+			#define fcGrav1 ( fcGrav /( fcGrav + PERIOD40HZ ))
+			#define fcGrav2 ( 1.0 - fcGrav1 )
+			AccelGravModuleFilt = fcGrav1 * AccelGravModuleFilt + fcGrav2 * abs(AccelGravModule - GRAVITY);
+		}
+		if ( TAS > 15 ) {
+			// when moving compute error between acceleration module and local gravity (GRAVITY) in relation to Nlimit
+			GravityModuleErr = Nlimit - AccelGravModuleFilt;
+		} else
+		{
+			// when on ground compute error using both accel and gyro module variation
+			GravityModuleErr =  (Nlimit - AccelGravModuleFilt) + (GyroModulePrimLevel - Gyroprimlimit);
+		}
+		// if GravityModuleErr positive, high confidence in accels
+		if  ( GravityModuleErr > 0.0 ) {
+			dynKp = Kp;
+			dynKi = Ki;
+		} else {
+			// if GravityModuleErr negative, low confidence in accels
+			// limit error magnitude
+			if ( GravityModuleErr < -4.0 ) GravityModuleErr = -4.0;
+			// compute dynamic gain function of error magnitude
+			Kgain = pow( 10.0, GravityModuleErr * 1.5 );
 			dynKp = Kgain * Kp;
 			dynKi = Kgain * Ki;
 		}		
