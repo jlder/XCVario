@@ -280,15 +280,24 @@ static float MPUtempcel; // MPU chip temperature
 static float GNSSRouteraw;
 static float GNSSRoutePrim = 0.0;
 static float GNSSRoute = 0.0;
-static float deltaUb = 0.0;
-static float UbPrim = 0.0;
-static float UbF = 0.0;
-static float deltaVb = 0.0;
-static float VbPrim = 0.0;
-static float VbF = 0.0;
-static float deltaWb = 0.0;
-static float WbPrim = 0.0;
-static float WbF = 0.0;
+static float deltaUbS = 0.0;
+static float UbPrimS = 0.0;
+static float UbFS = 0.0;
+static float deltaVbS = 0.0;
+static float VbPrimS = 0.0;
+static float VbFS = 0.0;
+static float deltaWbS = 0.0;
+static float WbPrimS = 0.0;
+static float WbFS = 0.0;
+static float deltaUbL = 0.0;
+static float UbPrimL = 0.0;
+static float UbFL = 0.0;
+static float deltaVbL = 0.0;
+static float VbPrimL = 0.0;
+static float VbFL = 0.0;
+static float deltaWbL = 0.0;
+static float WbPrimL = 0.0;
+static float WbFL = 0.0;
 static float UbiPrim = 0.0;
 static float VbiPrim = 0.0;
 static float WbiPrim = 0.0;
@@ -1113,13 +1122,13 @@ static void processIMU(void *pvParameters)
 			Vbi = fcVelbi1 * ( Vbi + ViPrim * dtGyr ) + fcVelbi2 * Vb;
 			Wbi = fcVelbi1 * ( Wbi + WiPrim * dtGyr ) + fcVelbi2 * Wb;
 
-			UbiPrim = fcVelbi1 * ( UbiPrim + UiPrimPrim * dtGyr ) + fcVelbi2 * UbPrim;
-			VbiPrim = fcVelbi1 * ( VbiPrim + ViPrimPrim * dtGyr ) + fcVelbi2 * VbPrim;			
-			WbiPrim = fcVelbi1 * ( WbiPrim + WiPrimPrim * dtGyr ) + fcVelbi2 * WbPrim;
+			UbiPrim = fcVelbi1 * ( UbiPrim + UiPrimPrim * dtGyr ) + fcVelbi2 * UbPrimS;
+			VbiPrim = fcVelbi1 * ( VbiPrim + ViPrimPrim * dtGyr ) + fcVelbi2 * VbPrimS;			
+			WbiPrim = fcVelbi1 * ( WbiPrim + WiPrimPrim * dtGyr ) + fcVelbi2 * WbPrimS;
 			
 			if (TSTstream) {
 				sprintf(str,"$UVW,%lld,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f\r\n",
-					gyroTime, UiPrim, UiPrim-(UiPrimF-UbPrim), UbiPrim,  ViPrim, ViPrim-(ViPrimF-VbPrim), VbiPrim, WiPrim, WiPrim-(WiPrimF-WbPrim), WbiPrim );
+					gyroTime, UiPrim, UiPrim-(UiPrimF-UbPrimL), UbiPrim,  ViPrim, ViPrim-(ViPrimF-VbPrimL), VbiPrim, WiPrim, WiPrim-(WiPrimF-WbPrimL), WbiPrim );
 				Router::sendXCV(str);
 			}		
 			
@@ -1552,20 +1561,34 @@ void readSensors(void *pvParameters){
 		Ub = cosPitch * cosDHeading * Vh - sinPitch * Vzbaro;
 		Vb = ( sinRoll * sinPitch * cosDHeading - cosRoll * sinDHeading ) * Vh + sinRoll * cosPitch * Vzbaro;
 		Wb = ( cosRoll * sinPitch * cosDHeading + sinRoll * sinDHeading ) * Vh + cosRoll * cosPitch * Vzbaro;
+
+		// Baro acceleration derivative Short period alpha/beta filter
+		#define NBaroAccS 6.0 // accel kinetic alpha/beta filter coeff
+		#define alphaBaroAccS (2.0 * (2.0 * NBaroAccS - 1.0) / NBaroAccS / (NBaroAccS + 1.0))
+		#define betaBaroAccS (6.0 / NBaroAccS / (NBaroAccS + 1.0) / PERIOD40HZ)			
+		deltaUbS = Ub - UbFS;
+		UbPrimS = UbPrimS + betaBaroAccS * deltaUbS;
+		UbFS = UbFS + alphaBaroAccS * deltaUbS + UbPrimS * dtstat;
+		deltaVbS = Vb - VbFS;
+		VbPrimS = VbPrimS + betaBaroAccS * deltaVbS;
+		VbFS = VbFS + alphaBaroAccS * deltaVbS + VbPrimS * dtstat;			
+		deltaWbS = Wb - WbFS;
+		WbPrimS = WbPrimS + betaBaroAccS * deltaWbS;
+		WbFS = WbFS + alphaBaroAccS * deltaWbS + WbPrimS * dtstat;
 		
-		// Baro acceleration derivative alpha/beta filter
-		#define NBaroAcc 40.0 // accel kinetic alpha/beta filter coeff
-		#define alphaBaroAcc (2.0 * (2.0 * NBaroAcc - 1.0) / NBaroAcc / (NBaroAcc + 1.0))
-		#define betaBaroAcc (6.0 / NBaroAcc / (NBaroAcc + 1.0) / PERIOD40HZ)			
-		deltaUb = Ub - UbF;
-		UbPrim = UbPrim + betaBaroAcc * deltaUb;
-		UbF = UbF + alphaBaroAcc * deltaUb + UbPrim * dtstat;
-		deltaVb = Vb - VbF;
-		VbPrim = VbPrim + betaBaroAcc * deltaVb;
-		VbF = VbF + alphaBaroAcc * deltaVb + VbPrim * dtstat;			
-		deltaWb = Wb - WbF;
-		WbPrim = WbPrim + betaBaroAcc * deltaWb;
-		WbF = WbF + alphaBaroAcc * deltaWb + WbPrim * dtstat;
+		// Baro acceleration derivative Long period alpha/beta filter
+		#define NBaroAccL 40.0 // accel kinetic alpha/beta filter coeff
+		#define alphaBaroAccL (2.0 * (2.0 * NBaroAccL - 1.0) / NBaroAccL / (NBaroAccL + 1.0))
+		#define betaBaroAccL (6.0 / NBaroAccL / (NBaroAccL + 1.0) / PERIOD40HZ)			
+		deltaUbL = Ub - UbFL;
+		UbPrimL = UbPrimL + betaBaroAccL * deltaUbL;
+		UbFL = UbFL + alphaBaroAccL * deltaUbL + UbPrimL * dtstat;
+		deltaVbL = Vb - VbFL;
+		VbPrimL = VbPrimL + betaBaroAccL * deltaVbL;
+		VbFL = VbFL + alphaBaroAccL * deltaVbL + VbPrimL * dtstat;			
+		deltaWbL = Wb - WbFL;
+		WbPrimL = WbPrimL + betaBaroAccL * deltaWbL;
+		WbFL = WbFL + alphaBaroAccL * deltaWbL + WbPrimL * dtstat;
 			
 		// baro interial vertical speed in earth frame
 		Vzbi = sinPitch * Ubi + sinRoll * cosPitch * Vbi + cosRoll * cosPitch * Wbi;		
