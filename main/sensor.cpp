@@ -227,15 +227,24 @@ static float Wb = 0.0;
 static float UiPrim = 0.0;
 static float ViPrim = 0.0;
 static float WiPrim = 0.0;
-static float deltaUiPrim = 0.0;
-static float UiPrimPrim = 0.0;
-static float UiPrimF = 0.0;
-static float deltaViPrim = 0.0;
-static float ViPrimPrim = 0.0;
-static float ViPrimF = 0.0;
-static float deltaWiPrim = 0.0;
-static float WiPrimPrim = 0.0;
-static float WiPrimF = 0.0;
+static float deltaUiPrimS = 0.0;
+static float UiPrimPrimS = 0.0;
+static float UiPrimSF = 0.0;
+static float deltaViPrimS = 0.0;
+static float ViPrimPrimS = 0.0;
+static float ViPrimSF = 0.0;
+static float deltaWiPrimS = 0.0;
+static float WiPrimPrimS = 0.0;
+static float WiPrimSF = 0.0;
+static float deltaUiPrimL = 0.0;
+static float UiPrimPrimL = 0.0;
+static float UiPrimLF = 0.0;
+static float deltaViPrimL = 0.0;
+static float ViPrimPrimL = 0.0;
+static float ViPrimLF = 0.0;
+static float deltaWiPrimL = 0.0;
+static float WiPrimPrimL = 0.0;
+static float WiPrimLF = 0.0;
 // variables for gravity estimation
 mpud::float_axes_t GravIMU;
 mpud::float_axes_t gravISUNEDBODY;
@@ -290,13 +299,13 @@ static float deltaWbS = 0.0;
 static float WbPrimS = 0.0;
 static float WbFS = 0.0;
 static float deltaUbL = 0.0;
-static float UbPrimL = 0.0;
+static float UbPrimFL = 0.0;
 static float UbFL = 0.0;
 static float deltaVbL = 0.0;
-static float VbPrimL = 0.0;
+static float VbPrimFL = 0.0;
 static float VbFL = 0.0;
 static float deltaWbL = 0.0;
-static float WbPrimL = 0.0;
+static float WbPrimFL = 0.0;
 static float WbFL = 0.0;
 static float UbiPrim = 0.0;
 static float VbiPrim = 0.0;
@@ -686,11 +695,11 @@ float deltaGz;
 	if ( ModuleKineticAccelF > ModuleKineticAccelMax  ) ModuleKineticAccelMax = fcKinAccMinMax1 * ModuleKineticAccelMax + fcKinAccMinMax2 * ModuleKineticAccelF;
 	KineticThreshold = ModuleKineticAccelMin + 0.05; 
 
-	if (TSTstream) {
+	/*if (TSTstream) {
 		sprintf(str,"$KIN,%lld,%.6f,%.6f,%.6f,%.6f,%.6f\r\n",
 				gyroTime, ModuleKineticAccel, ModuleKineticAccelF, ModuleKineticAccelMin, ModuleKineticAccelMax, KineticThreshold );
 		Router::sendXCV(str);
-	}
+	}*/
 	
 	// To estimate gyro Bias:
 	// - compute error between vertical vector from IMU quaternion and free quaternion
@@ -823,7 +832,7 @@ float deltaGz;
 		if ( AccelGravModuleFilt < abs(AccelGravModule - GRAVITY) ) {
 			AccelGravModuleFilt = abs(AccelGravModule - GRAVITY); // immediate rise
 		} else {
-			#define fcGrav 0.33 // 3Hz low pass to filter for testing stability criteria during decays
+			#define fcGrav 0.2 // 5Hz low pass to filter for testing stability criteria during decays
 			#define fcGrav1 ( fcGrav /( fcGrav + PERIOD40HZ ))
 			#define fcGrav2 ( 1.0 - fcGrav1 )
 			AccelGravModuleFilt = fcGrav1 * AccelGravModuleFilt + fcGrav2 * abs(AccelGravModule - GRAVITY);
@@ -1097,19 +1106,34 @@ static void processIMU(void *pvParameters)
 			UiPrim = accelISUNEDBODY.x - GravIMU.x - gyroCorr.y * Wbi + gyroCorr.z * Vbi;
 			ViPrim = accelISUNEDBODY.y - GravIMU.y - gyroCorr.z * Ubi + gyroCorr.x * Wbi;			
 			WiPrim = accelISUNEDBODY.z - GravIMU.z + gyroCorr.y * Ubi - gyroCorr.x * Vbi;
+
+			// KInectic accels alpha/beta short filter
+			#define NKinAccS 24.0 // accel kinetic alpha/beta filter coeff
+			#define alphaKinAccS (2.0 * (2.0 * NKinAccS - 1.0) / NKinAccS / (NKinAccS + 1.0))
+			#define betaKinAccS (6.0 / NKinAccS / (NKinAccS + 1.0) / PERIOD40HZ)			
+			deltaUiPrimS = UiPrim - UiPrimSF;
+			UiPrimPrimS = UiPrimPrimS + betaKinAccS * deltaUiPrimS;
+			UiPrimSF = UiPrimSF + alphaKinAccS * deltaUiPrimS + UiPrimPrimS * dtGyr;
+			deltaViPrimS = ViPrim - ViPrimSF;
+			ViPrimPrimS = ViPrimPrimS + betaKinAccS * deltaViPrimS;
+			ViPrimSF = ViPrimSF + alphaKinAccS * deltaViPrimS + ViPrimPrimS * dtGyr;
+			deltaWiPrimS = WiPrim - WiPrimSF;
+			WiPrimPrimS = WiPrimPrimS + betaKinAccS * deltaWiPrimS;
+			WiPrimSF = WiPrimSF + alphaKinAccS * deltaWiPrimS + WiPrimPrimS * dtGyr;	
+
 			// KInectic accels alpha/beta filter
-			#define NKinAcc 160.0 // accel kinetic alpha/beta filter coeff
-			#define alphaKinAcc (2.0 * (2.0 * NKinAcc - 1.0) / NKinAcc / (NKinAcc + 1.0))
-			#define betaKinAcc (6.0 / NKinAcc / (NKinAcc + 1.0) / PERIOD40HZ)			
-			deltaUiPrim = UiPrim - UiPrimF;
-			UiPrimPrim = UiPrimPrim + betaKinAcc * deltaUiPrim;
-			UiPrimF = UiPrimF + alphaKinAcc * deltaUiPrim + UiPrimPrim * dtGyr;
-			deltaViPrim = ViPrim - ViPrimF;
-			ViPrimPrim = ViPrimPrim + betaKinAcc * deltaViPrim;
-			ViPrimF = ViPrimF + alphaKinAcc * deltaViPrim + ViPrimPrim * dtGyr;
-			deltaWiPrim = WiPrim - WiPrimF;
-			WiPrimPrim = WiPrimPrim + betaKinAcc * deltaWiPrim;
-			WiPrimF = WiPrimF + alphaKinAcc * deltaWiPrim + WiPrimPrim * dtGyr;	
+			#define NKinAccL 160.0 // accel kinetic alpha/beta filter coeff
+			#define alphaKinAccL (2.0 * (2.0 * NKinAccL - 1.0) / NKinAccL / (NKinAccL + 1.0))
+			#define betaKinAccL (6.0 / NKinAccL / (NKinAccL + 1.0) / PERIOD40HZ)			
+			deltaUiPrimL = UiPrim - UiPrimLF;
+			UiPrimPrimL = UiPrimPrimL + betaKinAccL * deltaUiPrimL;
+			UiPrimLF = UiPrimLF + alphaKinAccL * deltaUiPrimL + UiPrimPrimL * dtGyr;
+			deltaViPrimL = ViPrim - ViPrimLF;
+			ViPrimPrimL = ViPrimPrimL + betaKinAccL * deltaViPrimL;
+			ViPrimLF = ViPrimLF + alphaKinAccL * deltaViPrimL + ViPrimPrimL * dtGyr;
+			deltaWiPrimL = WiPrim - WiPrimLF;
+			WiPrimPrimL = WiPrimPrimL + betaKinAccL * deltaWiPrimL;
+			WiPrimLF = WiPrimLF + alphaKinAccL * deltaWiPrimL + WiPrimPrimL * dtGyr;	
 
 
 			
@@ -1122,13 +1146,13 @@ static void processIMU(void *pvParameters)
 			Vbi = fcVelbi1 * ( Vbi + ViPrim * dtGyr ) + fcVelbi2 * Vb;
 			Wbi = fcVelbi1 * ( Wbi + WiPrim * dtGyr ) + fcVelbi2 * Wb;
 
-			UbiPrim = fcVelbi1 * ( UbiPrim + UiPrimPrim * dtGyr ) + fcVelbi2 * UbPrimS;
-			VbiPrim = fcVelbi1 * ( VbiPrim + ViPrimPrim * dtGyr ) + fcVelbi2 * VbPrimS;			
-			WbiPrim = fcVelbi1 * ( WbiPrim + WiPrimPrim * dtGyr ) + fcVelbi2 * WbPrimS;
+			UbiPrim = fcVelbi1 * ( UbiPrim + UiPrimPrimS * dtGyr ) + fcVelbi2 * UbPrimS;
+			VbiPrim = fcVelbi1 * ( VbiPrim + ViPrimPrimS * dtGyr ) + fcVelbi2 * VbPrimS;			
+			WbiPrim = fcVelbi1 * ( WbiPrim + WiPrimPrimS * dtGyr ) + fcVelbi2 * WbPrimS;
 			
 			if (TSTstream) {
-				sprintf(str,"$UVW,%lld,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f\r\n",
-					gyroTime, UiPrim, UiPrim-(UiPrimF-UbPrimL), UbiPrim,  ViPrim, ViPrim-(ViPrimF-VbPrimL), VbiPrim, WiPrim, WiPrim-(WiPrimF-WbPrimL), WbiPrim );
+				sprintf(str,"$UVW,%lld,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f\r\n",
+					gyroTime, UiPrim, UiPrimLF, UbPrimFL, UiPrimLF-UbPrimFL, UiPrim-(UiPrimLF-UbPrimFL), UbiPrim,  ViPrim, ViPrim-(ViPrimLF-VbPrimFL), VbiPrim, WiPrim, WiPrim-(WiPrimLF-WbPrimFL), WbiPrim );
 				Router::sendXCV(str);
 			}		
 			
@@ -1563,6 +1587,7 @@ void readSensors(void *pvParameters){
 		Wb = ( cosRoll * sinPitch * cosDHeading + sinRoll * sinDHeading ) * Vh + cosRoll * cosPitch * Vzbaro;
 
 		// Baro acceleration derivative Short period alpha/beta filter
+		// U/V/WbPrimS are used to compute U/V/WbiPrim, baro inertial accelerations
 		#define NBaroAccS 6.0 // accel kinetic alpha/beta filter coeff
 		#define alphaBaroAccS (2.0 * (2.0 * NBaroAccS - 1.0) / NBaroAccS / (NBaroAccS + 1.0))
 		#define betaBaroAccS (6.0 / NBaroAccS / (NBaroAccS + 1.0) / PERIOD40HZ)			
@@ -1581,14 +1606,14 @@ void readSensors(void *pvParameters){
 		#define alphaBaroAccL (2.0 * (2.0 * NBaroAccL - 1.0) / NBaroAccL / (NBaroAccL + 1.0))
 		#define betaBaroAccL (6.0 / NBaroAccL / (NBaroAccL + 1.0) / PERIOD40HZ)			
 		deltaUbL = Ub - UbFL;
-		UbPrimL = UbPrimL + betaBaroAccL * deltaUbL;
-		UbFL = UbFL + alphaBaroAccL * deltaUbL + UbPrimL * dtstat;
+		UbPrimFL = UbPrimFL + betaBaroAccL * deltaUbL;
+		UbFL = UbFL + alphaBaroAccL * deltaUbL + UbPrimFL * dtstat;
 		deltaVbL = Vb - VbFL;
-		VbPrimL = VbPrimL + betaBaroAccL * deltaVbL;
-		VbFL = VbFL + alphaBaroAccL * deltaVbL + VbPrimL * dtstat;			
+		VbPrimFL = VbPrimFL + betaBaroAccL * deltaVbL;
+		VbFL = VbFL + alphaBaroAccL * deltaVbL + VbPrimFL * dtstat;			
 		deltaWbL = Wb - WbFL;
-		WbPrimL = WbPrimL + betaBaroAccL * deltaWbL;
-		WbFL = WbFL + alphaBaroAccL * deltaWbL + WbPrimL * dtstat;
+		WbPrimFL = WbPrimFL + betaBaroAccL * deltaWbL;
+		WbFL = WbFL + alphaBaroAccL * deltaWbL + WbPrimFL * dtstat;
 			
 		// baro interial vertical speed in earth frame
 		Vzbi = sinPitch * Ubi + sinRoll * cosPitch * Vbi + cosRoll * cosPitch * Wbi;		
