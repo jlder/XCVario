@@ -299,13 +299,13 @@ static float deltaWbS = 0.0;
 static float WbPrimS = 0.0;
 static float WbFS = 0.0;
 static float deltaUbL = 0.0;
-static float UbPrimFL = 0.0;
+static float UbPrimLF = 0.0;
 static float UbFL = 0.0;
 static float deltaVbL = 0.0;
-static float VbPrimFL = 0.0;
+static float VbPrimLF = 0.0;
 static float VbFL = 0.0;
 static float deltaWbL = 0.0;
-static float WbPrimFL = 0.0;
+static float WbPrimLF = 0.0;
 static float WbFL = 0.0;
 static float UbiPrim = 0.0;
 static float VbiPrim = 0.0;
@@ -1035,8 +1035,8 @@ static void processIMU(void *pvParameters)
 				PitchInit = asin(accelISUNEDBODY.x/GRAVITY);
 				YawInit   = 0.0;
 			} else {
-				RollInit = 0.8 * RollInit + 0.2 * atan(accelISUNEDBODY.y / accelISUNEDBODY.z);
-				PitchInit = 0.8 * PitchInit + 0.2 * asin(accelISUNEDBODY.x/GRAVITY);
+				RollInit = 0.75 * RollInit + 0.25 * atan(accelISUNEDBODY.y / accelISUNEDBODY.z);
+				PitchInit = 0.75 * PitchInit + 0.25 * asin(accelISUNEDBODY.x/GRAVITY);
 			}
 
 			q0=((cos(RollInit/2.0)*cos(PitchInit/2.0)*cos(YawInit/2.0)+sin(RollInit/2.0)*sin(PitchInit/2.0)*sin(YawInit/2.0)));
@@ -1108,7 +1108,7 @@ static void processIMU(void *pvParameters)
 			WiPrim = accelISUNEDBODY.z - GravIMU.z + gyroCorr.y * Ubi - gyroCorr.x * Vbi;
 
 			// KInectic accels alpha/beta short filter
-			#define NKinAccS 24.0 // accel kinetic alpha/beta filter coeff
+			#define NKinAccS 7.0 // accel kinetic alpha/beta filter coeff
 			#define alphaKinAccS (2.0 * (2.0 * NKinAccS - 1.0) / NKinAccS / (NKinAccS + 1.0))
 			#define betaKinAccS (6.0 / NKinAccS / (NKinAccS + 1.0) / PERIOD40HZ)			
 			deltaUiPrimS = UiPrim - UiPrimSF;
@@ -1121,8 +1121,8 @@ static void processIMU(void *pvParameters)
 			WiPrimPrimS = WiPrimPrimS + betaKinAccS * deltaWiPrimS;
 			WiPrimSF = WiPrimSF + alphaKinAccS * deltaWiPrimS + WiPrimPrimS * dtGyr;	
 
-			// KInectic accels alpha/beta filter
-			#define NKinAccL 160.0 // accel kinetic alpha/beta filter coeff
+			// KInectic accels alpha/beta long filter
+			#define NKinAccL 80.0 // accel kinetic alpha/beta filter coeff
 			#define alphaKinAccL (2.0 * (2.0 * NKinAccL - 1.0) / NKinAccL / (NKinAccL + 1.0))
 			#define betaKinAccL (6.0 / NKinAccL / (NKinAccL + 1.0) / PERIOD40HZ)			
 			deltaUiPrimL = UiPrim - UiPrimLF;
@@ -1134,12 +1134,9 @@ static void processIMU(void *pvParameters)
 			deltaWiPrimL = WiPrim - WiPrimLF;
 			WiPrimPrimL = WiPrimPrimL + betaKinAccL * deltaWiPrimL;
 			WiPrimLF = WiPrimLF + alphaKinAccL * deltaWiPrimL + WiPrimPrimL * dtGyr;	
-
-
 			
-			
-			// Compute baro interial speed in body frame
-			#define PeriodVelbi 2.0 // period in second for baro/inertial velocity. period long enough to reduce effect of baro wind gradients
+			// Compute baro interial speed and acceleration in body frame
+			#define PeriodVelbi 2.5 // period in second for baro/inertial velocity. period long enough to reduce effect of baro wind gradients
 			#define fcVelbi1 ( PeriodVelbi / ( PeriodVelbi + PERIOD40HZ ))
 			#define fcVelbi2 ( 1.0 - fcVelbi1 )
 			Ubi = fcVelbi1 * ( Ubi + UiPrim * dtGyr ) + fcVelbi2 * Ub;
@@ -1149,10 +1146,15 @@ static void processIMU(void *pvParameters)
 			UbiPrim = fcVelbi1 * ( UbiPrim + UiPrimPrimS * dtGyr ) + fcVelbi2 * UbPrimS;
 			VbiPrim = fcVelbi1 * ( VbiPrim + ViPrimPrimS * dtGyr ) + fcVelbi2 * VbPrimS;			
 			WbiPrim = fcVelbi1 * ( WbiPrim + WiPrimPrimS * dtGyr ) + fcVelbi2 * WbPrimS;
-			
+
+			/*if (TSTstream) {
+				sprintf(str,"$UVW,%lld,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f\r\n",
+				gyroTime, UiPrim,UiPrimSF, UiPrimPrimS, free_Pitch, gyroCorr.y, gyroCorr.y/UiPrimPrimS );
+				Router::sendXCV(str);
+			}*/
 			if (TSTstream) {
-				sprintf(str,"$UVW,%lld,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f\r\n",
-					gyroTime, UiPrim, UiPrimLF, UbPrimFL, UiPrimLF-UbPrimFL, UiPrim-(UiPrimLF-UbPrimFL), UbiPrim,  ViPrim, ViPrim-(ViPrimLF-VbPrimFL), VbiPrim, WiPrim, WiPrim-(WiPrimLF-WbPrimFL), WbiPrim );
+				sprintf(str,"$UVW,%lld,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f\r\n",
+					gyroTime, UiPrim, UiPrimSF, UiPrimSF-(UiPrimLF-UbPrimLF), UbiPrim, Ubi, ViPrim, ViPrim-(ViPrimLF-VbPrimLF), VbiPrim, WiPrim, WiPrim-(WiPrimLF-WbPrimLF), WbiPrim );
 				Router::sendXCV(str);
 			}		
 			
@@ -1588,7 +1590,7 @@ void readSensors(void *pvParameters){
 
 		// Baro acceleration derivative Short period alpha/beta filter
 		// U/V/WbPrimS are used to compute U/V/WbiPrim, baro inertial accelerations
-		#define NBaroAccS 6.0 // accel kinetic alpha/beta filter coeff
+		#define NBaroAccS 5.0 // accel kinetic alpha/beta filter coeff
 		#define alphaBaroAccS (2.0 * (2.0 * NBaroAccS - 1.0) / NBaroAccS / (NBaroAccS + 1.0))
 		#define betaBaroAccS (6.0 / NBaroAccS / (NBaroAccS + 1.0) / PERIOD40HZ)			
 		deltaUbS = Ub - UbFS;
@@ -1602,18 +1604,18 @@ void readSensors(void *pvParameters){
 		WbFS = WbFS + alphaBaroAccS * deltaWbS + WbPrimS * dtstat;
 		
 		// Baro acceleration derivative Long period alpha/beta filter
-		#define NBaroAccL 40.0 // accel kinetic alpha/beta filter coeff
+		#define NBaroAccL 20.0 // accel kinetic alpha/beta filter coeff
 		#define alphaBaroAccL (2.0 * (2.0 * NBaroAccL - 1.0) / NBaroAccL / (NBaroAccL + 1.0))
 		#define betaBaroAccL (6.0 / NBaroAccL / (NBaroAccL + 1.0) / PERIOD40HZ)			
 		deltaUbL = Ub - UbFL;
-		UbPrimFL = UbPrimFL + betaBaroAccL * deltaUbL;
-		UbFL = UbFL + alphaBaroAccL * deltaUbL + UbPrimFL * dtstat;
+		UbPrimLF = UbPrimLF + betaBaroAccL * deltaUbL;
+		UbFL = UbFL + alphaBaroAccL * deltaUbL + UbPrimLF * dtstat;
 		deltaVbL = Vb - VbFL;
-		VbPrimFL = VbPrimFL + betaBaroAccL * deltaVbL;
-		VbFL = VbFL + alphaBaroAccL * deltaVbL + VbPrimFL * dtstat;			
+		VbPrimLF = VbPrimLF + betaBaroAccL * deltaVbL;
+		VbFL = VbFL + alphaBaroAccL * deltaVbL + VbPrimLF * dtstat;			
 		deltaWbL = Wb - WbFL;
-		WbPrimFL = WbPrimFL + betaBaroAccL * deltaWbL;
-		WbFL = WbFL + alphaBaroAccL * deltaWbL + WbPrimFL * dtstat;
+		WbPrimLF = WbPrimLF + betaBaroAccL * deltaWbL;
+		WbFL = WbFL + alphaBaroAccL * deltaWbL + WbPrimLF * dtstat;
 			
 		// baro interial vertical speed in earth frame
 		Vzbi = sinPitch * Ubi + sinRoll * cosPitch * Vbi + cosRoll * cosPitch * Wbi;		
@@ -1627,13 +1629,13 @@ void readSensors(void *pvParameters){
 		// TASbi is the sum of  baro inertial speeds square, in Body frame
 	
 		// baro inertial altitude
-		#define PeriodAltbi 0.5 // period in second for baro/inertial altitude. Baro/inertial velocity improves baro sensor response
+		#define PeriodAltbi 0.75 // period in second for baro/inertial altitude. Baro/inertial velocity improves baro sensor response
 		#define fcAltbi1 ( PeriodAltbi / ( PeriodAltbi + PERIOD10HZ ))
 		#define fcAltbi2 ( 1.0 - fcAltbi1 )		
 		ALTbi = fcAltbi1 * ( ALTbi - Vzbi * dtstat ) + fcAltbi2	* ALT;
 		
 		// energy calculation
-		#define NEnergy 10.0 // pneumatic velocity variation alpha/beta filter coeff (period ~1.0 s)
+		#define NEnergy 10.0 // Total Energy alpha/beta filter coeff (period ~1.5 s)
 		#define alphaEnergy (2.0 * (2.0 * NEnergy - 1.0) / NEnergy / (NEnergy + 1.0))
 		#define betaEnergy (6.0 / NEnergy / (NEnergy + 1.0) / PERIOD10HZ)	
 		deltaEnergy = ( ALTbi + (Ubi * Ubi + Vbi * Vbi + Wbi * Wbi) / 2.0 / GRAVITY ) - EnergyFilt;
