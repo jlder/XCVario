@@ -687,7 +687,7 @@ void SetupMenu::escape(){
 }
 
 void SetupMenu::vario_menu_create_damping( MenuEntry *top ){
-	SetupMenuValFloat * vda = new SetupMenuValFloat( 	"Damping", "sec", 2.0, 10.0, 0.1, vario_setup, false, &vario_delay );
+	SetupMenuValFloat * vda = new SetupMenuValFloat( 	"Damping", "sec", 1.0, 10.0, 0.1, vario_setup, false, &vario_delay );
 	vda->setHelp(PROGMEM"Response time, time constant of Vario low pass kalman filter");
 	top->addEntry( vda );
 

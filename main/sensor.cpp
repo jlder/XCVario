@@ -342,6 +342,9 @@ static float ALTPrim = 0.0;
 static float Vzbaro = 0.0;
 static float ALT = 0.0;
 static float EnergyFilt = 0.0;
+static float NEnergy = 10.0;
+static float alphaEnergy;
+static float betaEnergy;
 #define NCAS 7.0 // CAS alpha/beta filter coeff
 #define alphaCAS (2.0 * (2.0 * NCAS - 1.0) / NCAS / (NCAS + 1.0))
 #define betaCAS (6.0 / NCAS / (NCAS + 1.0) / PERIOD10HZ)
@@ -613,15 +616,15 @@ void drawDisplay(void *pvParameters){
 // depending on mode calculate value for Audio and set values accordingly
 void doAudio(){
 	polar_sink = Speed2Fly.sink( ias.get() );
-	float netto = TotalEnergy /*te_vario.get()*/ - polar_sink;
+	float netto = TotalEnergy /*te_vario.get()*/ - polar_sink; // TODO clean new energt calcul / audio
 	as2f = Speed2Fly.speed( netto, !Switch::getCruiseState() );
 	s2f_delta = s2f_delta + ((as2f - ias.get()) - s2f_delta)* (1/(s2f_delay.get()*10)); // low pass damping moved to the correct place
 	// ESP_LOGI( FNAME, "te: %f, polar_sink: %f, netto %f, s2f: %f  delta: %f", aTES2F, polar_sink, netto, as2f, s2f_delta );
 	if( vario_mode.get() == VARIO_NETTO || (Switch::getCruiseState() &&  (vario_mode.get() == CRUISE_NETTO)) ){
 		if( netto_mode.get() == NETTO_RELATIVE )
-			Audio::setValues( TotalEnergy/*te_vario.get()*/ - polar_sink + Speed2Fly.circlingSink( ias.get() ), s2f_delta );
+			Audio::setValues( TotalEnergy/*te_vario.get()*/ - polar_sink + Speed2Fly.circlingSink( ias.get() ), s2f_delta );// TODO clean new energt calcul / audio
 		else if( netto_mode.get() == NETTO_NORMAL )
-			Audio::setValues( TotalEnergy/*te_vario.get()*/ - polar_sink, s2f_delta );
+			Audio::setValues( TotalEnergy/*te_vario.get()*/ - polar_sink, s2f_delta );// TODO clean new energt calcul / audio
 	}
 	else {
 		Audio::setValues( TotalEnergy /*te_vario.get()*/, s2f_delta );
@@ -852,9 +855,9 @@ float deltaGz;
 		} else {
 			// if GravityModuleErr negative, low confidence in accels
 			// limit error magnitude
-			if ( GravityModuleErr < -4.0 ) GravityModuleErr = -4.0;
+			if ( GravityModuleErr < -5.0 ) GravityModuleErr = -5.0;
 			// compute dynamic gain function of error magnitude
-			Kgain = pow( 10.0, GravityModuleErr * 1.5 );
+			Kgain = pow( 10.0, GravityModuleErr * 1.0 );
 			dynKp = Kgain * Kp;
 			dynKi = Kgain * Ki;
 		}		
@@ -1119,8 +1122,17 @@ static void processIMU(void *pvParameters)
 			ViPrimSF = ViPrimSF + alphaKinAccS * deltaViPrimS + ViPrimPrimS * dtGyr;
 			deltaWiPrimS = WiPrim - WiPrimSF;
 			WiPrimPrimS = WiPrimPrimS + betaKinAccS * deltaWiPrimS;
-			WiPrimSF = WiPrimSF + alphaKinAccS * deltaWiPrimS + WiPrimPrimS * dtGyr;	
+			WiPrimSF = WiPrimSF + alphaKinAccS * deltaWiPrimS + WiPrimPrimS * dtGyr;
 
+			// Compute baro interial acceleration in body frame
+			#define PeriodVelbi 2.5 // period in second for baro/inertial velocity. period long enough to reduce effect of baro wind gradients
+			#define fcVelbi1 ( PeriodVelbi / ( PeriodVelbi + PERIOD40HZ ))
+			#define fcVelbi2 ( 1.0 - fcVelbi1 )			// 
+			UbiPrim = fcVelbi1 * ( UbiPrim + UiPrimPrimS * dtGyr ) + fcVelbi2 * UbPrimS;
+			VbiPrim = fcVelbi1 * ( VbiPrim + ViPrimPrimS * dtGyr ) + fcVelbi2 * VbPrimS;			
+			WbiPrim = fcVelbi1 * ( WbiPrim + WiPrimPrimS * dtGyr ) + fcVelbi2 * WbPrimS;
+			
+			/* TODO test long term low pass on kinetic and baro accelerations to estimate kinetic acceleration bias
 			// KInectic accels alpha/beta long filter
 			#define NKinAccL 80.0 // accel kinetic alpha/beta filter coeff
 			#define alphaKinAccL (2.0 * (2.0 * NKinAccL - 1.0) / NKinAccL / (NKinAccL + 1.0))
@@ -1133,19 +1145,15 @@ static void processIMU(void *pvParameters)
 			ViPrimLF = ViPrimLF + alphaKinAccL * deltaViPrimL + ViPrimPrimL * dtGyr;
 			deltaWiPrimL = WiPrim - WiPrimLF;
 			WiPrimPrimL = WiPrimPrimL + betaKinAccL * deltaWiPrimL;
-			WiPrimLF = WiPrimLF + alphaKinAccL * deltaWiPrimL + WiPrimPrimL * dtGyr;	
+			WiPrimLF = WiPrimLF + alphaKinAccL * deltaWiPrimL + WiPrimPrimL * dtGyr;
+			*/			
 			
-			// Compute baro interial speed and acceleration in body frame
-			#define PeriodVelbi 2.5 // period in second for baro/inertial velocity. period long enough to reduce effect of baro wind gradients
-			#define fcVelbi1 ( PeriodVelbi / ( PeriodVelbi + PERIOD40HZ ))
-			#define fcVelbi2 ( 1.0 - fcVelbi1 )
+			// Compute baro interial velocity in body frame
 			Ubi = fcVelbi1 * ( Ubi + UiPrim * dtGyr ) + fcVelbi2 * Ub;
 			Vbi = fcVelbi1 * ( Vbi + ViPrim * dtGyr ) + fcVelbi2 * Vb;
 			Wbi = fcVelbi1 * ( Wbi + WiPrim * dtGyr ) + fcVelbi2 * Wb;
 
-			UbiPrim = fcVelbi1 * ( UbiPrim + UiPrimPrimS * dtGyr ) + fcVelbi2 * UbPrimS;
-			VbiPrim = fcVelbi1 * ( VbiPrim + ViPrimPrimS * dtGyr ) + fcVelbi2 * VbPrimS;			
-			WbiPrim = fcVelbi1 * ( WbiPrim + WiPrimPrimS * dtGyr ) + fcVelbi2 * WbPrimS;
+
 
 			/*if (TSTstream) {
 				sprintf(str,"$UVW,%lld,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f\r\n",
@@ -1603,6 +1611,7 @@ void readSensors(void *pvParameters){
 		WbPrimS = WbPrimS + betaBaroAccS * deltaWbS;
 		WbFS = WbFS + alphaBaroAccS * deltaWbS + WbPrimS * dtstat;
 		
+		/* TODO test long term low pass on kinetic and baro accelerations to estimate kinetic acceleration bias		
 		// Baro acceleration derivative Long period alpha/beta filter
 		#define NBaroAccL 20.0 // accel kinetic alpha/beta filter coeff
 		#define alphaBaroAccL (2.0 * (2.0 * NBaroAccL - 1.0) / NBaroAccL / (NBaroAccL + 1.0))
@@ -1616,6 +1625,7 @@ void readSensors(void *pvParameters){
 		deltaWbL = Wb - WbFL;
 		WbPrimLF = WbPrimLF + betaBaroAccL * deltaWbL;
 		WbFL = WbFL + alphaBaroAccL * deltaWbL + WbPrimLF * dtstat;
+		*/
 			
 		// baro interial vertical speed in earth frame
 		Vzbi = sinPitch * Ubi + sinRoll * cosPitch * Vbi + cosRoll * cosPitch * Wbi;		
@@ -1634,10 +1644,17 @@ void readSensors(void *pvParameters){
 		#define fcAltbi2 ( 1.0 - fcAltbi1 )		
 		ALTbi = fcAltbi1 * ( ALTbi - Vzbi * dtstat ) + fcAltbi2	* ALT;
 		
+		/*
 		// energy calculation
 		#define NEnergy 10.0 // Total Energy alpha/beta filter coeff (period ~1.5 s)
 		#define alphaEnergy (2.0 * (2.0 * NEnergy - 1.0) / NEnergy / (NEnergy + 1.0))
-		#define betaEnergy (6.0 / NEnergy / (NEnergy + 1.0) / PERIOD10HZ)	
+		#define betaEnergy (6.0 / NEnergy / (NEnergy + 1.0) / PERIOD10HZ)
+		*/
+		// TODO test variable damping		
+		// TODO need to perform filter parameters calculation on when damping is changed
+		NEnergy = vario_delay.get() / PERIOD10HZ; // Total Energy alpha/beta filter coeff (period ~ delay * 10)
+		alphaEnergy = (2.0 * (2.0 * NEnergy - 1.0) / NEnergy / (NEnergy + 1.0));
+		betaEnergy = (6.0 / NEnergy / (NEnergy + 1.0) / PERIOD10HZ);		
 		deltaEnergy = ( ALTbi + (Ubi * Ubi + Vbi * Vbi + Wbi * Wbi) / 2.0 / GRAVITY ) - EnergyFilt;
 		EnergyPrim = EnergyPrim + betaEnergy * deltaEnergy;
 		EnergyFilt = EnergyFilt + alphaEnergy * deltaEnergy + EnergyPrim * dtstat;
