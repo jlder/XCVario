@@ -41,6 +41,18 @@ void change_mc() {
 	Speed2Fly.change_mc();
 }
 
+void change_tefilter() {
+		NEnergy = te_filt.get() / PERIOD10HZ; // Total Energy alpha/beta filter coeff (period ~ delay * 10)
+		alphaEnergy = (2.0 * (2.0 * NEnergy - 1.0) / NEnergy / (NEnergy + 1.0));
+		betaEnergy = (6.0 / NEnergy / (NEnergy + 1.0) / PERIOD10HZ);	
+}
+
+void change_bifilt(){
+		PeriodVelbi = velbi_period.get(); // period in second for baro/inertial velocity. period long enough to reduce effect of baro wind gradients
+		fcVelbi1 = ( PeriodVelbi / ( PeriodVelbi + PERIOD40HZ ));
+		fcVelbi2 = ( 1.0 - fcVelbi1 );
+}
+
 void change_ballast() {
 	Speed2Fly.change_ballast();
 }
@@ -387,4 +399,6 @@ SetupNG<float>			sway("XCV_SWAY", 0.0);
 SetupNG<float>			distCG("DIST_CG_XCVARIO", 0.0);
 SetupNG<float>			gravity("LOCAL_GRAVITY", 9.807);
 SetupNG<float>          mpu_temperature("MPUTEMP", 45.0, true, SYNC_FROM_MASTER, PERSISTENT, chg_mpu_target );    // default for AHRS chip temperature (XCV 2023)
+SetupNG<float> 			te_filt( "TE FILTER",1.0, true, SYNC_FROM_MASTER, PERSISTENT, change_tefilter );
+SetupNG<float> 			velbi_period( "VELBI_PERIOD",2.5, true, SYNC_FROM_MASTER, PERSISTENT, change_bifilt );
 

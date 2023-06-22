@@ -502,6 +502,7 @@ extern SetupNG<float>  		flap_pos;
 extern SetupNG<float>  		altitude;
 extern SetupNG<float>  		ias;
 extern SetupNG<float>  		te_vario;
+extern SetupNG<float>  		velbi_period;
 
 extern SetupNG<int>  		display_type;
 extern SetupNG<int>  		display_orientation;
@@ -571,6 +572,7 @@ extern SetupNG<float>		sway;
 extern SetupNG<float>		distCG;
 extern SetupNG<float>		gravity;
 extern SetupNG<float>       mpu_temperature;
+extern SetupNG<float>		te_filt;
 extern SetupNG<int>		    hardwareRevision;
 extern SetupNG<int>		    ahrs_licence_dig1;
 extern SetupNG<int>		    ahrs_licence_dig2;

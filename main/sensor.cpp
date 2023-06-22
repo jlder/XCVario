@@ -146,9 +146,6 @@ mpud::float_axes_t gyroDPS;
 mpud::float_axes_t accelG_Prev;
 mpud::float_axes_t gyroDPS_Prev; 
 
-#define PERIOD10HZ 0.1 // constant for filters in the 10 Hz loop
-#define PERIOD40HZ 0.025 // constant for filters in the 40 Hz loop
-
 // Fligth Test
 float deltaGyroModule = 0.0;	// gyro module alfa/beta filter for gyro stability test
 float GyroModulePrimFilt = 0.0;
@@ -342,9 +339,12 @@ static float ALTPrim = 0.0;
 static float Vzbaro = 0.0;
 static float ALT = 0.0;
 static float EnergyFilt = 0.0;
-static float NEnergy = 10.0;
-static float alphaEnergy;
-static float betaEnergy;
+float NEnergy = 10.0;
+float alphaEnergy;
+float betaEnergy;
+float PeriodVelbi = 2.5;
+float fcVelbi1;
+float fcVelbi2;
 #define NCAS 7.0 // CAS alpha/beta filter coeff
 #define alphaCAS (2.0 * (2.0 * NCAS - 1.0) / NCAS / (NCAS + 1.0))
 #define betaCAS (6.0 / NCAS / (NCAS + 1.0) / PERIOD10HZ)
@@ -972,6 +972,13 @@ static void processIMU(void *pvParameters)
 	float YawInit = 0.0;
 	int16_t AttitudeInit = 0;
 	
+	NEnergy = te_filt.get() / PERIOD10HZ; // Total Energy alpha/beta filter coeff (period ~ delay * 10)
+	alphaEnergy = (2.0 * (2.0 * NEnergy - 1.0) / NEnergy / (NEnergy + 1.0));
+	betaEnergy = (6.0 / NEnergy / (NEnergy + 1.0) / PERIOD10HZ);
+	PeriodVelbi = velbi_period.get(); // period in second for baro/inertial velocity. period long enough to reduce effect of baro wind gradients
+	fcVelbi1 = ( PeriodVelbi / ( PeriodVelbi + PERIOD40HZ ));
+	fcVelbi2 = ( 1.0 - fcVelbi1 );
+	
 	while (1) {
 
 		TickType_t xLastWakeTime_mpu =xTaskGetTickCount();
@@ -1125,9 +1132,9 @@ static void processIMU(void *pvParameters)
 			WiPrimSF = WiPrimSF + alphaKinAccS * deltaWiPrimS + WiPrimPrimS * dtGyr;
 
 			// Compute baro interial acceleration in body frame
-			#define PeriodVelbi 2.5 // period in second for baro/inertial velocity. period long enough to reduce effect of baro wind gradients
-			#define fcVelbi1 ( PeriodVelbi / ( PeriodVelbi + PERIOD40HZ ))
-			#define fcVelbi2 ( 1.0 - fcVelbi1 )			// 
+			//#define PeriodVelbi 2.5 // period in second for baro/inertial velocity. period long enough to reduce effect of baro wind gradients
+			//#define fcVelbi1 ( PeriodVelbi / ( PeriodVelbi + PERIOD40HZ ))
+			//#define fcVelbi2 ( 1.0 - fcVelbi1 )
 			UbiPrim = fcVelbi1 * ( UbiPrim + UiPrimPrimS * dtGyr ) + fcVelbi2 * UbPrimS;
 			VbiPrim = fcVelbi1 * ( VbiPrim + ViPrimPrimS * dtGyr ) + fcVelbi2 * VbPrimS;			
 			WbiPrim = fcVelbi1 * ( WbiPrim + WiPrimPrimS * dtGyr ) + fcVelbi2 * WbPrimS;
@@ -1652,9 +1659,7 @@ void readSensors(void *pvParameters){
 		*/
 		// TODO test variable damping		
 		// TODO need to perform filter parameters calculation on when damping is changed
-		NEnergy = vario_delay.get() / PERIOD10HZ; // Total Energy alpha/beta filter coeff (period ~ delay * 10)
-		alphaEnergy = (2.0 * (2.0 * NEnergy - 1.0) / NEnergy / (NEnergy + 1.0));
-		betaEnergy = (6.0 / NEnergy / (NEnergy + 1.0) / PERIOD10HZ);		
+		
 		deltaEnergy = ( ALTbi + (Ubi * Ubi + Vbi * Vbi + Wbi * Wbi) / 2.0 / GRAVITY ) - EnergyFilt;
 		EnergyPrim = EnergyPrim + betaEnergy * deltaEnergy;
 		EnergyFilt = EnergyFilt + alphaEnergy * deltaEnergy + EnergyPrim * dtstat;

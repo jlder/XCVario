@@ -1984,20 +1984,12 @@ void SetupMenu::system_menu_create( MenuEntry *sye ){
 	nmeas->addEntry( "IMU&SEN");
 }
 
-void SetupMenu::setup_create_root(MenuEntry *top ){
-	ESP_LOGI(FNAME,"setup_create_root()");
-	if( rot_default.get() == 0 ) {
-		SetupMenuValFloat * mc = new SetupMenuValFloat( "MC", "",	0.0, 9.9, 0.1, 0, true, &MC );
-		mc->setHelp(PROGMEM"Mac Cready value for optimum cruise speed, or average climb rate to be provided in same unit as the variometer");
-		mc->setPrecision(1);
-		top->addEntry( mc );
-	}
-	else {
-		SetupMenuValFloat * vol = new SetupMenuValFloat( "Audio Volume", "%", 0.0, 100, 1, vol_adj, true, &audio_volume );
-		vol->setHelp(PROGMEM"Audio volume level for variometer tone on internal and external speaker");
-		top->addEntry( vol );
-	}
-
+void SetupMenu::flight_menu_create( MenuEntry *top ){
+	SetupMenuValFloat * mc = new SetupMenuValFloat( "MC", "",	0.0, 9.9, 0.1, 0, true, &MC );
+	mc->setHelp(PROGMEM"Mac Cready value for optimum cruise speed, or average climb rate to be provided in same unit as the variometer");
+	mc->setPrecision(1);
+	top->addEntry( mc );
+		
 	SetupMenuValFloat * bgs = new SetupMenuValFloat( "Bugs", "%", 0.0, 50, 1, bug_adj, true, &bugs  );
 	bgs->setHelp(PROGMEM"Percent of bugs contamination to indicate degradation of gliding performance");
 	top->addEntry( bgs );
@@ -2011,6 +2003,79 @@ void SetupMenu::setup_create_root(MenuEntry *top ){
 	crewball->setPrecision(0);
 	crewball->setHelp(PROGMEM"Weight of the pilot(s) including parachute (everything on top of the empty weight apart from ballast)");
 	top->addEntry( crewball );
+}
+
+int tefilt_adj( SetupMenuValFloat * p ){
+		NEnergy = te_filt.get() / PERIOD10HZ; // Total Energy alpha/beta filter coeff (period ~ delay * 10)
+		alphaEnergy = (2.0 * (2.0 * NEnergy - 1.0) / NEnergy / (NEnergy + 1.0));
+		betaEnergy = (6.0 / NEnergy / (NEnergy + 1.0) / PERIOD10HZ);
+	return 0;
+}
+
+int bifilt_adj( SetupMenuValFloat * p ){
+		PeriodVelbi = velbi_period.get(); // period in second for baro/inertial velocity. period long enough to reduce effect of baro wind gradients
+		fcVelbi1 = ( PeriodVelbi / ( PeriodVelbi + PERIOD40HZ ));
+		fcVelbi2 = ( 1.0 - fcVelbi1 );
+	return 0;
+}
+
+
+void SetupMenu::flighttest_menu_create( MenuEntry *top ){
+	
+	SetupMenuValFloat * tefilt = new SetupMenuValFloat( "TE period", "S",	0.5, 5.9, 0.1, tefilt_adj, true, &te_filt );
+	tefilt->setHelp(PROGMEM"TE filter time");
+	tefilt->setPrecision(1);
+	top->addEntry( tefilt );
+	
+	SetupMenuValFloat * velbiperiod = new SetupMenuValFloat( "Baro Inert Vel period", "S",	1.0, 5.9, 0.1, bifilt_adj, true, &velbi_period );
+	velbiperiod->setHelp(PROGMEM"TE filter time");
+	velbiperiod->setPrecision(1);
+	top->addEntry( velbiperiod );
+	
+}
+
+void SetupMenu::setup_create_root(MenuEntry *top ){
+	ESP_LOGI(FNAME,"setup_create_root()");
+	if( rot_default.get() == 0 ) {
+		SetupMenu * flighttestmenu = new SetupMenu( "Fligth Test Menu" );
+		top->addEntry( flighttestmenu );
+		flighttestmenu->addCreator( flighttest_menu_create );
+
+	}
+	else {
+		SetupMenuValFloat * vol = new SetupMenuValFloat( "Audio Volume", "%", 0.0, 100, 1, vol_adj, true, &audio_volume );
+		vol->setHelp(PROGMEM"Audio volume level for variometer tone on internal and external speaker");
+		top->addEntry( vol );
+	}
+
+	/*	SetupMenu * va = new SetupMenu( "Vario and Speed 2 Fly" );
+		top->addEntry( va );
+		va->addCreator( vario_menu_create ); */
+
+	/*
+	SetupMenuValFloat * mc = new SetupMenuValFloat( "MC", "",	0.0, 9.9, 0.1, 0, true, &MC );
+	mc->setHelp(PROGMEM"Mac Cready value for optimum cruise speed, or average climb rate to be provided in same unit as the variometer");
+	mc->setPrecision(1);
+	top->addEntry( mc );
+		
+	SetupMenuValFloat * bgs = new SetupMenuValFloat( "Bugs", "%", 0.0, 50, 1, bug_adj, true, &bugs  );
+	bgs->setHelp(PROGMEM"Percent of bugs contamination to indicate degradation of gliding performance");
+	top->addEntry( bgs );
+
+	SetupMenuValFloat * bal = new SetupMenuValFloat( "Ballast", "litre", 0.0, 500, 1, water_adj, true, &ballast_kg  );
+	bal->setHelp(PROGMEM"Amount of water ballast added to the over all weight");
+	bal->setPrecision(0);
+	top->addEntry( bal );
+
+	SetupMenuValFloat * crewball = new SetupMenuValFloat( "Crew Weight", "kg", 0, 300, 1, crew_weight_adj, false, &crew_weight );
+	crewball->setPrecision(0);
+	crewball->setHelp(PROGMEM"Weight of the pilot(s) including parachute (everything on top of the empty weight apart from ballast)");
+	top->addEntry( crewball );
+	*/
+
+	SetupMenu * flightparam = new SetupMenu( "Glider/Flight parameters" );
+	top->addEntry( flightparam );
+	flightparam->addCreator( flight_menu_create );
 
 	SetupMenuValFloat *qnh_menu = SetupMenu::createQNHMenu();
 	top->addEntry( qnh_menu );

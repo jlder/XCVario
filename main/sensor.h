@@ -29,6 +29,10 @@
 #define SPI_MOSI       GPIO_NUM_27      // SPI SDO Master Out Slave In pin
 #define SPI_MISO       GPIO_NUM_32      // SPI SDI Master In Slave Out
 
+
+#define PERIOD10HZ 0.1 // constant for filters in the 10 Hz loop
+#define PERIOD40HZ 0.025 // constant for filters in the 40 Hz loop
+
 typedef struct global_flags{
 	bool inSetup :1;
 	bool haveMPU :1;
@@ -118,6 +122,12 @@ extern bool CALstream;
 extern bool TSTstream;
 extern bool LABtest;
 extern float localGravity;
+extern float NEnergy;
+extern float alphaEnergy;
+extern float betaEnergy;
+extern float PeriodVelbi;
+extern float fcVelbi1;
+extern float fcVelbi2;
 
 
 #endif

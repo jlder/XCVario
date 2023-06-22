@@ -41,7 +41,10 @@ public:
 	static gpio_num_t getGearWarningIO();
 
 	static void setup_create_root( MenuEntry *top );
-
+	
+	static void flight_menu_create( MenuEntry *top );	
+	static void flighttest_menu_create( MenuEntry *top );
+	
 	static void vario_menu_create( MenuEntry *top );
 	static void vario_menu_create_damping( MenuEntry *top );
 	static void vario_menu_create_meanclimb( MenuEntry *top );
