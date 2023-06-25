@@ -250,6 +250,7 @@ mpud::float_axes_t gravISUNEDBODY;
 mpud::float_axes_t currentAccelBias;
 mpud::float_axes_t currentAccelGain;
 mpud::float_axes_t GroundGyroBias;
+mpud::float_axes_t NewGroundGyroBias;
 // get installation parameters tilt, sway, distCG
 // compute trigonometry
 float DistCGVario = 0.0; // distance from CG to vario
@@ -971,6 +972,8 @@ static void processIMU(void *pvParameters)
 	float RollInit = 0.0;
 	float YawInit = 0.0;
 	int16_t AttitudeInit = 0;
+	// initialize prevgyrotime
+	prevgyroTime = esp_timer_get_time()/1000.0;
 	
 	// compute once the filter parameters in functions of values in FLASH
 	NEnergy = te_filt.get() / PERIOD10HZ; // Total Energy alpha/beta filter coeff (period ~ delay * 10)
@@ -992,6 +995,9 @@ static void processIMU(void *pvParameters)
 			gyroDPS = mpud::gyroDegPerSec(gyroRaw, GYRO_FS); // For compatibility with Eckhard code only. Convert raw gyro to Gyro_FS full scale in degre per second 
 			gyroRPS = mpud::gyroRadPerSec(gyroRaw, GYRO_FS); // convert raw gyro to Gyro_FS full scale
 			// convert gyro coordinates to ISU : rad/s NED MPU and remove bias
+			if ( abs(GroundGyroBias.x - NewGroundGyroBias.x) > 0.0001 ) GroundGyroBias.x = 0.99 * GroundGyroBias.x + 0.01 * NewGroundGyroBias.x;
+			if ( abs(GroundGyroBias.y - NewGroundGyroBias.y) > 0.0001 ) GroundGyroBias.y = 0.99 * GroundGyroBias.y + 0.01 * NewGroundGyroBias.y;	
+			if ( abs(GroundGyroBias.z - NewGroundGyroBias.z) > 0.0001 ) GroundGyroBias.z = 0.99 * GroundGyroBias.z + 0.01 * NewGroundGyroBias.z;			
 			gyroISUNEDMPU.x = -(gyroRPS.z - GroundGyroBias.z);
 			gyroISUNEDMPU.y = -(gyroRPS.y - GroundGyroBias.y);
 			gyroISUNEDMPU.z = -(gyroRPS.x - GroundGyroBias.x);
@@ -1042,12 +1048,12 @@ static void processIMU(void *pvParameters)
 
 		if ( AttitudeInit < 10 ) {
 			if ( AttitudeInit == 0 ) {
-				RollInit = atan(accelISUNEDBODY.y / accelISUNEDBODY.z);
-				PitchInit = asin(accelISUNEDBODY.x/GRAVITY);
+				RollInit = atan2(accelISUNEDBODY.y , accelISUNEDBODY.z);
+				PitchInit = atan2( -accelISUNEDBODY.x , sqrt(accelISUNEDBODY.y * accelISUNEDBODY.y + accelISUNEDBODY.z * accelISUNEDBODY.z));				
 				YawInit   = 0.0;
 			} else {
-				RollInit = 0.75 * RollInit + 0.25 * atan(accelISUNEDBODY.y / accelISUNEDBODY.z);
-				PitchInit = 0.75 * PitchInit + 0.25 * asin(accelISUNEDBODY.x/GRAVITY);
+				RollInit = 0.75 * RollInit + 0.25 * atan2(accelISUNEDBODY.y , accelISUNEDBODY.z);
+				PitchInit = 0.75 * PitchInit + 0.25 * atan2( -accelISUNEDBODY.x , sqrt(accelISUNEDBODY.y * accelISUNEDBODY.y + accelISUNEDBODY.z * accelISUNEDBODY.z));
 			}
 
 			q0=((cos(RollInit/2.0)*cos(PitchInit/2.0)*cos(YawInit/2.0)+sin(RollInit/2.0)*sin(PitchInit/2.0)*sin(YawInit/2.0)));
@@ -1141,7 +1147,6 @@ static void processIMU(void *pvParameters)
 			Ubi = fcVelbi1 * ( Ubi + UbiPrim * dtGyr ) + fcVelbi2 * Ub;
 			Vbi = fcVelbi1 * ( Vbi + VbiPrim * dtGyr ) + fcVelbi2 * Vb;
 			Wbi = fcVelbi1 * ( Wbi + WbiPrim * dtGyr ) + fcVelbi2 * Wb;
-		
 		}
 
 		// When TAS < 15 m/s the vario is considered potentially stable on ground
@@ -1165,7 +1170,6 @@ static void processIMU(void *pvParameters)
 							Gravy = accelISUNEDBODY.y;
 							Gravz = accelISUNEDBODY.z;
 							averagecount = 1;
-							
 						} else {
 							// between 2.5 seconds and 22.5 seconds, accumulate gyro data
 							if ( gyrostable <900 ) {
@@ -1180,9 +1184,9 @@ static void processIMU(void *pvParameters)
 								// If no bias yet, after 25 seconds calculate average bias, gravity and roll/pitch
 								// If already have bias, calulate after 2 minutes to avoid risk of perturbation before takeoff
 								if ( (BIAS_Init == 0 && gyrostable > 1000) || (BIAS_Init > 0 && gyrostable > 4800) ) {
-									GroundGyroBias.x = GxBias / averagecount;
-									GroundGyroBias.y = GyBias / averagecount;
-									GroundGyroBias.z = GzBias / averagecount;
+									NewGroundGyroBias.x = GxBias / averagecount;
+									NewGroundGyroBias.y = GyBias / averagecount;
+									NewGroundGyroBias.z = GzBias / averagecount;
 									Gravx /= averagecount;
 									Gravy /= averagecount;
 									Gravz /= averagecount;
@@ -1190,7 +1194,7 @@ static void processIMU(void *pvParameters)
 									AccelGravModuleFilt = GRAVITY;
 									BIAS_Init++;
 									if ( BIAS_Init == 1 ) {
-										gyro_bias.set(GroundGyroBias);
+										gyro_bias.set(NewGroundGyroBias);
 										gravity.set(GRAVITY);
 									}								
 									gyrostable = 0;
@@ -1261,7 +1265,7 @@ static void processIMU(void *pvParameters)
 			// if moving ( TAS > 15 m/s )
 			// if bias and gravtity have been estimated more than once, store last available bias and gravity in FLASH
 			if ( BIAS_Init > 1  ) {
-				gyro_bias.set(GroundGyroBias);
+				gyro_bias.set(NewGroundGyroBias);
 				gravity.set(GRAVITY);
 			}
 		}
@@ -2126,6 +2130,7 @@ void system_startup(void *args){
 				GroundGyroBias.y = 0.0;
 				GroundGyroBias.z = 0.0;
 		}
+		NewGroundGyroBias = GroundGyroBias;
 
 		// get installation parameters tilt, sway, distCG
 		DistCGVario = distCG.get();
