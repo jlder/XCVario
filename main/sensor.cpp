@@ -1394,9 +1394,9 @@ void readSensors(void *pvParameters){
 	float WingLoad = 40.0;
 	float AoA = 0.0;
 	float AoB = 0.0;
-	float CLA = 5.98; // CLA=2*PI/(1+2/AR) = 5.75 for LS6 5.98 for Ventus 3
-	float KAoB = 2.97; // 3.5 for LS6  2.97 for Ventus 3
-	float KGx = 12; // 4.1 for LS6 and 12 for Ventus 3
+	float CLA = 5.75; // CLA=2*PI/(1+2/AR) = 5.75 for LS6 5.98 for Ventus 3
+	float KAoB = 3.5; // 3.5 for LS6  2.97 for Ventus 3
+	float KGx = 4.1; // 4.1 for LS6 and 12 for Ventus 3
 	
 	float deltaEnergy;
 	float EnergyPrim = 0.0;
