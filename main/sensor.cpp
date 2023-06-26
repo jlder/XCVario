@@ -1048,12 +1048,12 @@ static void processIMU(void *pvParameters)
 
 		if ( AttitudeInit < 10 ) {
 			if ( AttitudeInit == 0 ) {
-				RollInit = atan2(accelISUNEDBODY.y , accelISUNEDBODY.z);
-				PitchInit = atan2( -accelISUNEDBODY.x , sqrt(accelISUNEDBODY.y * accelISUNEDBODY.y + accelISUNEDBODY.z * accelISUNEDBODY.z));				
+				RollInit = atan2(-accelISUNEDBODY.y , -accelISUNEDBODY.z);
+				PitchInit = asin( accelISUNEDBODY.x / sqrt(accelISUNEDBODY.x*accelISUNEDBODY.x+accelISUNEDBODY.y * accelISUNEDBODY.y + accelISUNEDBODY.z * accelISUNEDBODY.z));
 				YawInit   = 0.0;
 			} else {
-				RollInit = 0.75 * RollInit + 0.25 * atan2(accelISUNEDBODY.y , accelISUNEDBODY.z);
-				PitchInit = 0.75 * PitchInit + 0.25 * atan2( -accelISUNEDBODY.x , sqrt(accelISUNEDBODY.y * accelISUNEDBODY.y + accelISUNEDBODY.z * accelISUNEDBODY.z));
+				RollInit = 0.75 * RollInit + 0.25 * atan2(-accelISUNEDBODY.y , -accelISUNEDBODY.z);
+				PitchInit = 0.75 * PitchInit + 0.25 * asin( accelISUNEDBODY.x / sqrt(accelISUNEDBODY.x*accelISUNEDBODY.x+accelISUNEDBODY.y * accelISUNEDBODY.y + accelISUNEDBODY.z * accelISUNEDBODY.z));
 			}
 
 			q0=((cos(RollInit/2.0)*cos(PitchInit/2.0)*cos(YawInit/2.0)+sin(RollInit/2.0)*sin(PitchInit/2.0)*sin(YawInit/2.0)));
