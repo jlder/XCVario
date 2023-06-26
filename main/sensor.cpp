@@ -324,6 +324,7 @@ static float GRAVITY = 9.807;
 static float dynamicP; // filtered dynamic pressure
 static float baroP=0; // barometric pressure
 static float temperature=15.0;
+static float delta_temperature=0.0;
 static float XCVTemp=15.0;//External temperature for MPU temp control
 
 static float Rho;
@@ -1394,9 +1395,9 @@ void readSensors(void *pvParameters){
 	float WingLoad = 40.0;
 	float AoA = 0.0;
 	float AoB = 0.0;
-	float CLA = 5.75; // CLA=2*PI/(1+2/AR) = 5.75 for LS6 5.98 for Ventus 3
-	float KAoB = 3.5; // 3.5 for LS6  2.97 for Ventus 3
-	float KGx = 4.1; // 4.1 for LS6 and 12 for Ventus 3
+	float CLA = 5.98; // CLA=2*PI/(1+2/AR) = 5.75 for LS6 5.98 for Ventus 3
+	float KAoB = 2.97; // 3.5 for LS6  2.97 for Ventus 3
+	float KGx = 12.0; // 4.1 for LS6 and 12 for Ventus 3
 	
 	float deltaEnergy;
 	float EnergyPrim = 0.0;
@@ -1868,7 +1869,11 @@ void readTemp(void *pvParameters){
 					gflags.validTemperature = true;
 				}
 				// ESP_LOGI(FNAME,"temperature=%2.1f", temperature );
-				temperature +=  (t - temperature) * 0.3; // A bit low pass as strategy against toggling
+				delta_temperature = t - temperature; // TODO below are filters to remove or limit effects of OAT outliers (due to EMI on sensor in one experiment). We put dust under the carpet!!!
+				if ( abs(delta_temperature) > 50.0 ) delta_temperature = 0; // remove large outliers
+				if ( delta_temperature > 0.1 )  delta_temperature = 0.1; // limit temperature variation to 0.1°C /s in case of outliers within "normal" temperature range.
+				if ( delta_temperature < -0.1 )  delta_temperature = -0.1;				
+				temperature =  0.75 * temperature + 0.25 * delta_temperature; // A bit low pass as strategy against toggling
 				temperature = std::round(temperature*10)/10;
 				if( temperature != temp_prev ){
 					OAT.set( temperature );
