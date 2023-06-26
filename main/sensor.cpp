@@ -796,37 +796,10 @@ float deltaGz;
 	// Compute feedback error only if accelerometer measurement is valid (avoids NaN in accelerometer normalisation)
 	AccelGravModule = sqrt( ax * ax + ay * ay + az * az );
 	if ( AccelGravModule != 0.0) {
-		/* // gyro should be corrected using error between vertical from IMU quaternion and observered vertical from accels.
-		// Accels are good proxy for vertical :
-		// when the flight mechanic forces apply, this is true when the module of acceleration is close to local gravity (GRAVITY)
-		// when on the ground, additional condition on gyro stability is required to insure accels can be used to observe vertical. 
-		// gyro correction is performed with PI feedback using Kp and Ki (proportional & integral) coefficients.
-		// these coefficients are adjusted dynamicaly (dynKp and dynKi) in function acceleration module proximity to GRAVITY
-		// when error is lower than a threshold, maximum Kp and Ki coefficients are used
-		// when error is higher than threshold, reduced coefficients are used.
-		//
-
-		// IMU stability criteria is using filtered module of kinetic acceleration refernced to Nlimit which is the stability threshold
-		GravityModuleErr = Nlimit - ModuleKineticAccelF;
-		
-		// if GravityModuleErr positive, high confidence in accels (kinetic accels module below Nlimit)
-		if  ( GravityModuleErr > 0.0 ) {
-			dynKp = Kp;
-			dynKi = Ki;
-		} else {
-			// if GravityModuleErr negative, low confidence in accels
-			// limit magnitude of error
-			if ( GravityModuleErr < -1.0 ) GravityModuleErr = -1.0;
-			// compute dynamic gain function of error magnitude
-			Kgain = pow( 10.0, GravityModuleErr * 8 );
-			dynKp = Kgain * Kp;
-			dynKi = Kgain * Ki;
-		} */
-
 		// gyro should be corrected using error between vertical from IMU quaternion and observered vertical from accels.
 		// Accels are good proxy for vertical :
-		// when the flight mechanic forces apply, this is true when the module of acceleration is close to local gravity (GRAVITY)
-		// when on the ground, additional condition on gyro stability is required to insure accels can be used to observe vertical. 
+		// - when the flight mechanic forces apply, this is true when the module of acceleration is close to local gravity (GRAVITY)
+		// - when on the ground, additional condition on gyro stability is required to insure accels can be used to observe vertical. 
 		// gyro correction is performed with PI feedback using Kp and Ki (proportional & integral) coefficients.
 		// these coefficients are adjusted dynamicaly (dynKp and dynKi) in function acceleration module proximity to GRAVITY
 		// when error is lower than a threshold, maximum Kp and Ki coefficients are used
@@ -1422,7 +1395,7 @@ void readSensors(void *pvParameters){
 	float AoA = 0.0;
 	float AoB = 0.0;
 	float CLA = 5.75; // CLA=2*PI/(1+2/AR) = 5.75 for LS6 5.98 for Ventus 3
-	float KAoB = 200; // 3.5 for LS6  2.97 for Ventus 3
+	float KAoB = 3.5; // 3.5 for LS6  2.97 for Ventus 3
 	float KGx = 4.1; // 4.1 for LS6 and 12 for Ventus 3
 	
 	float deltaEnergy;
