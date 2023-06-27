@@ -1873,7 +1873,7 @@ void readTemp(void *pvParameters){
 				if ( abs(delta_temperature) > 50.0 ) delta_temperature = 0; // remove large outliers
 				if ( delta_temperature > 0.1 )  delta_temperature = 0.1; // limit temperature variation to 0.1°C /s in case of outliers within "normal" temperature range.
 				if ( delta_temperature < -0.1 )  delta_temperature = -0.1;				
-				temperature =  0.75 * temperature + 0.25 * delta_temperature; // A bit low pass as strategy against toggling
+				temperature =  temperature + 0.25 * delta_temperature; // A bit low pass as strategy against toggling
 				temperature = std::round(temperature*10)/10;
 				if( temperature != temp_prev ){
 					OAT.set( temperature );
