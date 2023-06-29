@@ -2322,6 +2322,7 @@ void system_startup(void *args){
 			display->writeText( line++, "Temp Sensor: OK");
 			gflags.validTemperature = true;
 			logged_tests += "External Temperature Sensor:PASSED\n";
+			OAT.set( temperature );
 
 		}
 	}
