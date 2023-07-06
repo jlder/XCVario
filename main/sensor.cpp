@@ -1395,9 +1395,9 @@ void readSensors(void *pvParameters){
 	float WingLoad = 40.0;
 	float AoA = 0.0;
 	float AoB = 0.0;
-	float CLA = 5.98; // CLA=2*PI/(1+2/AR) = 5.75 for LS6 5.98 for Ventus 3
-	float KAoB = 2.97; // 3.5 for LS6  2.97 for Ventus 3
-	float KGx = 12.0; // 4.1 for LS6 and 12 for Ventus 3
+	float CLA = 5.75; // CLA=2*PI/(1+2/AR) = 5.75 for LS6 5.98 for Ventus 3
+	float KAoB = 3.5; // 3.5 for LS6  2.97 for Ventus 3
+	float KGx = 4.1; // 4.1 for LS6 and 12 for Ventus 3
 	
 	float deltaEnergy;
 	float EnergyPrim = 0.0;
@@ -1522,7 +1522,7 @@ void readSensors(void *pvParameters){
 
 		// compute AoA (Angle of attack) and AoB (Angle od slip)
 		WingLoad = gross_weight.get() / polar_wingarea.get();  // should be only computed when pilot change weight settings in XCVario
-		if ( (dynP > 100.0) && (accelISUNEDBODY.z > 1.0) ) { // compute AoA and AoB only when dynamic pressure is above 100 Pa and accel z above 1 m/s²
+		if ( (dynP > 100.0) && (abs(accelISUNEDBODY.z > 1.0)) ) { // compute AoA and AoB only when dynamic pressure is above 100 Pa and accel z above 1 m/s²
 			CL = -accelISUNEDBODY.z * 2 / RhoSLISA * WingLoad / CAS / CAS;
 			dAoA = ( CL - prevCL ) / CLA;
 			prevCL = CL;
