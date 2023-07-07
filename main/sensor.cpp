@@ -1870,7 +1870,12 @@ void readTemp(void *pvParameters){
 				}
 				// ESP_LOGI(FNAME,"temperature=%2.1f", temperature );
 				delta_temperature = t - temperature; // TODO below are filters to remove or limit effects of OAT outliers (due to EMI on sensor in one experiment). We put dust under the carpet!!!
-				if ( abs(delta_temperature) > 50.0 ) delta_temperature = 0; // remove large outliers
+				if ( abs(delta_temperature) > 50.0 ) {
+					delta_temperature = 0; // remove large outliers
+					if ( abs(temperature) > abs(t) ) {
+					temperature = t; // if temperature is an outlier (during init with GNSS?) reset temperature to last sensor value
+					}
+				}
 				if ( delta_temperature > 0.1 )  delta_temperature = 0.1; // limit temperature variation to 0.1°C /s in case of outliers within "normal" temperature range.
 				if ( delta_temperature < -0.1 )  delta_temperature = -0.1;				
 				temperature =  temperature + 0.25 * delta_temperature; // A bit low pass as strategy against toggling
