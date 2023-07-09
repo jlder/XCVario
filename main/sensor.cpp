@@ -1414,12 +1414,38 @@ void readSensors(void *pvParameters){
 	float deltaGNSSRoute;	
 	#define NGNSS 7.0 // GNSS alpha/beta. Sample rate is 0 Hz = 0.1 second
 	#define alphaGNSSRoute (2.0 * (2.0 * NGNSS - 1.0) / NGNSS / (NGNSS + 1.0))
-	#define betaGNSSRoute (6.0 / NGNSS / (NGNSS + 1.0) / PERIOD10HZ)	
+	#define betaGNSSRoute (6.0 / NGNSS / (NGNSS + 1.0) / PERIOD10HZ)
+
+	// Wind speed variables
+	float Vgx;
+	float Vgy;
+	float VgxPrev = 0.0;
+	float VgyPrev = 0.0;
+	float DeltaVgx;
+	float DeltaVgy;
+	float SegmentSquare;
+	float Segment = 0.0;
+	float MidSegmentx;
+	float MidSegmenty;
+	float Median = 0.0;
+	float MedianDirx;
+	float MedianDiry;
+	float Windx = 0.0;
+	float Windy = 0.0;
+	float Windxalt;
+	float Windyalt;
+	float fcWind = 1.0;
+	float fcWind1;
+	float fcWind2;
+	float FilteredWindx = 0.0;
+	float FilteredWindy = 0.0;
+	float VhPrev = 0.0;
+	float FilteredVhHeading = 0.0;
 	
 	int client_sync_dataIdx = 0;
 
 	while (1)
-	{
+	{ 
 		count++;
 
 		TickType_t xLastWakeTime = xTaskGetTickCount();
@@ -1588,7 +1614,47 @@ void readSensors(void *pvParameters){
 		EnergyFilt = EnergyFilt + alphaEnergy * deltaEnergy + EnergyPrim * dtstat;
 		
 		TotalEnergy = EnergyPrim;
+		
+		// compute wind speed using GNSS and horizontal true airspeed
+		Vgx = chosenGnss->speed.x; // GNSS x coordinate
+		Vgy = chosenGnss->speed.y; // GNSS y coordinate
+		DeltaVgx = Vgx-VgxPrev; // Variation of x speed coordinate
+		DeltaVgy = Vgy-VgyPrev; // Variation of y speed coordinate
+		SegmentSquare = DeltaVgx*DeltaVgx+DeltaVgy*DeltaVgy; // squared module of segment between speed vectors extremities
+		if ( VgxPrev != 0.0 && VgyPrev != 0.0 && SegmentSquare != 0.0 ) {
+			Segment = sqrt(SegmentSquare); // module of segment
+			MidSegmentx = (Vgx+VgxPrev)/2; // mid segment x
+			MidSegmenty = (Vgy+VgyPrev)/2; // mid segment y
+			Median = sqrt((Vh+VhPrev)*(Vh+VhPrev)/4-SegmentSquare/4); // module of median between segment center and true airspedd origin (usinf average of current and previous true airspeed
+			MedianDirx = -(Vgy-VgyPrev)/Segment; // direction of median x
+			MedianDiry = (Vgx-VgxPrev)/Segment; // direction of median y
+			Windx = MidSegmentx + Median * MedianDirx; // wind x coordinate
+			Windy = MidSegmenty + Median * MedianDiry; // wind y coordinate
+			Windxalt = MidSegmentx - Median * MedianDirx; // alternate wind x coordinate
+			Windyalt = MidSegmenty - Median * MedianDiry; // alternate wind y coordinate
+			if ( (Windx*Windx+Windy*Windy) > (Windxalt*Windxalt+Windyalt*Windyalt) ) { // Pick wind coordinates closest to GNSS vectors origin.
+				Windx = Windxalt;
+				Windy = Windyalt;
+			}
+		}
+		VgxPrev = Vgx;
+		VgyPrev = Vgy;
+		VhPrev = Vh;
+		// dynamic filter for wind speed, in function of GNSS route variation
+		if ( SegmentSquare > 0 ) {
+			fcWind = 3.0 * 17.0 / Segment * Median; // fc low pass filter has 1 second period when GNSS route variation is 3° 
+			fcWind1 = fcWind / (fcWind + 0.1); // sample period is 0.1 second
+			fcWind2 = 1 - fcWind1;
+		} else {
+			fcWind1 = 1.0; // when there is no route change from GNSS, keep current wind value
+			fcWind2 = 0.0;
+		}
+		FilteredWindx = fcWind1 * FilteredWindx + fcWind2 * Windx;
+		FilteredWindy = fcWind1 * FilteredWindy + fcWind2 * Windy;
+		FilteredVhHeading = fcWind1 * FilteredVhHeading + fcWind2 * atan2(Vgy-Windy,Vgx-Windx);		
+		
 
+		
 		if ( SENstream ) {
 		/* Sensor data
 			$S1,			
@@ -1623,11 +1689,14 @@ void readSensors(void *pvParameters){
 			Vbi in cm/s,
 			Wbi in cm/s,
 			Vzbi in cm/s,			
-			TotalEnergy in cm/s
+			TotalEnergy in cm/s,
+			Wind speed x in cm/s,
+			Wind speed y in cm/s,
+			Vh heading in tenth of °
 			<CR><LF>		
 		*/
 	
-			sprintf(str,"$S1,%lld,%i,%i,%i,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",
+			sprintf(str,"$S1,%lld,%i,%i,%i,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",
 				statTime, (int32_t)(statP*100.0),(int32_t)(teP*100.0), (int16_t)(dynP*10), 
 				(int64_t)(chosenGnss->time*1000.0), (int16_t)(chosenGnss->speed.x*100), (int16_t)(chosenGnss->speed.y*100), (int16_t)(chosenGnss->speed.z*100), (int16_t)(GNSSRouteraw*10),
 				(int32_t)(Pitch*1000.0), (int32_t)(Roll*1000.0), (int32_t)(Yaw*1000.0),
@@ -1637,7 +1706,10 @@ void readSensors(void *pvParameters){
 				(int32_t)(UiPrim*100), (int32_t)(ViPrim*100), (int32_t)(WiPrim*100),
 				(int32_t)(Ub*100), (int32_t)(Vb*100), (int32_t)(Wb*100),
 				(int32_t)(Ubi*100), (int32_t)(Vbi*100),(int32_t)(Wbi*100), (int32_t)(Vzbi*100),				
-				(int32_t)(TotalEnergy*100) );
+				(int32_t)(TotalEnergy*100),
+				(int32_t)(FilteredWindx*100), (int32_t)(FilteredWindy*100),
+				(int32_t)(FilteredVhHeading*10)	);				
+				
 			Router::sendXCV(str);
 		}
 		if ( SENstream && !(count % 50) ) { // send $S2 every 50 cycles = 5 seconds
