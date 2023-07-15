@@ -1395,9 +1395,10 @@ void readSensors(void *pvParameters){
 	float WingLoad = 40.0;
 	float AoA = 0.0;
 	float AoB = 0.0;
-	float CLA = 5.75; // CLA=2*PI/(1+2/AR) = 5.75 for LS6 5.98 for Ventus 3
-	float KAoB = 3.5; // 3.5 for LS6  2.97 for Ventus 3
-	float KGx = 4.1; // 4.1 for LS6 and 12 for Ventus 3
+    float CLA = 5.67; // CLA=2*PI/(1+2/AR) = 5.75 for LS6, 5.98 for Ventus 3, 5.67 for Taurus
+    float KAoB = 3; // 3.5 for LS6,  2.97 for Ventus 3, 3 for Taurus TBC
+    float KGx = 4; // 4.1 for LS6, 12 for Ventus 3, 4 for Taurus TBC
+	
 	
 	float deltaEnergy;
 	float EnergyPrim = 0.0;
@@ -1435,12 +1436,15 @@ void readSensors(void *pvParameters){
 	float Windxalt;
 	float Windyalt;
 	float fcWind = 1.0;
-	float fcWind1;
-	float fcWind2;
+	float fcWind1 = 1.0;
+	float fcWind2 = 0.0;
 	float FilteredWindx = 0.0;
 	float FilteredWindy = 0.0;
 	float VhPrev = 0.0;
+	float VhAvg = 0.0;
 	float FilteredVhHeading = 0.0;
+	#define DSR 7 // only compute wind every 7 samples.
+	int16_t tickDSR = 1;
 	
 	int client_sync_dataIdx = 0;
 
@@ -1618,42 +1622,39 @@ void readSensors(void *pvParameters){
 		// compute wind speed using GNSS and horizontal true airspeed
 		Vgx = chosenGnss->speed.x; // GNSS x coordinate
 		Vgy = chosenGnss->speed.y; // GNSS y coordinate
-		DeltaVgx = Vgx-VgxPrev; // Variation of x speed coordinate
-		DeltaVgy = Vgy-VgyPrev; // Variation of y speed coordinate
-		SegmentSquare = DeltaVgx*DeltaVgx+DeltaVgy*DeltaVgy; // squared module of segment between speed vectors extremities
-		if ( VgxPrev != 0.0 && VgyPrev != 0.0 && SegmentSquare != 0.0 ) {
+		tickDSR++;
+		if (tickDSR > DSR) {
+			tickDSR = 1;
+			DeltaVgx = Vgx-VgxPrev; // Variation of x speed coordinate
+			DeltaVgy = Vgy-VgyPrev; // Variation of y speed coordinate
+			SegmentSquare = DeltaVgx*DeltaVgx+DeltaVgy*DeltaVgy; // squared module of segment between speed vectors extremities
 			Segment = sqrt(SegmentSquare); // module of segment
-			MidSegmentx = (Vgx+VgxPrev)/2; // mid segment x
-			MidSegmenty = (Vgy+VgyPrev)/2; // mid segment y
-			Median = sqrt((Vh+VhPrev)*(Vh+VhPrev)/4-SegmentSquare/4); // module of median between segment center and true airspedd origin (usinf average of current and previous true airspeed
-			MedianDirx = -(Vgy-VgyPrev)/Segment; // direction of median x
-			MedianDiry = (Vgx-VgxPrev)/Segment; // direction of median y
-			Windx = MidSegmentx + Median * MedianDirx; // wind x coordinate
-			Windy = MidSegmenty + Median * MedianDiry; // wind y coordinate
-			Windxalt = MidSegmentx - Median * MedianDirx; // alternate wind x coordinate
-			Windyalt = MidSegmenty - Median * MedianDiry; // alternate wind y coordinate
-			if ( (Windx*Windx+Windy*Windy) > (Windxalt*Windxalt+Windyalt*Windyalt) ) { // Pick wind coordinates closest to GNSS vectors origin.
-				Windx = Windxalt;
-				Windy = Windyalt;
-			}
+			VhAvg = ( Vh + VhPrev ) / 2;
+			if ( (Segment > 1.0) && (VgxPrev != 0.0) && (VgyPrev != 0.0) && (DeltaVgx != 0.0) && (DeltaVgy != 0.0) && (VhAvg > Segment/2) ) {
+				MidSegmentx = (Vgx+VgxPrev)/2; // mid segment x
+				MidSegmenty = (Vgy+VgyPrev)/2; // mid segment y
+				Median = sqrt(VhAvg*VhAvg-SegmentSquare/4); // module of median between segment center and true airspedd origin (usinf average of current and previous true airspeed
+				MedianDirx = -DeltaVgy/Segment; // direction of median x
+				MedianDiry = DeltaVgx/Segment; // direction of median y
+				Windx = MidSegmentx + Median * MedianDirx; // wind x coordinate
+				Windy = MidSegmenty + Median * MedianDiry; // wind y coordinate
+				Windxalt = MidSegmentx - Median * MedianDirx; // alternate wind x coordinate
+				Windyalt = MidSegmenty - Median * MedianDiry; // alternate wind y coordinate
+				if ( (Windx*Windx+Windy*Windy) > (Windxalt*Windxalt+Windyalt*Windyalt) ) { // Pick wind coordinates closest to GNSS vectors origin.
+					Windx = Windxalt;
+					Windy = Windyalt;
+				}				
+				fcWind = 0.025 * 17.0 / Segment * Median; // fc low pass filter
+				fcWind1 = fcWind / (fcWind + 0.1); 
+				fcWind2 = 1 - fcWind1;
+				FilteredWindx = fcWind1 * FilteredWindx + fcWind2 * Windx;
+				FilteredWindy = fcWind1 * FilteredWindy + fcWind2 * Windy;
+				FilteredVhHeading = fcWind1 * FilteredVhHeading + fcWind2 * atan2(Vgy-Windy,Vgx-Windx);
+			} 				
+			VgxPrev = Vgx;
+			VgyPrev = Vgy;
+			VhPrev = Vh;
 		}
-		VgxPrev = Vgx;
-		VgyPrev = Vgy;
-		VhPrev = Vh;
-		// dynamic filter for wind speed, in function of GNSS route variation
-		if ( SegmentSquare > 0 ) {
-			fcWind = 3.0 * 17.0 / Segment * Median; // fc low pass filter has 1 second period when GNSS route variation is 3° 
-			fcWind1 = fcWind / (fcWind + 0.1); // sample period is 0.1 second
-			fcWind2 = 1 - fcWind1;
-		} else {
-			fcWind1 = 1.0; // when there is no route change from GNSS, keep current wind value
-			fcWind2 = 0.0;
-		}
-		FilteredWindx = fcWind1 * FilteredWindx + fcWind2 * Windx;
-		FilteredWindy = fcWind1 * FilteredWindy + fcWind2 * Windy;
-		FilteredVhHeading = fcWind1 * FilteredVhHeading + fcWind2 * atan2(Vgy-Windy,Vgx-Windx);		
-		
-
 		
 		if ( SENstream ) {
 		/* Sensor data
