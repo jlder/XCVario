@@ -1442,7 +1442,8 @@ void readSensors(void *pvParameters){
 	float FilteredWindy = 0.0;
 	float VhPrev = 0.0;
 	float VhAvg = 0.0;
-	float FilteredVhHeading = 0.0;
+	float VhHeading = 0.0;
+
 	#define DSR 7 // only compute wind every 7 samples.
 	int16_t tickDSR = 1;
 	
@@ -1649,7 +1650,9 @@ void readSensors(void *pvParameters){
 				fcWind2 = 1 - fcWind1;
 				FilteredWindx = fcWind1 * FilteredWindx + fcWind2 * Windx;
 				FilteredWindy = fcWind1 * FilteredWindy + fcWind2 * Windy;
-				FilteredVhHeading = fcWind1 * FilteredVhHeading + fcWind2 * atan2(Vgy-Windy,Vgx-Windx);
+				VhHeading = M_PI + atan2(Vgx-Windx, Vgy-Windy);
+				if ( VhHeading < 0 ) VhHeading = VhHeading + 2.0 * M_PI;
+				VhHeading = VhHeading * 180.0 / M_PI;
 			} 				
 			VgxPrev = Vgx;
 			VgyPrev = Vgy;
@@ -1709,7 +1712,7 @@ void readSensors(void *pvParameters){
 				(int32_t)(Ubi*100), (int32_t)(Vbi*100),(int32_t)(Wbi*100), (int32_t)(Vzbi*100),				
 				(int32_t)(TotalEnergy*100),
 				(int32_t)(FilteredWindx*100), (int32_t)(FilteredWindy*100),
-				(int32_t)(FilteredVhHeading*10)	);				
+				(int32_t)(VhHeading*10)	);				
 				
 			Router::sendXCV(str);
 		}
