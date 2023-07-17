@@ -181,7 +181,7 @@ static float integralFBz = 0.0;
 static float BankFilt = 0.0;
 static float GzPrim = 0.0;
 static float GzF = 0.0;
-
+static float GravityModuleErr = 0.0;
 static float BiasGz = 0.0;
 static float Pitch = 0.0;
 static float Roll = 0.0;
@@ -677,7 +677,7 @@ float halfex = 0.0;
 float halfey = 0.0;
 float halfez = 0.0;
 float qa, qb, qc, free_halfvx, free_halfvy, free_halfvz;
-float GravityModuleErr = 0.0;
+//float GravityModuleErr = 0.0; TODO
 float dynKp = Kp;
 float dynKi = Ki;
 float deltaGz;
@@ -1696,11 +1696,12 @@ void readSensors(void *pvParameters){
 			TotalEnergy in cm/s,
 			Wind speed x in cm/s,
 			Wind speed y in cm/s,
-			Vh heading in tenth of °
+			Vh heading in tenth of °,
+			GravityModuleErr in thousands of unit ( >0 to get 100% Kp/Ki)
 			<CR><LF>		
 		*/
 	
-			sprintf(str,"$S1,%lld,%i,%i,%i,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",
+			sprintf(str,"$S1,%lld,%i,%i,%i,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",
 				statTime, (int32_t)(statP*100.0),(int32_t)(teP*100.0), (int16_t)(dynP*10), 
 				(int64_t)(chosenGnss->time*1000.0), (int16_t)(chosenGnss->speed.x*100), (int16_t)(chosenGnss->speed.y*100), (int16_t)(chosenGnss->speed.z*100), (int16_t)(GNSSRouteraw*10),
 				(int32_t)(Pitch*1000.0), (int32_t)(Roll*1000.0), (int32_t)(Yaw*1000.0),
@@ -1712,7 +1713,8 @@ void readSensors(void *pvParameters){
 				(int32_t)(Ubi*100), (int32_t)(Vbi*100),(int32_t)(Wbi*100), (int32_t)(Vzbi*100),				
 				(int32_t)(TotalEnergy*100),
 				(int32_t)(FilteredWindx*100), (int32_t)(FilteredWindy*100),
-				(int32_t)(VhHeading*10)	);				
+				(int32_t)(VhHeading*10),
+				(int32_t)(GravityModuleErr*1000) );				
 				
 			Router::sendXCV(str);
 		}
