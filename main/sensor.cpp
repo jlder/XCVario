@@ -661,7 +661,7 @@ void MahonyUpdateIMU(float dt, float gxraw, float gyraw, float gzraw,
 #define Nbias 8000.0 // very long period for extracting error rate of change between IMU quaternion and free quaternion
 #define alphaBias (2.0 * (2.0 * Nbias - 1.0) / Nbias / (Nbias + 1.0))
 #define betaBias (6.0 / Nbias / (Nbias + 1.0) / PERIOD40HZ)
-#define Nlimit 0.15 // stability criteria for gravity estimation from accels in m/s²
+#define Nlimit 0.25 // stability criteria for gravity estimation from accels in m/s²
 #define Kp 2.0 //2.5 // proportional feedback to sync quaternion
 #define Ki 0.15 //0.15 // integral feedback to sync quaternion
 
@@ -832,7 +832,7 @@ float deltaGz;
 			// limit error magnitude
 			if ( GravityModuleErr < -5.0 ) GravityModuleErr = -5.0;
 			// compute dynamic gain function of error magnitude
-			Kgain = pow( 10.0, GravityModuleErr * 1.0 );
+			Kgain = pow( 10.0, GravityModuleErr * 6.0 );
 			dynKp = Kgain * Kp;
 			dynKi = Kgain * Ki;
 		}		
@@ -1399,7 +1399,12 @@ void readSensors(void *pvParameters){
     float KAoB = 3; // 3.5 for LS6,  2.97 for Ventus 3, 3 for Taurus TBC
     float KGx = 4; // 4.1 for LS6, 12 for Ventus 3, 4 for Taurus TBC
 	
-	
+	float TEraw;
+	float TEb = 0.0;
+	float deltaTE = 0.0;
+	float TEbPrim = 0.0;
+	float TEbiPrim;
+	float TASbiSquare;
 	float deltaEnergy;
 	float EnergyPrim = 0.0;
 	
@@ -1552,7 +1557,9 @@ void readSensors(void *pvParameters){
 		Vzbaro = - ALTPrim;
 
 		// compute AoA (Angle of attack) and AoB (Angle od slip)
-		WingLoad = gross_weight.get() / polar_wingarea.get();  // should be only computed when pilot change weight settings in XCVario
+		// WingLoad = gross_weight.get() / polar_wingarea.get();  // should be only computed when pilot change weight settings in XCVario
+		// TODO check WingLoad calculation
+		WingLoad = 38.0;
 		if ( (dynP > 100.0) && (abs(accelISUNEDBODY.z > 1.0)) ) { // compute AoA and AoB only when dynamic pressure is above 100 Pa and accel z above 1 m/s²
 			CL = -accelISUNEDBODY.z * 2 / RhoSLISA * WingLoad / CAS / CAS;
 			dAoA = ( CL - prevCL ) / CLA;
@@ -1613,12 +1620,19 @@ void readSensors(void *pvParameters){
 		#define fcAltbi2 ( 1.0 - fcAltbi1 )		
 		ALTbi = fcAltbi1 * ( ALTbi - Vzbi * dtstat ) + fcAltbi2	* ALT;
 		
-		// energy calculation
-		deltaEnergy = ( ALTbi + (Ubi * Ubi + Vbi * Vbi + Wbi * Wbi) / 2.0 / GRAVITY ) - EnergyFilt;
+		TASbiSquare = Ubi * Ubi + Vbi * Vbi + Wbi * Wbi;
+		// energy calculation : variation of potential and kinetic energy
+		deltaEnergy = ( ALTbi + TASbiSquare / GRAVITY ) - EnergyFilt;
 		EnergyPrim = EnergyPrim + betaEnergy * deltaEnergy;
 		EnergyFilt = EnergyFilt + alphaEnergy * deltaEnergy + EnergyPrim * dtstat;
-		
 		TotalEnergy = EnergyPrim;
+		
+		// energy calculation : correcting TE with TASbi.
+		TEraw = (1.0 - pow( (teP-(QNH.get()-1013.25)) * 0.000986923 , 0.1902891634 ) ) * (273.15 + OATemp) * 153.846153846;
+		deltaTE = TEraw - TEb;
+		TEbPrim = TEbPrim + betaEnergy * deltaTE;
+		TEb = TEb + alphaEnergy * deltaTE + TEbPrim * dtstat;
+		TEbiPrim = TEbPrim + (TASbiSquare - TAS * TAS) / 2.0 / GRAVITY;
 		
 		// compute wind speed using GNSS and horizontal true airspeed
 		Vgx = chosenGnss->speed.x; // GNSS x coordinate
@@ -1697,11 +1711,12 @@ void readSensors(void *pvParameters){
 			Wind speed x in cm/s,
 			Wind speed y in cm/s,
 			Vh heading in tenth of °,
-			GravityModuleErr in thousands of unit ( >0 to get 100% Kp/Ki)
+			GravityModuleErr in thousands of unit ( >0 to get 100% Kp/Ki),
+			TEbiPrim (Total energy variation from TE corrected with TASbi) in cm/s
 			<CR><LF>		
 		*/
 	
-			sprintf(str,"$S1,%lld,%i,%i,%i,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",
+			sprintf(str,"$S1,%lld,%i,%i,%i,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",
 				statTime, (int32_t)(statP*100.0),(int32_t)(teP*100.0), (int16_t)(dynP*10), 
 				(int64_t)(chosenGnss->time*1000.0), (int16_t)(chosenGnss->speed.x*100), (int16_t)(chosenGnss->speed.y*100), (int16_t)(chosenGnss->speed.z*100), (int16_t)(GNSSRouteraw*10),
 				(int32_t)(Pitch*1000.0), (int32_t)(Roll*1000.0), (int32_t)(Yaw*1000.0),
@@ -1714,7 +1729,8 @@ void readSensors(void *pvParameters){
 				(int32_t)(TotalEnergy*100),
 				(int32_t)(FilteredWindx*100), (int32_t)(FilteredWindy*100),
 				(int32_t)(VhHeading*10),
-				(int32_t)(GravityModuleErr*1000) );				
+				(int32_t)(GravityModuleErr*1000), 
+				(int32_t)(TEbiPrim*100) );				
 				
 			Router::sendXCV(str);
 		}
