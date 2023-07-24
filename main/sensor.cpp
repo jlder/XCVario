@@ -700,12 +700,6 @@ float deltaGz;
 	if ( ModuleKineticAccelF > ModuleKineticAccelMax  ) ModuleKineticAccelMax = fcKinAccMinMax1 * ModuleKineticAccelMax + fcKinAccMinMax2 * ModuleKineticAccelF;
 	KineticThreshold = ModuleKineticAccelMin + 0.05; 
 
-	/*if (TSTstream) {
-		sprintf(str,"$KIN,%lld,%.6f,%.6f,%.6f,%.6f,%.6f\r\n",
-				gyroTime, ModuleKineticAccel, ModuleKineticAccelF, ModuleKineticAccelMin, ModuleKineticAccelMax, KineticThreshold );
-		Router::sendXCV(str);
-	}*/
-	
 	// To estimate gyro Bias:
 	// - compute error between vertical vector from IMU quaternion and free quaternion
 	// - estimate bias by computing error rate of change on each axis using long term alpha/beta filter
@@ -1555,12 +1549,9 @@ void readSensors(void *pvParameters){
 		// in glider operation, gaining altitude and energy is considered positive. However in NED representation vertical axis is positive pointing down.
 		// therefore Vzbaro in NED is the opposite of altitude variation.
 		Vzbaro = - ALTPrim;
-
 		// compute AoA (Angle of attack) and AoB (Angle od slip)
-		// WingLoad = gross_weight.get() / polar_wingarea.get();  // should be only computed when pilot change weight settings in XCVario
-		// TODO check WingLoad calculation
-		WingLoad = 38.0;
-		if ( (dynP > 100.0) && (abs(accelISUNEDBODY.z > 1.0)) ) { // compute AoA and AoB only when dynamic pressure is above 100 Pa and accel z above 1 m/s²
+		WingLoad = gross_weight.get() / polar_wingarea.get();  // should be only computed when pilot change weight settings in XCVario
+		if ( (dynP>100.0) && (CAS>10.0) && (TAS>10.0) && (abs(accelISUNEDBODY.z) > 1.0) ) { // compute AoA and AoB only when dynamic pressure is above 100 Pa, CAS & TAS abobe 10m/s and accel z above 1 m/s²
 			CL = -accelISUNEDBODY.z * 2 / RhoSLISA * WingLoad / CAS / CAS;
 			dAoA = ( CL - prevCL ) / CLA;
 			prevCL = CL;
