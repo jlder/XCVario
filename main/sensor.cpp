@@ -1617,7 +1617,7 @@ void readSensors(void *pvParameters){
 		EnergyPrim = EnergyPrim + betaEnergy * deltaEnergy;
 		EnergyFilt = EnergyFilt + alphaEnergy * deltaEnergy + EnergyPrim * dtstat;
 		TotalEnergy = EnergyPrim;
-		
+
 		// energy calculation : correcting TE with TASbi.
 		TEraw = (1.0 - pow( (teP-(QNH.get()-1013.25)) * 0.000986923 , 0.1902891634 ) ) * (273.15 + OATemp) * 153.846153846;
 		deltaTE = TEraw - TEb;
@@ -1636,7 +1636,7 @@ void readSensors(void *pvParameters){
 			SegmentSquare = DeltaVgx*DeltaVgx+DeltaVgy*DeltaVgy; // squared module of segment between speed vectors extremities
 			Segment = sqrt(SegmentSquare); // module of segment
 			VhAvg = ( Vh + VhPrev ) / 2;
-			if ( (Segment > 1.0) && (VgxPrev != 0.0) && (VgyPrev != 0.0) && (DeltaVgx != 0.0) && (DeltaVgy != 0.0) && (VhAvg > Segment/2) ) {
+			if ( (abs(Vh-VhPrev)<0.35) && (Segment > 1.0) && (VgxPrev != 0.0) && (VgyPrev != 0.0) && (DeltaVgx != 0.0) && (DeltaVgy != 0.0) && (VhAvg > Segment/2) ) {
 				MidSegmentx = (Vgx+VgxPrev)/2; // mid segment x
 				MidSegmenty = (Vgy+VgyPrev)/2; // mid segment y
 				Median = sqrt(VhAvg*VhAvg-SegmentSquare/4); // module of median between segment center and true airspedd origin (usinf average of current and previous true airspeed
@@ -1650,7 +1650,7 @@ void readSensors(void *pvParameters){
 					Windx = Windxalt;
 					Windy = Windyalt;
 				}				
-				fcWind = 0.025 * 17.0 / Segment * Median; // fc low pass filter
+				fcWind = 0.02 * 17.0 / Segment * Median; // fc low pass filter
 				fcWind1 = fcWind / (fcWind + 0.1); 
 				fcWind2 = 1 - fcWind1;
 				FilteredWindx = fcWind1 * FilteredWindx + fcWind2 * Windx;
