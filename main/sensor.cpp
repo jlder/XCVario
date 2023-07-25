@@ -233,15 +233,15 @@ static float ViPrimSF = 0.0;
 static float deltaWiPrimS = 0.0;
 static float WiPrimPrimS = 0.0;
 static float WiPrimSF = 0.0;
-static float deltaUiPrimL = 0.0;
-static float UiPrimPrimL = 0.0;
-static float UiPrimLF = 0.0;
-static float deltaViPrimL = 0.0;
-static float ViPrimPrimL = 0.0;
-static float ViPrimLF = 0.0;
-static float deltaWiPrimL = 0.0;
-static float WiPrimPrimL = 0.0;
-static float WiPrimLF = 0.0;
+//static float deltaUiPrimL = 0.0;
+//static float UiPrimPrimL = 0.0;
+//static float UiPrimLF = 0.0;
+//static float deltaViPrimL = 0.0;
+//static float ViPrimPrimL = 0.0;
+//static float ViPrimLF = 0.0;
+//static float deltaWiPrimL = 0.0;
+//static float WiPrimPrimL = 0.0;
+//static float WiPrimLF = 0.0;
 // variables for gravity estimation
 mpud::float_axes_t GravIMU;
 mpud::float_axes_t gravISUNEDBODY;
@@ -296,15 +296,15 @@ static float VbFS = 0.0;
 static float deltaWbS = 0.0;
 static float WbPrimS = 0.0;
 static float WbFS = 0.0;
-static float deltaUbL = 0.0;
-static float UbPrimLF = 0.0;
-static float UbFL = 0.0;
-static float deltaVbL = 0.0;
-static float VbPrimLF = 0.0;
-static float VbFL = 0.0;
-static float deltaWbL = 0.0;
-static float WbPrimLF = 0.0;
-static float WbFL = 0.0;
+//static float deltaUbL = 0.0;
+//static float UbPrimLF = 0.0;
+//static float UbFL = 0.0;
+//static float deltaVbL = 0.0;
+//static float VbPrimLF = 0.0;
+//static float VbFL = 0.0;
+//static float deltaWbL = 0.0;
+//static float WbPrimLF = 0.0;
+//static float WbFL = 0.0;
 static float UbiPrim = 0.0;
 static float VbiPrim = 0.0;
 static float WbiPrim = 0.0;
@@ -341,6 +341,7 @@ static float ALTPrim = 0.0;
 static float Vzbaro = 0.0;
 static float ALT = 0.0;
 static float EnergyFilt = 0.0;
+static float TEbiPrim = 0.0;
 float NEnergy = 10.0;
 float alphaEnergy;
 float betaEnergy;
@@ -592,10 +593,10 @@ void drawDisplay(void *pvParameters){
 				// ESP_LOGI(FNAME,"TE=%2.3f", te_vario.get() );
 // modif gfm affichage d'une tension batterie nulle tant que les biais gyros n'ont pas été initialisés
 				if (BIAS_Init > 0){
-					display->drawDisplay( airspeed, te_vario.get(), aTE, polar_sink, altitude.get(), t, battery, s2f_delta, as2f, TotalEnergy /*average_climb.get()*/, Switch::getCruiseState(), gflags.standard_setting, flap_pos.get() );
+					display->drawDisplay( airspeed, te_vario.get(), TEbiPrim /*aTE*/, polar_sink, altitude.get(), t, battery, s2f_delta, as2f, TotalEnergy /*average_climb.get()*/, Switch::getCruiseState(), gflags.standard_setting, flap_pos.get() );
 				}	
 				else {
-					display->drawDisplay( airspeed,  te_vario.get(), aTE, polar_sink, altitude.get(), t, 0.0, s2f_delta, as2f, TotalEnergy /*average_climb.get()*/, Switch::getCruiseState(), gflags.standard_setting, flap_pos.get() );
+					display->drawDisplay( airspeed,  te_vario.get(), TEbiPrim /*aTE*/, polar_sink, altitude.get(), t, 0.0, s2f_delta, as2f, TotalEnergy /*average_climb.get()*/, Switch::getCruiseState(), gflags.standard_setting, flap_pos.get() );
 				}
 // fin modif gfm
 				}
@@ -1397,10 +1398,12 @@ void readSensors(void *pvParameters){
 	float TEb = 0.0;
 	float deltaTE = 0.0;
 	float TEbPrim = 0.0;
-	float TEbiPrim;
+	float TEbiPrimraw;
 	float TASbiSquare;
 	float deltaEnergy;
 	float EnergyPrim = 0.0;
+	float deltaTEbiPrim;
+	float TEbiPrimPrim = 0.0;
 	
 	int16_t FirsTimeSensor = 2;
 	
@@ -1581,9 +1584,9 @@ void readSensors(void *pvParameters){
 
 		// Baro acceleration derivative Short period alpha/beta filter
 		// U/V/WbPrimS are used to compute U/V/WbiPrim, baro inertial accelerations
-		#define NBaroAccS 5.0 // accel kinetic alpha/beta filter coeff
+		#define NBaroAccS 6.0 // accel kinetic alpha/beta filter coeff
 		#define alphaBaroAccS (2.0 * (2.0 * NBaroAccS - 1.0) / NBaroAccS / (NBaroAccS + 1.0))
-		#define betaBaroAccS (6.0 / NBaroAccS / (NBaroAccS + 1.0) / PERIOD40HZ)			
+		#define betaBaroAccS (6.0 / NBaroAccS / (NBaroAccS + 1.0) / PERIOD10HZ)			
 		deltaUbS = Ub - UbFS;
 		UbPrimS = UbPrimS + betaBaroAccS * deltaUbS;
 		UbFS = UbFS + alphaBaroAccS * deltaUbS + UbPrimS * dtstat;
@@ -1620,10 +1623,19 @@ void readSensors(void *pvParameters){
 
 		// energy calculation : correcting TE with TASbi.
 		TEraw = (1.0 - pow( (teP-(QNH.get()-1013.25)) * 0.000986923 , 0.1902891634 ) ) * (273.15 + OATemp) * 153.846153846;
+		// Compute TE derivative using alpha/beta filter
+		#define NTEb 7.0 // TEbi alpha/beta filter coeff
+		#define alphaTEb (2.0 * (2.0 * NTEb - 1.0) / NTEb / (NTEb + 1.0))
+		#define betaTEb (6.0 / NTEb / (NTEb + 1.0) / PERIOD10HZ)	
 		deltaTE = TEraw - TEb;
-		TEbPrim = TEbPrim + betaEnergy * deltaTE;
-		TEb = TEb + alphaEnergy * deltaTE + TEbPrim * dtstat;
-		TEbiPrim = TEbPrim + (TASbiSquare - TAS * TAS) / 2.0 / GRAVITY;
+		TEbPrim = TEbPrim + betaTEb * deltaTE;
+		TEb = TEb + alphaTEb * deltaTE + TEbPrim * dtstat;
+		// Coorect TE derivative with error between TASbi and TAS
+		TEbiPrimraw = TEbPrim + (TASbiSquare - TAS * TAS) / 2.0 / GRAVITY;
+		// filter resulting TEbi derivative for pilot ( same constant as previous total energy calculation using baro/inertiel static and TAS.
+		deltaTEbiPrim = TEbiPrimraw - TEbiPrim;
+		TEbiPrimPrim = TEbiPrimPrim + betaEnergy * deltaTEbiPrim;
+		TEbiPrim = TEbiPrim + alphaEnergy * deltaTEbiPrim + TEbiPrimPrim * dtstat;
 		
 		// compute wind speed using GNSS and horizontal true airspeed
 		Vgx = chosenGnss->speed.x; // GNSS x coordinate
@@ -1964,9 +1976,8 @@ void readTemp(void *pvParameters){
 				if ( delta_temperature > 0.1 )  delta_temperature = 0.1; // limit temperature variation to 0.1°C /s in case of outliers within "normal" temperature range.
 				if ( delta_temperature < -0.1 )  delta_temperature = -0.1;				
 				temperature =  temperature + 0.25 * delta_temperature; // A bit low pass as strategy against toggling
-				temperature = std::round(temperature*10)/10;
 				if( temperature != temp_prev ){
-					OAT.set( temperature );
+					OAT.set( std::round(temperature*10)/10 );
 					ESP_LOGI(FNAME,"NEW temperature=%2.1f, prev T=%2.1f", temperature, temp_prev );
 					temp_prev = temperature;
 				}
