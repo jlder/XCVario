@@ -233,15 +233,6 @@ static float ViPrimSF = 0.0;
 static float deltaWiPrimS = 0.0;
 static float WiPrimPrimS = 0.0;
 static float WiPrimSF = 0.0;
-//static float deltaUiPrimL = 0.0;
-//static float UiPrimPrimL = 0.0;
-//static float UiPrimLF = 0.0;
-//static float deltaViPrimL = 0.0;
-//static float ViPrimPrimL = 0.0;
-//static float ViPrimLF = 0.0;
-//static float deltaWiPrimL = 0.0;
-//static float WiPrimPrimL = 0.0;
-//static float WiPrimLF = 0.0;
 // variables for gravity estimation
 mpud::float_axes_t GravIMU;
 mpud::float_axes_t gravISUNEDBODY;
@@ -296,15 +287,6 @@ static float VbFS = 0.0;
 static float deltaWbS = 0.0;
 static float WbPrimS = 0.0;
 static float WbFS = 0.0;
-//static float deltaUbL = 0.0;
-//static float UbPrimLF = 0.0;
-//static float UbFL = 0.0;
-//static float deltaVbL = 0.0;
-//static float VbPrimLF = 0.0;
-//static float VbFL = 0.0;
-//static float deltaWbL = 0.0;
-//static float WbPrimLF = 0.0;
-//static float WbFL = 0.0;
 static float UbiPrim = 0.0;
 static float VbiPrim = 0.0;
 static float WbiPrim = 0.0;
@@ -593,10 +575,10 @@ void drawDisplay(void *pvParameters){
 				// ESP_LOGI(FNAME,"TE=%2.3f", te_vario.get() );
 // modif gfm affichage d'une tension batterie nulle tant que les biais gyros n'ont pas été initialisés
 				if (BIAS_Init > 0){
-					display->drawDisplay( airspeed, te_vario.get(), TEbiPrim /*aTE*/, polar_sink, altitude.get(), t, battery, s2f_delta, as2f, TotalEnergy /*average_climb.get()*/, Switch::getCruiseState(), gflags.standard_setting, flap_pos.get() );
+					display->drawDisplay( airspeed, TotalEnergy /*te_vario.get()*/,  TEbiPrim/*aTE*/, polar_sink, altitude.get(), t, battery, s2f_delta, as2f, te_vario.get()/*average_climb.get()*/, Switch::getCruiseState(), gflags.standard_setting, flap_pos.get() );
 				}	
 				else {
-					display->drawDisplay( airspeed,  te_vario.get(), TEbiPrim /*aTE*/, polar_sink, altitude.get(), t, 0.0, s2f_delta, as2f, TotalEnergy /*average_climb.get()*/, Switch::getCruiseState(), gflags.standard_setting, flap_pos.get() );
+					display->drawDisplay( airspeed,  TotalEnergy /*te_vario.get()*/, TEbiPrim /*aTE*/, polar_sink, altitude.get(), t, 0.0, s2f_delta, as2f, te_vario.get()/*average_climb.get()*/, Switch::getCruiseState(), gflags.standard_setting, flap_pos.get() );
 				}
 // fin modif gfm
 				}
@@ -1450,6 +1432,8 @@ void readSensors(void *pvParameters){
 	int16_t tickDSR = 1;
 	
 	int client_sync_dataIdx = 0;
+	
+	float mpu_heat_pwm = 0.0;	
 
 	while (1)
 	{ 
@@ -1719,7 +1703,7 @@ void readSensors(void *pvParameters){
 			<CR><LF>		
 		*/
 	
-			sprintf(str,"$S1,%lld,%i,%i,%i,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",
+			sprintf(str,"$S1,%lld,%i,%i,%i,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",
 				statTime, (int32_t)(statP*100.0),(int32_t)(teP*100.0), (int16_t)(dynP*10), 
 				(int64_t)(chosenGnss->time*1000.0), (int16_t)(chosenGnss->speed.x*100), (int16_t)(chosenGnss->speed.y*100), (int16_t)(chosenGnss->speed.z*100), (int16_t)(GNSSRouteraw*10),
 				(int32_t)(Pitch*1000.0), (int32_t)(Roll*1000.0), (int32_t)(Yaw*1000.0),
@@ -1733,7 +1717,9 @@ void readSensors(void *pvParameters){
 				(int32_t)(FilteredWindx*100), (int32_t)(FilteredWindy*100),
 				(int32_t)(VhHeading*10),
 				(int32_t)(GravityModuleErr*1000), 
-				(int32_t)(TEbiPrim*100) );				
+				(int32_t)(TEbiPrim*100),
+				(int32_t) mpu_heat_pwm
+				);				
 				
 			Router::sendXCV(str);
 		}
