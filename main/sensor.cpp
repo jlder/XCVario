@@ -1705,11 +1705,13 @@ void readSensors(void *pvParameters){
 			Wind speed y in cm/s,
 			Vh heading in tenth of °,
 			GravityModuleErr in thousands of unit ( >0 to get 100% Kp/Ki),
-			TEbiPrim (Total energy variation from TE corrected with TASbi) in cm/s
+			TEbiPrim (Total energy variation from TE corrected with TASbi) in cm/s,
+			MPU.mpu_heat_pwn integer pwm unit,
+			dtstat in ms
 			<CR><LF>		
 		*/
 	
-			sprintf(str,"$S1,%lld,%i,%i,%i,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",
+			sprintf(str,"$S1,%lld,%i,%i,%i,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",
 				statTime, (int32_t)(statP*100.0),(int32_t)(teP*100.0), (int16_t)(dynP*10), 
 				//(int64_t)(chosenGnss->time*1000.0), (int16_t)(chosenGnss->speed.x*100), (int16_t)(chosenGnss->speed.y*100), (int16_t)(chosenGnss->speed.z*100), (int16_t)(GNSSRouteraw*10),
 				(int64_t)(0.0), (int16_t)(chosenGnss->speed.x*100), (int16_t)(chosenGnss->speed.y*100), (int16_t)(0.0), (int16_t)(0.0),			
@@ -1730,7 +1732,8 @@ void readSensors(void *pvParameters){
 				(int32_t)(GravityModuleErr*1000), 
 				//(int32_t)(TEbiPrim*100),
 				(int32_t)(0.0),				
-				(int32_t)rint(MPU.mpu_heat_pwm)
+				(int32_t)rint(MPU.mpu_heat_pwm),
+				(int32_t)(dtstat*1000) 				
 				);				
 				
 			Router::sendXCV(str);
