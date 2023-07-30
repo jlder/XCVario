@@ -162,6 +162,7 @@ Compass *compass = 0;
 BTSender btsender;
 
 // IMU variables	
+int countIMU = 0;
 mpud::float_axes_t accelISUNEDMPU;
 mpud::float_axes_t accelISUNEDBODY;	
 mpud::float_axes_t gyroRPS;
@@ -309,6 +310,8 @@ static float temperature=15.0;
 static float delta_temperature=0.0;
 static float XCVTemp=15.0;//External temperature for MPU temp control
 
+static float AoA = 0.0;
+static float AoB = 0.0;
 static float Rho;
 static float CASraw;
 static float deltaCAS;
@@ -323,7 +326,6 @@ static float ALTPrim = 0.0;
 static float Vzbaro = 0.0;
 static float ALT = 0.0;
 static float EnergyFilt = 0.0;
-static float TEbiPrim = 0.0;
 float NEnergy = 10.0;
 float alphaEnergy;
 float betaEnergy;
@@ -345,12 +347,17 @@ static float Vzbi = 0.0;
 static float ALTbi = 0.0;
 
 static float TotalEnergy = 0.0;
+static float TotalEnergyAvg = 0.0;
+
 #define NVztot 7.0 // CAS alpha/beta filter coeff
 #define alphaVztot (2.0 * (2.0 * NVztot - 1.0) / NVztot / (NVztot + 1.0))
 #define betaVztot (6.0 / NVztot / (NVztot + 1.0) / PERIOD10HZ)
 #define NVelAcc 7.0 // pneumatic velocity variation alpha/beta filter coeff
 #define alphaVelAcc (2.0 * (2.0 * NVelAcc - 1.0) / NVelAcc / (NVelAcc + 1.0))
 #define betaVelAcc (6.0 / NVelAcc / (NVelAcc + 1.0) / PERIOD10HZ)
+
+static float FilteredWindx = 0.0;
+static float FilteredWindy = 0.0;
 
 static float battery=0.0;
 
@@ -398,7 +405,12 @@ AdaptUGC *egl = 0;
 // Fligth Test
 extern UbloxGnssDecoder s1UbloxGnssDecoder;
 extern UbloxGnssDecoder s2UbloxGnssDecoder;
-
+// when GNSS receiver is connected to S1 interface
+const gnss_data_t *gnss1;
+// when GNSS receiver is connected to S2 interface
+const gnss_data_t *gnss2;
+// select between S1 and S2
+const gnss_data_t *chosenGnss;
 
 #define GYRO_FS (mpud::GYRO_FS_250DPS)
 
@@ -575,10 +587,10 @@ void drawDisplay(void *pvParameters){
 				// ESP_LOGI(FNAME,"TE=%2.3f", te_vario.get() );
 // modif gfm affichage d'une tension batterie nulle tant que les biais gyros n'ont pas été initialisés
 				if (BIAS_Init > 0){
-					display->drawDisplay( airspeed, TotalEnergy /*te_vario.get()*/,  TEbiPrim/*aTE*/, polar_sink, altitude.get(), t, battery, s2f_delta, as2f, te_vario.get()/*average_climb.get()*/, Switch::getCruiseState(), gflags.standard_setting, flap_pos.get() );
+					display->drawDisplay( airspeed, TotalEnergy /*te_vario.get()*/,  TotalEnergyAvg/*aTE*/, polar_sink, altitude.get(), t, battery, s2f_delta, as2f, average_climb.get(), Switch::getCruiseState(), gflags.standard_setting, flap_pos.get() );
 				}	
 				else {
-					display->drawDisplay( airspeed,  TotalEnergy /*te_vario.get()*/, TEbiPrim /*aTE*/, polar_sink, altitude.get(), t, 0.0, s2f_delta, as2f, te_vario.get()/*average_climb.get()*/, Switch::getCruiseState(), gflags.standard_setting, flap_pos.get() );
+					display->drawDisplay( airspeed,  TotalEnergy /*te_vario.get()*/, TotalEnergyAvg /*aTE*/, polar_sink, altitude.get(), t, 0.0, s2f_delta, as2f, average_climb.get(), Switch::getCruiseState(), gflags.standard_setting, flap_pos.get() );
 				}
 // fin modif gfm
 				}
@@ -935,6 +947,8 @@ static void processIMU(void *pvParameters)
 	fcVelbi2 = ( 1.0 - fcVelbi1 );
 	
 	while (1) {
+		
+		countIMU++;
 
 		TickType_t xLastWakeTime_mpu =xTaskGetTickCount();
 		
@@ -1221,24 +1235,164 @@ static void processIMU(void *pvParameters)
 			}
 		}
 		
-		// If required stream IMU data
-		if ( IMUstream  ) {
-			/*
-			IMU data in ISU and NED orientation
-				$I,
-				MPU (gyro) time in milli second,
-				Acceleration in BODY X-Axis in tenth milli m/s²,
-				Acceleration in BODY Y-Axis in tenth milli m/s²,
-				Acceleration in BODU Z-Axis in tenth milli m/s²,				
-				Rotation BODY X-Axis in hundredth of milli rad/s,
-				Rotation BODY Y-Axis in hundredth of milli rad/s,
-				Rotation BODY Z-Axis in hundredth of milli rad/s,				
-				<CR><LF>	
-			*/			
-			sprintf(str,"$I,%lld,%i,%i,%i,%i,%i,%i\r\n",
+		/*
+		IMU data in ISU and NED orientation
+			$I,
+			MPU (gyro) time in milli second,
+			Acceleration in BODY X-Axis in tenth milli m/s²,
+			Acceleration in BODY Y-Axis in tenth milli m/s²,
+			Acceleration in BODU Z-Axis in tenth milli m/s²,				
+			Rotation BODY X-Axis in hundredth of milli rad/s,
+			Rotation BODY Y-Axis in hundredth of milli rad/s,
+			Rotation BODY Z-Axis in hundredth of milli rad/s,				
+			<CR><LF>	
+		*/
+
+		/* Sensor data
+			$S1,			
+			static time in milli second,
+			static pressure in Pa,
+			TE pressure in deci Pa,
+			Dynamic pressure in tenth of Pa,
+			GNSS time in milli second,
+			GNSS speed x or north in centimeters/s,
+			GNSS speed y or east in centimeters/s,
+			GNSS speed z or down in centimeters/s,
+			GNSS route in tenth of °,			
+			Pitch in milli rad,
+			Roll in milli rad,
+			Yaw in milli rad,
+			Gravity estimation x in milli m/s²,
+			Gravity estimation y in milli m/s²,
+			Gravity estimation z in milli m/s²,			
+			CAS in cm/s,
+			TAS in cm/s,
+			ALT in cm,
+			Vzbaro in cm/s,
+			AoA angle in mrad,
+			AoB  angle in mrad,
+			UiPrim in cm/s²,
+			ViPrim in cm/s²,
+			WiPrim in cm/s²,			
+			Ub in cm/s,
+			Vb in cm/s,
+			Wb in cm/s,
+			Ubi in cm/s,
+			Vbi in cm/s,
+			Wbi in cm/s,
+			Vzbi in cm/s,			
+			TotalEnergy in cm/s,
+			Wind speed x in cm/s,
+			Wind speed y in cm/s,
+			Vh heading in tenth of °,
+			GravityModuleErr in thousands of unit ( >0 to get 100% Kp/Ki),
+			TEbiPrim (Total energy variation from TE corrected with TASbi) in cm/s,
+			MPU.mpu_heat_pwn integer pwm unit,
+			dtstat in ms
+			<CR><LF>		
+		*/
+		
+		/* 
+			$S2,
+			Outside Air Temperature in tenth of °C,
+			MPU temperature in tenth °C,
+			GNSS fix 0 to 5   3=3D   4= 3D diff,
+			GNSS number of satelites used,
+			Ground Gyro bias x in hundredth of milli rad/s,
+			Ground Gyro bias y in hundredth of milli rad/s,
+			Ground Gyro bias z in hundredth of milli rad/s,			
+			IMU Gyro bias x in hundredth of milli rad/s,
+			IMU Gyro bias y in hundredth of milli rad/s,
+			IMU Gyro bias z in hundredth of milli rad/s,
+			Local Gravity in tenth of milli m/s²,
+			Number of ground bias estimations,
+			free quaternion Pitch in milli rad,
+			free quaternion Roll in milli rad,
+			free quaternion Yaw in milli rad,
+			Kinetic accel min in milli m/s²,
+			Kinetic accel max in milli m/s²,
+			Kinetic threshold in milli m/s²
+		*/		
+		if ( !(countIMU % 4) ) { 
+			if ( !(countIMU % 200) ) {
+				// send $I, $S1 and S2
+				sprintf(str,"$I,%lld,%i,%i,%i,%i,%i,%i\r\n$S1,%lld,%i,%i,%i,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$S2,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",
+				// Inertial data
 				gyroTime,
 				(int32_t)(accelISUNEDBODY.x*10000.0), (int32_t)(accelISUNEDBODY.y*10000.0), (int32_t)(accelISUNEDBODY.z*10000.0),
-				(int32_t)(gyroISUNEDBODY.x*100000.0), (int32_t)(gyroISUNEDBODY.y*100000.0),(int32_t)(gyroISUNEDBODY.z*100000.0) );
+				(int32_t)(gyroISUNEDBODY.x*100000.0), (int32_t)(gyroISUNEDBODY.y*100000.0),(int32_t)(gyroISUNEDBODY.z*100000.0),
+				// Sensors 1 data
+				statTime, (int32_t)(statP*100.0),(int32_t)(teP*100.0), (int16_t)(dynP*10), 
+				//(int64_t)(chosenGnss->time*1000.0), (int16_t)(chosenGnss->speed.x*100), (int16_t)(chosenGnss->speed.y*100), (int16_t)(chosenGnss->speed.z*100), (int16_t)(GNSSRouteraw*10),
+				(int64_t)(0.0), (int16_t)(chosenGnss->speed.x*100), (int16_t)(chosenGnss->speed.y*100), (int16_t)(0.0), (int16_t)(0.0),			
+				(int32_t)(Pitch*1000.0), (int32_t)(Roll*1000.0), (int32_t)(Yaw*1000.0),
+				//(int32_t)(gravISUNEDBODY.x*1000), (int32_t)(gravISUNEDBODY.y*1000), (int32_t)(gravISUNEDBODY.z*1000),
+				(int32_t)(0.0), (int32_t)(0.0), (int32_t)(0.0),				
+				(int32_t)(CAS*100), (int32_t)(TAS*100), (int32_t)(ALT*100), (int32_t)(Vzbaro*100),
+				(int32_t)(AoA*1000), (int32_t)(AoB*1000),
+				//(int32_t)(UiPrim*100), (int32_t)(ViPrim*100), (int32_t)(WiPrim*100),
+				(int32_t)(0.0), (int32_t)(0.0), (int32_t)(0.0),
+				//(int32_t)(Ub*100), (int32_t)(Vb*100), (int32_t)(Wb*100),
+				(int32_t)(0.0), (int32_t)(0.0), (int32_t)(0.0),				
+				(int32_t)(Ubi*100), (int32_t)(Vbi*100),(int32_t)(Wbi*100), (int32_t)(Vzbi*100),				
+				(int32_t)(TotalEnergy*100),
+				(int32_t)(FilteredWindx*100), (int32_t)(FilteredWindy*100),
+				//(int32_t)(VhHeading*10),
+				(int32_t)(0.0),				
+				(int32_t)(GravityModuleErr*1000), 
+				//(int32_t)(TEbiPrim*100),
+				(int32_t)(0.0),				
+				(int32_t)rint(MPU.mpu_heat_pwm),
+				(int32_t)(dtstat*1000),
+				// Sensor 2 data
+				(int16_t)(OATemp*10.0), (int16_t)(MPUtempcel*10.0), chosenGnss->fix, chosenGnss->numSV,
+				(int32_t)(GroundGyroBias.x*100000.0), (int32_t)(GroundGyroBias.y*100000.0), (int32_t)(GroundGyroBias.z*100000.0),				
+				(int32_t)(BiasQuatGx*100000.0), (int32_t)(BiasQuatGy*100000.0), (int32_t)(BiasQuatGz*100000.0),
+				(int32_t)(GRAVITY*10000.0),(int16_t)BIAS_Init,
+				(int32_t)(free_Pitch*1000.0), (int32_t)(free_Roll*1000.0), (int32_t)(free_Yaw*1000.0),
+				(int32_t)(ModuleKineticAccelMin*1000.0), (int32_t)(ModuleKineticAccelMax*1000.0), (int32_t)(KineticThreshold*1000.0)
+				);				
+				Router::sendXCV(str);
+			} else { 
+				// send $I and $S1
+				sprintf(str,"$I,%lld,%i,%i,%i,%i,%i,%i\r\n$S1,%lld,%i,%i,%i,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",
+				// Inertial data
+				gyroTime,
+				(int32_t)(accelISUNEDBODY.x*10000.0), (int32_t)(accelISUNEDBODY.y*10000.0), (int32_t)(accelISUNEDBODY.z*10000.0),
+				(int32_t)(gyroISUNEDBODY.x*100000.0), (int32_t)(gyroISUNEDBODY.y*100000.0),(int32_t)(gyroISUNEDBODY.z*100000.0),
+				// Sensors 1 data
+				statTime, (int32_t)(statP*100.0),(int32_t)(teP*100.0), (int16_t)(dynP*10), 
+				//(int64_t)(chosenGnss->time*1000.0), (int16_t)(chosenGnss->speed.x*100), (int16_t)(chosenGnss->speed.y*100), (int16_t)(chosenGnss->speed.z*100), (int16_t)(GNSSRouteraw*10),
+				(int64_t)(0.0), (int16_t)(chosenGnss->speed.x*100), (int16_t)(chosenGnss->speed.y*100), (int16_t)(0.0), (int16_t)(0.0),			
+				(int32_t)(Pitch*1000.0), (int32_t)(Roll*1000.0), (int32_t)(Yaw*1000.0),
+				//(int32_t)(gravISUNEDBODY.x*1000), (int32_t)(gravISUNEDBODY.y*1000), (int32_t)(gravISUNEDBODY.z*1000),
+				(int32_t)(0.0), (int32_t)(0.0), (int32_t)(0.0),				
+				(int32_t)(CAS*100), (int32_t)(TAS*100), (int32_t)(ALT*100), (int32_t)(Vzbaro*100),
+				(int32_t)(AoA*1000), (int32_t)(AoB*1000),
+				//(int32_t)(UiPrim*100), (int32_t)(ViPrim*100), (int32_t)(WiPrim*100),
+				(int32_t)(0.0), (int32_t)(0.0), (int32_t)(0.0),
+				//(int32_t)(Ub*100), (int32_t)(Vb*100), (int32_t)(Wb*100),
+				(int32_t)(0.0), (int32_t)(0.0), (int32_t)(0.0),				
+				(int32_t)(Ubi*100), (int32_t)(Vbi*100),(int32_t)(Wbi*100), (int32_t)(Vzbi*100),				
+				(int32_t)(TotalEnergy*100),
+				(int32_t)(FilteredWindx*100), (int32_t)(FilteredWindy*100),
+				//(int32_t)(VhHeading*10),
+				(int32_t)(0.0),				
+				(int32_t)(GravityModuleErr*1000), 
+				//(int32_t)(TEbiPrim*100),
+				(int32_t)(0.0),				
+				(int32_t)rint(MPU.mpu_heat_pwm),
+				(int32_t)(dtstat*1000) 				
+				);
+				Router::sendXCV(str);
+			}
+		} else {
+			// send $I
+			sprintf(str,"$I,%lld,%i,%i,%i,%i,%i,%i\r\n",
+			gyroTime,
+			(int32_t)(accelISUNEDBODY.x*10000.0), (int32_t)(accelISUNEDBODY.y*10000.0), (int32_t)(accelISUNEDBODY.z*10000.0),
+			(int32_t)(gyroISUNEDBODY.x*100000.0), (int32_t)(gyroISUNEDBODY.y*100000.0),(int32_t)(gyroISUNEDBODY.z*100000.0)
+			);
 			Router::sendXCV(str);
 		}
 
@@ -1370,22 +1524,13 @@ void readSensors(void *pvParameters){
 	float dAoA = 0.0;
 	float AoARaw = 0.0;
 	float WingLoad = 40.0;
-	float AoA = 0.0;
-	float AoB = 0.0;
     float CLA = 5.67; // CLA=2*PI/(1+2/AR) = 5.75 for LS6, 5.98 for Ventus 3, 5.67 for Taurus
     float KAoB = 3; // 3.5 for LS6,  2.97 for Ventus 3, 3 for Taurus TBC
     float KGx = 4; // 4.1 for LS6, 12 for Ventus 3, 4 for Taurus TBC
 	
-	float TEraw;
-	float TEb = 0.0;
-	float deltaTE = 0.0;
-	float TEbPrim = 0.0;
-	float TEbiPrimraw;
 	float TASbiSquare;
 	float deltaEnergy;
 	float EnergyPrim = 0.0;
-	float deltaTEbiPrim;
-	float TEbiPrimPrim = 0.0;
 	
 	int16_t FirsTimeSensor = 2;
 	
@@ -1422,8 +1567,6 @@ void readSensors(void *pvParameters){
 	float fcWind = 1.0;
 	float fcWind1 = 1.0;
 	float fcWind2 = 0.0;
-	float FilteredWindx = 0.0;
-	float FilteredWindy = 0.0;
 	float VhPrev = 0.0;
 	float VhAvg = 0.0;
 	float VhHeading = 0.0;
@@ -1433,8 +1576,6 @@ void readSensors(void *pvParameters){
 	
 	int client_sync_dataIdx = 0;
 	
-	float mpu_heat_pwm = 0.0;	
-
 	while (1)
 	{ 
 		count++;
@@ -1497,11 +1638,11 @@ void readSensors(void *pvParameters){
 		
 		// get Ublox GNSS data
 		// when GNSS receiver is connected to S1 interface
-		const gnss_data_t *gnss1 = s1UbloxGnssDecoder.getGNSSData(1);
+		gnss1 = s1UbloxGnssDecoder.getGNSSData(1);
 		// when GNSS receiver is connected to S2 interface
-		const gnss_data_t *gnss2 = s2UbloxGnssDecoder.getGNSSData(2);
+		gnss2 = s2UbloxGnssDecoder.getGNSSData(2);
 		// select gnss with better fix
-		const gnss_data_t *chosenGnss = (gnss2->fix >= gnss1->fix) ? gnss2 : gnss1;
+		chosenGnss = (gnss2->fix >= gnss1->fix) ? gnss2 : gnss1;
 		GNSSRouteraw = chosenGnss->route;
 		
 		// alpha/beta filter on GNSS route to reduce noise and get route variation
@@ -1608,6 +1749,7 @@ void readSensors(void *pvParameters){
 		EnergyPrim = EnergyPrim + betaEnergy * deltaEnergy;
 		EnergyFilt = EnergyFilt + alphaEnergy * deltaEnergy + EnergyPrim * dtstat;
 		TotalEnergy = EnergyPrim;
+		TotalEnergyAvg = 0.9995 * TotalEnergyAvg + 0.0005 * TotalEnergy;
 
 		/* TODO remove alternate TE calculation 
 		// energy calculation : correcting TE with TASbi.
@@ -1666,112 +1808,7 @@ void readSensors(void *pvParameters){
 			VhPrev = Vh;
 		}
 		
-		if ( SENstream ) {
-		/* Sensor data
-			$S1,			
-			static time in milli second,
-			static pressure in Pa,
-			TE pressure in deci Pa,
-			Dynamic pressure in tenth of Pa,
-			GNSS time in milli second,
-			GNSS speed x or north in centimeters/s,
-			GNSS speed y or east in centimeters/s,
-			GNSS speed z or down in centimeters/s,
-			GNSS route in tenth of °,			
-			Pitch in milli rad,
-			Roll in milli rad,
-			Yaw in milli rad,
-			Gravity estimation x in milli m/s²,
-			Gravity estimation y in milli m/s²,
-			Gravity estimation z in milli m/s²,			
-			CAS in cm/s,
-			TAS in cm/s,
-			ALT in cm,
-			Vzbaro in cm/s,
-			AoA angle in mrad,
-			AoB  angle in mrad,
-			UiPrim in cm/s²,
-			ViPrim in cm/s²,
-			WiPrim in cm/s²,			
-			Ub in cm/s,
-			Vb in cm/s,
-			Wb in cm/s,
-			Ubi in cm/s,
-			Vbi in cm/s,
-			Wbi in cm/s,
-			Vzbi in cm/s,			
-			TotalEnergy in cm/s,
-			Wind speed x in cm/s,
-			Wind speed y in cm/s,
-			Vh heading in tenth of °,
-			GravityModuleErr in thousands of unit ( >0 to get 100% Kp/Ki),
-			TEbiPrim (Total energy variation from TE corrected with TASbi) in cm/s,
-			MPU.mpu_heat_pwn integer pwm unit,
-			dtstat in ms
-			<CR><LF>		
-		*/
-	
-			sprintf(str,"$S1,%lld,%i,%i,%i,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",
-				statTime, (int32_t)(statP*100.0),(int32_t)(teP*100.0), (int16_t)(dynP*10), 
-				//(int64_t)(chosenGnss->time*1000.0), (int16_t)(chosenGnss->speed.x*100), (int16_t)(chosenGnss->speed.y*100), (int16_t)(chosenGnss->speed.z*100), (int16_t)(GNSSRouteraw*10),
-				(int64_t)(0.0), (int16_t)(chosenGnss->speed.x*100), (int16_t)(chosenGnss->speed.y*100), (int16_t)(0.0), (int16_t)(0.0),			
-				(int32_t)(Pitch*1000.0), (int32_t)(Roll*1000.0), (int32_t)(Yaw*1000.0),
-				//(int32_t)(gravISUNEDBODY.x*1000), (int32_t)(gravISUNEDBODY.y*1000), (int32_t)(gravISUNEDBODY.z*1000),
-				(int32_t)(0.0), (int32_t)(0.0), (int32_t)(0.0),				
-				(int32_t)(CAS*100), (int32_t)(TAS*100), (int32_t)(ALT*100), (int32_t)(Vzbaro*100),
-				(int32_t)(AoA*1000), (int32_t)(AoB*1000),
-				//(int32_t)(UiPrim*100), (int32_t)(ViPrim*100), (int32_t)(WiPrim*100),
-				(int32_t)(0.0), (int32_t)(0.0), (int32_t)(0.0),
-				//(int32_t)(Ub*100), (int32_t)(Vb*100), (int32_t)(Wb*100),
-				(int32_t)(0.0), (int32_t)(0.0), (int32_t)(0.0),				
-				(int32_t)(Ubi*100), (int32_t)(Vbi*100),(int32_t)(Wbi*100), (int32_t)(Vzbi*100),				
-				(int32_t)(TotalEnergy*100),
-				(int32_t)(FilteredWindx*100), (int32_t)(FilteredWindy*100),
-				//(int32_t)(VhHeading*10),
-				(int32_t)(0.0),				
-				(int32_t)(GravityModuleErr*1000), 
-				//(int32_t)(TEbiPrim*100),
-				(int32_t)(0.0),				
-				(int32_t)rint(MPU.mpu_heat_pwm),
-				(int32_t)(dtstat*1000) 				
-				);				
-				
-			Router::sendXCV(str);
-		}
-		if ( SENstream && !(count % 50) ) { // send $S2 every 50 cycles = 5 seconds
-		/* 
-			$S2,
-			Outside Air Temperature in tenth of °C,
-			MPU temperature in tenth °C,
-			GNSS fix 0 to 5   3=3D   4= 3D diff,
-			GNSS number of satelites used,
-			Ground Gyro bias x in hundredth of milli rad/s,
-			Ground Gyro bias y in hundredth of milli rad/s,
-			Ground Gyro bias z in hundredth of milli rad/s,			
-			IMU Gyro bias x in hundredth of milli rad/s,
-			IMU Gyro bias y in hundredth of milli rad/s,
-			IMU Gyro bias z in hundredth of milli rad/s,
-			Local Gravity in tenth of milli m/s²,
-			Number of ground bias estimations,
-			free quaternion Pitch in milli rad,
-			free quaternion Roll in milli rad,
-			free quaternion Yaw in milli rad,
-			Kinetic accel min in milli m/s²,
-			Kinetic accel max in milli m/s²,
-			Kinetic threshold in milli m/s²
-		*/
-			sprintf(str,"$S2,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",
-				(int16_t)(OATemp*10.0), (int16_t)(MPUtempcel*10.0), chosenGnss->fix, chosenGnss->numSV,
-				(int32_t)(GroundGyroBias.x*100000.0), (int32_t)(GroundGyroBias.y*100000.0), (int32_t)(GroundGyroBias.z*100000.0),				
-				(int32_t)(BiasQuatGx*100000.0), (int32_t)(BiasQuatGy*100000.0), (int32_t)(BiasQuatGz*100000.0),
-				(int32_t)(GRAVITY*10000.0),(int16_t)BIAS_Init,
-				(int32_t)(free_Pitch*1000.0), (int32_t)(free_Roll*1000.0), (int32_t)(free_Yaw*1000.0),
-				(int32_t)(ModuleKineticAccelMin*1000.0), (int32_t)(ModuleKineticAccelMax*1000.0), (int32_t)(KineticThreshold*1000.0)
-				);
-			Router::sendXCV(str);
-		}		
-		
-		
+
 		//
 		// Eckhard code
 		//
