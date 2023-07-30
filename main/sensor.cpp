@@ -1481,12 +1481,16 @@ void readSensors(void *pvParameters){
 		}
 		
 		// get XCVTemp
+		// TODO temporary fix to avoid bad altitude and speed corrections due to OAT errors
+		OATemp = 15 - ( (altitude.get()/100) * 0.65 );
+		/*
 		XCVTemp = bmpVario.bmpTemp;
 		OATemp = OAT.get();
 		if( !gflags.validTemperature ) {
 			OATemp = 15 - ( (altitude.get()/100) * 0.65 );
 			ESP_LOGI(FNAME,"OATemp: %0.1f  Altitude %0.1f", OATemp, altitude.get() );
 		}
+		*/
 		
 		// get MPU temp
 		MPUtempcel = MPU.getTemperature();
@@ -1605,6 +1609,7 @@ void readSensors(void *pvParameters){
 		EnergyFilt = EnergyFilt + alphaEnergy * deltaEnergy + EnergyPrim * dtstat;
 		TotalEnergy = EnergyPrim;
 
+		/* TODO remove alternate TE calculation 
 		// energy calculation : correcting TE with TASbi.
 		TEraw = (1.0 - pow( (teP-(QNH.get()-1013.25)) * 0.000986923 , 0.1902891634 ) ) * (273.15 + OATemp) * 153.846153846;
 		// Compute TE derivative using alpha/beta filter
@@ -1620,6 +1625,7 @@ void readSensors(void *pvParameters){
 		deltaTEbiPrim = TEbiPrimraw - TEbiPrim;
 		TEbiPrimPrim = TEbiPrimPrim + betaEnergy * deltaTEbiPrim;
 		TEbiPrim = TEbiPrim + alphaEnergy * deltaTEbiPrim + TEbiPrimPrim * dtstat;
+		*/
 		
 		// compute wind speed using GNSS and horizontal true airspeed
 		Vgx = chosenGnss->speed.x; // GNSS x coordinate
@@ -1705,19 +1711,25 @@ void readSensors(void *pvParameters){
 	
 			sprintf(str,"$S1,%lld,%i,%i,%i,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",
 				statTime, (int32_t)(statP*100.0),(int32_t)(teP*100.0), (int16_t)(dynP*10), 
-				(int64_t)(chosenGnss->time*1000.0), (int16_t)(chosenGnss->speed.x*100), (int16_t)(chosenGnss->speed.y*100), (int16_t)(chosenGnss->speed.z*100), (int16_t)(GNSSRouteraw*10),
+				//(int64_t)(chosenGnss->time*1000.0), (int16_t)(chosenGnss->speed.x*100), (int16_t)(chosenGnss->speed.y*100), (int16_t)(chosenGnss->speed.z*100), (int16_t)(GNSSRouteraw*10),
+				(int64_t)(0.0), (int16_t)(chosenGnss->speed.x*100), (int16_t)(chosenGnss->speed.y*100), (int16_t)(0.0), (int16_t)(0.0),			
 				(int32_t)(Pitch*1000.0), (int32_t)(Roll*1000.0), (int32_t)(Yaw*1000.0),
-				(int32_t)(gravISUNEDBODY.x*1000), (int32_t)(gravISUNEDBODY.y*1000), (int32_t)(gravISUNEDBODY.z*1000),				
+				//(int32_t)(gravISUNEDBODY.x*1000), (int32_t)(gravISUNEDBODY.y*1000), (int32_t)(gravISUNEDBODY.z*1000),
+				(int32_t)(0.0), (int32_t)(0.0), (int32_t)(0.0),				
 				(int32_t)(CAS*100), (int32_t)(TAS*100), (int32_t)(ALT*100), (int32_t)(Vzbaro*100),
 				(int32_t)(AoA*1000), (int32_t)(AoB*1000),
-				(int32_t)(UiPrim*100), (int32_t)(ViPrim*100), (int32_t)(WiPrim*100),
-				(int32_t)(Ub*100), (int32_t)(Vb*100), (int32_t)(Wb*100),
+				//(int32_t)(UiPrim*100), (int32_t)(ViPrim*100), (int32_t)(WiPrim*100),
+				(int32_t)(0.0), (int32_t)(0.0), (int32_t)(0.0),
+				//(int32_t)(Ub*100), (int32_t)(Vb*100), (int32_t)(Wb*100),
+				(int32_t)(0.0), (int32_t)(0.0), (int32_t)(0.0),				
 				(int32_t)(Ubi*100), (int32_t)(Vbi*100),(int32_t)(Wbi*100), (int32_t)(Vzbi*100),				
 				(int32_t)(TotalEnergy*100),
 				(int32_t)(FilteredWindx*100), (int32_t)(FilteredWindy*100),
-				(int32_t)(VhHeading*10),
+				//(int32_t)(VhHeading*10),
+				(int32_t)(0.0),				
 				(int32_t)(GravityModuleErr*1000), 
-				(int32_t)(TEbiPrim*100),
+				//(int32_t)(TEbiPrim*100),
+				(int32_t)(0.0),				
 				(int32_t)rint(MPU.mpu_heat_pwm)
 				);				
 				
