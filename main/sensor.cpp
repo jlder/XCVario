@@ -1718,7 +1718,7 @@ void readSensors(void *pvParameters){
 				(int32_t)(VhHeading*10),
 				(int32_t)(GravityModuleErr*1000), 
 				(int32_t)(TEbiPrim*100),
-				(int32_t) mpu_heat_pwm
+				(int32_t)rint(MPU.mpu_heat_pwm)
 				);				
 				
 			Router::sendXCV(str);
