@@ -1314,6 +1314,44 @@ static void processIMU(void *pvParameters)
 			Kinetic threshold in milli m/s²
 		*/		
 		if ( !(countIMU % 4) ) { 
+		
+			// get raw static pressure
+			bool ok=false;
+			float p = 0;
+			p = baroSensor->readPressure(ok);
+			if ( ok ) {
+				prevstatTime = statTime;
+				statTime = esp_timer_get_time()/1000.0; // record static time in milli second
+				dtstat = (statTime - prevstatTime) / 1000.0; // period between last two valid static pressure samples in second	
+				statP = p;
+				// for compatibility with Eckhard code
+				baroP = p;
+			}
+			
+			// get raw te pressure
+			xSemaphoreTake(xMutex,portMAX_DELAY );
+			p = teSensor->readPressure(ok);
+			if ( ok ) {
+				teTime = esp_timer_get_time()/1000.0; // record TE time in milli second
+				teP = p;
+				// not sure what is required for compatibility with Eckhard code
+			}
+			xSemaphoreGive(xMutex);
+			
+			// get raw dynamic pressure
+			if( asSensor )
+				p = asSensor->readPascal(0, ok);
+			if( ok ) {
+				prevdynPTime = dynPTime;
+				dynPTime = esp_timer_get_time()/1000.0; // record dynPTimeTE time in milli second		
+				dtdynP = (dynPTime - prevdynPTime) / 1000.0; // period between last two valid dynamic pressure samples in second			
+				dynP = 0;
+				if ( p > 60 ) dynP = p; // TODO decide if a dynP should be aboce certain value to be valid
+				// for compatibility with Eckhard code
+				dynamicP = 0;
+				if ( p > 60 ) dynamicP = p; 
+			}	
+			
 			if ( !(countIMU % 200) ) {
 				// send $I, $S1 and S2
 				sprintf(str,"$I,%lld,%i,%i,%i,%i,%i,%i\r\n$S1,%lld,%i,%i,%i,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$S2,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",
@@ -1398,7 +1436,8 @@ static void processIMU(void *pvParameters)
 
 		ProcessTimeIMU = (esp_timer_get_time()/1000.0) - gyroTime;
 		if ( ProcessTimeIMU > 5 ) {
-//			ESP_LOGI(FNAME,"processIMU: %i / 25", (int16_t)(ProcessTimeIMU) );
+//			.
+
 //TODO			sprintf(str,"IMU Process : %i ms\r\n",(int16_t)(ProcessTimeIMU) );
 //			Router::sendXCV(str);			
 		}		
@@ -1583,7 +1622,7 @@ void readSensors(void *pvParameters){
 		TickType_t xLastWakeTime = xTaskGetTickCount();
 		
 		ProcessTimeSensors = (esp_timer_get_time()/1000.0);
-		
+		/*
 		// get raw static pressure
 		bool ok=false;
 		float p = 0;
@@ -1620,10 +1659,11 @@ void readSensors(void *pvParameters){
 			dynamicP = 0;
 			if ( p > 60 ) dynamicP = p; 
 		}
+		*/
 		
 		// get XCVTemp
 		// TODO temporary fix to avoid bad altitude and speed corrections due to OAT errors
-		OATemp = 15 - ( (altitude.get()/100) * 0.65 );
+		OATemp = 25 - ( (altitude.get()/100) * 0.65 );
 		/*
 		XCVTemp = bmpVario.bmpTemp;
 		OATemp = OAT.get();
