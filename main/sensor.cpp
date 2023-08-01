@@ -318,7 +318,7 @@ static float deltaCAS;
 static float CASprim = 0.0;
 static float CAS = 0.0;
 static float Rhocorr;
-static float TAS;
+static float TAS=0.0;
 static float TASprim;
 static float ALTraw;
 static float deltaALT;
@@ -1321,7 +1321,7 @@ static void processIMU(void *pvParameters)
 			p = baroSensor->readPressure(ok);
 			if ( ok ) {
 				prevstatTime = statTime;
-				statTime = esp_timer_get_time()/1000.0; // record static time in milli second
+				statTime = esp_timer_get_time()/1000; // record static time in milli second
 				dtstat = (statTime - prevstatTime) / 1000.0; // period between last two valid static pressure samples in second	
 				statP = p;
 				// for compatibility with Eckhard code
@@ -1332,7 +1332,7 @@ static void processIMU(void *pvParameters)
 			xSemaphoreTake(xMutex,portMAX_DELAY );
 			p = teSensor->readPressure(ok);
 			if ( ok ) {
-				teTime = esp_timer_get_time()/1000.0; // record TE time in milli second
+				teTime = esp_timer_get_time()/1000; // record TE time in milli second
 				teP = p;
 				// not sure what is required for compatibility with Eckhard code
 			}
@@ -1343,8 +1343,8 @@ static void processIMU(void *pvParameters)
 				p = asSensor->readPascal(0, ok);
 			if( ok ) {
 				prevdynPTime = dynPTime;
-				dynPTime = esp_timer_get_time()/1000.0; // record dynPTimeTE time in milli second		
-				dtdynP = (dynPTime - prevdynPTime) / 1000.0; // period between last two valid dynamic pressure samples in second			
+				dynPTime = esp_timer_get_time()/1000; // record dynPTimeTE time in milli second
+				dtdynP = (dynPTime - prevdynPTime) / 1000; // period between last two valid dynamic pressure samples in second
 				dynP = 0;
 				if ( p > 60 ) dynP = p; // TODO decide if a dynP should be aboce certain value to be valid
 				// for compatibility with Eckhard code
@@ -1435,9 +1435,8 @@ static void processIMU(void *pvParameters)
 		}
 
 		ProcessTimeIMU = (esp_timer_get_time()/1000.0) - gyroTime;
-		if ( ProcessTimeIMU > 5 ) {
-//			.
-
+		if ( ProcessTimeIMU > 12.5 ) {
+			ESP_LOGI(FNAME,"processIMU: %i / 25", (int16_t)(ProcessTimeIMU) );
 //TODO			sprintf(str,"IMU Process : %i ms\r\n",(int16_t)(ProcessTimeIMU) );
 //			Router::sendXCV(str);			
 		}		
@@ -1697,7 +1696,8 @@ void readSensors(void *pvParameters){
 			GNSSRoutePrim = 0.0;
 			GNSSRoute = 0.0;
 		}
-
+// modif gfm On ne fait le calcul suivant que si la statique a été mesurée dans la routine IMU. Sinon, Rho est nul et entraine une division par zéro
+		if (statP>0.0) {
 		// compute CAS, ALT and Vzbaro using alpha/beta filters.  TODO consider using atmospher.h functions
 		Rho = (100.0 * statP / 287.058 / (273.15 + OATemp));
 		CASraw = sqrt(2 * dynP / RhoSLISA);
@@ -1847,7 +1847,7 @@ void readSensors(void *pvParameters){
 			VgyPrev = Vgy;
 			VhPrev = Vh;
 		}
-		
+		}//fin modif gfm
 
 		//
 		// Eckhard code
@@ -2008,7 +2008,7 @@ void readSensors(void *pvParameters){
 		}
 
 		ProcessTimeSensors = (esp_timer_get_time()/1000.0) - ProcessTimeSensors;
-		if ( ProcessTimeSensors > 40 ) {
+		if ( ProcessTimeSensors > 30 ) {
 			ESP_LOGI(FNAME,"readSensors: %i / 100", (int16_t)(ProcessTimeSensors) );
 		}	
 
@@ -2056,7 +2056,7 @@ void readTemp(void *pvParameters){
 				temperature =  temperature + 0.25 * delta_temperature; // A bit low pass as strategy against toggling
 				if( temperature != temp_prev ){
 					OAT.set( std::round(temperature*10)/10 );
-					ESP_LOGI(FNAME,"NEW temperature=%2.1f, prev T=%2.1f", temperature, temp_prev );
+					//ESP_LOGI(FNAME,"NEW temperature=%2.1f, prev T=%2.1f", temperature, temp_prev );
 					temp_prev = temperature;
 				}
 			}
@@ -2874,7 +2874,11 @@ void system_startup(void *args){
 	if( screen_centeraid.get() ){
 		centeraid = new CenterAid( MYUCG );
 	}
-	
+	//modif gfm
+	statTime = esp_timer_get_time()/1000; // record static time in milli second
+	dynPTime = esp_timer_get_time()/1000; // record static time in milli second
+	//ESP_LOGI(FNAME,"init statime %lld \n",statTime);
+	//fin modif gfm
 	xTaskCreatePinnedToCore(&processIMU, "processIMU", 4096, NULL, 15, &mpid, 0);
 	
 	if( SetupCommon::isClient() ){
