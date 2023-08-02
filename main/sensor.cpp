@@ -1238,6 +1238,7 @@ static void processIMU(void *pvParameters)
 				dtGyr in ms
 				<CR><LF>	
 			*/
+			while( SENstream && BTsync ) {} // wait for $S1 & S2 stream to be processed before sending $I stream.
 			BTsync = true;
 			sprintf(str,"$I,%lld,%i,%i,%i,%i,%i,%i,%i\r\n",
 				gyroTime,
@@ -1245,6 +1246,7 @@ static void processIMU(void *pvParameters)
 				(int32_t)(gyroISUNEDBODY.x*100000.0), (int32_t)(gyroISUNEDBODY.y*100000.0),(int32_t)(gyroISUNEDBODY.z*100000.0),
 				(int32_t)(dtGyr*1000) ); 
 			Router::sendXCV(str);
+			delay(1);
 			BTsync = false;
 		} else {
 			BTsync = false;
@@ -1743,7 +1745,7 @@ void readSensors(void *pvParameters){
 			Kinetic threshold in milli m/s²
 		*/	
 			while( IMUstream && BTsync ) { } // wait for $I stream to be processed before sending $S1 and $S2 stream.
-			
+			BTsync = true;
 			if ( !(count % 50) ) { 
 				// send $S1 and $S2 every 50 cycles = 5 seconds
 				sprintf(str,"$S1,%lld,%i,%i,%i,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$S2,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",
@@ -1806,7 +1808,11 @@ void readSensors(void *pvParameters){
 					(int32_t)(dtstat*1000) 				
 					);				
 				Router::sendXCV(str);
-			}			
+			}
+			delay(1);
+			BTsync = false;
+		} else {
+			BTsync = false;
 		}		
 		
 		//
