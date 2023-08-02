@@ -1234,14 +1234,16 @@ static void processIMU(void *pvParameters)
 				Acceleration in BODU Z-Axis in tenth milli m/s²,				
 				Rotation BODY X-Axis in hundredth of milli rad/s,
 				Rotation BODY Y-Axis in hundredth of milli rad/s,
-				Rotation BODY Z-Axis in hundredth of milli rad/s,				
+				Rotation BODY Z-Axis in hundredth of milli rad/s,
+				dtGyr in ms
 				<CR><LF>	
 			*/
 			BTsync = true;
-			sprintf(str,"$I,%lld,%i,%i,%i,%i,%i,%i\r\n",
+			sprintf(str,"$I,%lld,%i,%i,%i,%i,%i,%i,%i\r\n",
 				gyroTime,
 				(int32_t)(accelISUNEDBODY.x*10000.0), (int32_t)(accelISUNEDBODY.y*10000.0), (int32_t)(accelISUNEDBODY.z*10000.0),
-				(int32_t)(gyroISUNEDBODY.x*100000.0), (int32_t)(gyroISUNEDBODY.y*100000.0),(int32_t)(gyroISUNEDBODY.z*100000.0) );
+				(int32_t)(gyroISUNEDBODY.x*100000.0), (int32_t)(gyroISUNEDBODY.y*100000.0),(int32_t)(gyroISUNEDBODY.z*100000.0),
+				(int32_t)(dtGyr*1000) ); 
 			Router::sendXCV(str);
 			BTsync = false;
 		} else {
