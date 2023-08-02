@@ -259,6 +259,7 @@ float CTmultCS = 0.0; // CT * CS
 
 static char str[500]; 	// string for flight test message broadcast on wireless // TODO reduce size
 static int64_t ProcessTimeIMU = 0.0;
+static bool BTsync = false;
 static int64_t ProcessTimeSensors = 0.0;
 static int64_t gyroTime;  // time stamp for gyros
 static int64_t prevgyroTime;
@@ -1234,19 +1235,21 @@ static void processIMU(void *pvParameters)
 				Rotation BODY Y-Axis in hundredth of milli rad/s,
 				Rotation BODY Z-Axis in hundredth of milli rad/s,				
 				<CR><LF>	
-			*/			
+			*/
+			BTsync = true;
 			sprintf(str,"$I,%lld,%i,%i,%i,%i,%i,%i\r\n",
 				gyroTime,
 				(int32_t)(accelISUNEDBODY.x*10000.0), (int32_t)(accelISUNEDBODY.y*10000.0), (int32_t)(accelISUNEDBODY.z*10000.0),
 				(int32_t)(gyroISUNEDBODY.x*100000.0), (int32_t)(gyroISUNEDBODY.y*100000.0),(int32_t)(gyroISUNEDBODY.z*100000.0) );
 			Router::sendXCV(str);
+			BTsync = false;
+		} else {
+			BTsync = false;
 		}
 
 		ProcessTimeIMU = (esp_timer_get_time()/1000.0) - gyroTime;
-		if ( ProcessTimeIMU > 5 ) {
-//			ESP_LOGI(FNAME,"processIMU: %i / 25", (int16_t)(ProcessTimeIMU) );
-//TODO			sprintf(str,"IMU Process : %i ms\r\n",(int16_t)(ProcessTimeIMU) );
-//			Router::sendXCV(str);			
+		if ( ProcessTimeIMU > 12.5 ) {
+			ESP_LOGI(FNAME,"processIMU: %i / 25", (int16_t)(ProcessTimeIMU) );
 		}		
 
 		mtick++;
@@ -1710,35 +1713,6 @@ void readSensors(void *pvParameters){
 			dtstat in ms
 			<CR><LF>		
 		*/
-	
-			sprintf(str,"$S1,%lld,%i,%i,%i,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",
-				statTime, (int32_t)(statP*100.0),(int32_t)(teP*100.0), (int16_t)(dynP*10), 
-				//(int64_t)(chosenGnss->time*1000.0), (int16_t)(chosenGnss->speed.x*100), (int16_t)(chosenGnss->speed.y*100), (int16_t)(chosenGnss->speed.z*100), (int16_t)(GNSSRouteraw*10),
-				(int64_t)(0.0), (int16_t)(chosenGnss->speed.x*100), (int16_t)(chosenGnss->speed.y*100), (int16_t)(0.0), (int16_t)(0.0),			
-				(int32_t)(Pitch*1000.0), (int32_t)(Roll*1000.0), (int32_t)(Yaw*1000.0),
-				//(int32_t)(gravISUNEDBODY.x*1000), (int32_t)(gravISUNEDBODY.y*1000), (int32_t)(gravISUNEDBODY.z*1000),
-				(int32_t)(0.0), (int32_t)(0.0), (int32_t)(0.0),				
-				(int32_t)(CAS*100), (int32_t)(TAS*100), (int32_t)(ALT*100), (int32_t)(Vzbaro*100),
-				(int32_t)(AoA*1000), (int32_t)(AoB*1000),
-				//(int32_t)(UiPrim*100), (int32_t)(ViPrim*100), (int32_t)(WiPrim*100),
-				(int32_t)(0.0), (int32_t)(0.0), (int32_t)(0.0),
-				//(int32_t)(Ub*100), (int32_t)(Vb*100), (int32_t)(Wb*100),
-				(int32_t)(0.0), (int32_t)(0.0), (int32_t)(0.0),				
-				(int32_t)(Ubi*100), (int32_t)(Vbi*100),(int32_t)(Wbi*100), (int32_t)(Vzbi*100),				
-				(int32_t)(TotalEnergy*100),
-				(int32_t)(FilteredWindx*100), (int32_t)(FilteredWindy*100),
-				//(int32_t)(VhHeading*10),
-				(int32_t)(0.0),				
-				(int32_t)(GravityModuleErr*1000), 
-				//(int32_t)(TEbiPrim*100),
-				(int32_t)(0.0),				
-				(int32_t)rint(MPU.mpu_heat_pwm),
-				(int32_t)(dtstat*1000) 				
-				);				
-				
-			Router::sendXCV(str);
-		}
-		if ( SENstream && !(count % 50) ) { // send $S2 every 50 cycles = 5 seconds
 		/* 
 			$S2,
 			Outside Air Temperature in tenth of °C,
@@ -1759,18 +1733,71 @@ void readSensors(void *pvParameters){
 			Kinetic accel min in milli m/s²,
 			Kinetic accel max in milli m/s²,
 			Kinetic threshold in milli m/s²
-		*/
-			sprintf(str,"$S2,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",
-				(int16_t)(OATemp*10.0), (int16_t)(MPUtempcel*10.0), chosenGnss->fix, chosenGnss->numSV,
-				(int32_t)(GroundGyroBias.x*100000.0), (int32_t)(GroundGyroBias.y*100000.0), (int32_t)(GroundGyroBias.z*100000.0),				
-				(int32_t)(BiasQuatGx*100000.0), (int32_t)(BiasQuatGy*100000.0), (int32_t)(BiasQuatGz*100000.0),
-				(int32_t)(GRAVITY*10000.0),(int16_t)BIAS_Init,
-				(int32_t)(free_Pitch*1000.0), (int32_t)(free_Roll*1000.0), (int32_t)(free_Yaw*1000.0),
-				(int32_t)(ModuleKineticAccelMin*1000.0), (int32_t)(ModuleKineticAccelMax*1000.0), (int32_t)(KineticThreshold*1000.0)
-				);
-			Router::sendXCV(str);
+		*/	
+			while( IMUstream && BTsync ) { } // wait for $I stream to be processed before sending $S1 and $S2 stream.
+			
+			if ( !(count % 50) ) { 
+				// send $S1 and $S2 every 50 cycles = 5 seconds
+				sprintf(str,"$S1,%lld,%i,%i,%i,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$S2,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",
+					statTime, (int32_t)(statP*100.0),(int32_t)(teP*100.0), (int16_t)(dynP*10), 
+					//(int64_t)(chosenGnss->time*1000.0), (int16_t)(chosenGnss->speed.x*100), (int16_t)(chosenGnss->speed.y*100), (int16_t)(chosenGnss->speed.z*100), (int16_t)(GNSSRouteraw*10),
+					(int64_t)(0.0), (int16_t)(chosenGnss->speed.x*100), (int16_t)(chosenGnss->speed.y*100), (int16_t)(0.0), (int16_t)(0.0),			
+					(int32_t)(Pitch*1000.0), (int32_t)(Roll*1000.0), (int32_t)(Yaw*1000.0),
+					//(int32_t)(gravISUNEDBODY.x*1000), (int32_t)(gravISUNEDBODY.y*1000), (int32_t)(gravISUNEDBODY.z*1000),
+					(int32_t)(0.0), (int32_t)(0.0), (int32_t)(0.0),				
+					(int32_t)(CAS*100), (int32_t)(TAS*100), (int32_t)(ALT*100), (int32_t)(Vzbaro*100),
+					(int32_t)(AoA*1000), (int32_t)(AoB*1000),
+					//(int32_t)(UiPrim*100), (int32_t)(ViPrim*100), (int32_t)(WiPrim*100),
+					(int32_t)(0.0), (int32_t)(0.0), (int32_t)(0.0),
+					//(int32_t)(Ub*100), (int32_t)(Vb*100), (int32_t)(Wb*100),
+					(int32_t)(0.0), (int32_t)(0.0), (int32_t)(0.0),				
+					(int32_t)(Ubi*100), (int32_t)(Vbi*100),(int32_t)(Wbi*100), (int32_t)(Vzbi*100),				
+					(int32_t)(TotalEnergy*100),
+					(int32_t)(FilteredWindx*100), (int32_t)(FilteredWindy*100),
+					//(int32_t)(VhHeading*10),
+					(int32_t)(0.0),				
+					(int32_t)(GravityModuleErr*1000), 
+					//(int32_t)(TEbiPrim*100),
+					(int32_t)(0.0),				
+					(int32_t)rint(MPU.mpu_heat_pwm),
+					(int32_t)(dtstat*1000),					
+					(int16_t)(OATemp*10.0), (int16_t)(MPUtempcel*10.0), chosenGnss->fix, chosenGnss->numSV,
+					(int32_t)(GroundGyroBias.x*100000.0), (int32_t)(GroundGyroBias.y*100000.0), (int32_t)(GroundGyroBias.z*100000.0),				
+					(int32_t)(BiasQuatGx*100000.0), (int32_t)(BiasQuatGy*100000.0), (int32_t)(BiasQuatGz*100000.0),
+					(int32_t)(GRAVITY*10000.0),(int16_t)BIAS_Init,
+					(int32_t)(free_Pitch*1000.0), (int32_t)(free_Roll*1000.0), (int32_t)(free_Yaw*1000.0),
+					(int32_t)(ModuleKineticAccelMin*1000.0), (int32_t)(ModuleKineticAccelMax*1000.0), (int32_t)(KineticThreshold*1000.0)		
+					);				
+				Router::sendXCV(str);		
+			} else {
+				// send $S1 only every 100ms
+				sprintf(str,"$S1,%lld,%i,%i,%i,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",
+					statTime, (int32_t)(statP*100.0),(int32_t)(teP*100.0), (int16_t)(dynP*10), 
+					//(int64_t)(chosenGnss->time*1000.0), (int16_t)(chosenGnss->speed.x*100), (int16_t)(chosenGnss->speed.y*100), (int16_t)(chosenGnss->speed.z*100), (int16_t)(GNSSRouteraw*10),
+					(int64_t)(0.0), (int16_t)(chosenGnss->speed.x*100), (int16_t)(chosenGnss->speed.y*100), (int16_t)(0.0), (int16_t)(0.0),			
+					(int32_t)(Pitch*1000.0), (int32_t)(Roll*1000.0), (int32_t)(Yaw*1000.0),
+					//(int32_t)(gravISUNEDBODY.x*1000), (int32_t)(gravISUNEDBODY.y*1000), (int32_t)(gravISUNEDBODY.z*1000),
+					(int32_t)(0.0), (int32_t)(0.0), (int32_t)(0.0),				
+					(int32_t)(CAS*100), (int32_t)(TAS*100), (int32_t)(ALT*100), (int32_t)(Vzbaro*100),
+					(int32_t)(AoA*1000), (int32_t)(AoB*1000),
+					//(int32_t)(UiPrim*100), (int32_t)(ViPrim*100), (int32_t)(WiPrim*100),
+					(int32_t)(0.0), (int32_t)(0.0), (int32_t)(0.0),
+					//(int32_t)(Ub*100), (int32_t)(Vb*100), (int32_t)(Wb*100),
+					(int32_t)(0.0), (int32_t)(0.0), (int32_t)(0.0),				
+					(int32_t)(Ubi*100), (int32_t)(Vbi*100),(int32_t)(Wbi*100), (int32_t)(Vzbi*100),				
+					(int32_t)(TotalEnergy*100),
+					(int32_t)(FilteredWindx*100), (int32_t)(FilteredWindy*100),
+					//(int32_t)(VhHeading*10),
+					(int32_t)(0.0),				
+					(int32_t)(GravityModuleErr*1000), 
+					//(int32_t)(TEbiPrim*100),
+					(int32_t)(0.0),				
+					(int32_t)rint(MPU.mpu_heat_pwm),
+					(int32_t)(dtstat*1000) 				
+					);				
+				Router::sendXCV(str);
+			}			
 		}		
-		
 		
 		//
 		// Eckhard code
@@ -1931,7 +1958,7 @@ void readSensors(void *pvParameters){
 		}
 
 		ProcessTimeSensors = (esp_timer_get_time()/1000.0) - ProcessTimeSensors;
-		if ( ProcessTimeSensors > 40 ) {
+		if ( ProcessTimeSensors > 50 ) {
 			ESP_LOGI(FNAME,"readSensors: %i / 100", (int16_t)(ProcessTimeSensors) );
 		}	
 
