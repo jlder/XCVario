@@ -310,13 +310,14 @@ static float temperature=15.0;
 static float delta_temperature=0.0;
 static float XCVTemp=15.0;//External temperature for MPU temp control
 
+#define RhoSLISA 1.225
 static float Rho;
 static float CASraw;
 static float deltaCAS;
 static float CASprim = 0.0;
 static float CAS = 0.0;
-static float Rhocorr;
-static float TAS;
+static float Rhocorr = RhoSLISA;
+static float TAS = 0.0;
 static float TASprim;
 static float ALTraw;
 static float deltaALT;
@@ -337,7 +338,6 @@ float fcVelbi2;
 #define NALT 7.0 // ALT alpha/beta coeff
 #define alphaALT (2.0 * (2.0 * NALT - 1.0) / NALT / (NALT + 1.0))
 #define betaALT (6.0 / NALT / (NALT + 1.0) / PERIOD10HZ)
-#define RhoSLISA 1.225
 
 static float Ubi = 0.0;
 static float Vbi = 0.0;
@@ -346,6 +346,7 @@ static float Vzbi = 0.0;
 static float ALTbi = 0.0;
 
 static float TotalEnergy = 0.0;
+static float TotalEnergyAvg = 0.0;
 #define NVztot 7.0 // CAS alpha/beta filter coeff
 #define alphaVztot (2.0 * (2.0 * NVztot - 1.0) / NVztot / (NVztot + 1.0))
 #define betaVztot (6.0 / NVztot / (NVztot + 1.0) / PERIOD10HZ)
@@ -575,11 +576,11 @@ void drawDisplay(void *pvParameters){
 			if( !(gflags.stall_warning_active || gflags.gear_warning_active || gflags.flarmWarning || gflags.gLoadDisplay )  ) {
 				// ESP_LOGI(FNAME,"TE=%2.3f", te_vario.get() );
 // modif gfm affichage d'une tension batterie nulle tant que les biais gyros n'ont pas été initialisés
-				if (BIAS_Init > 0){
-					display->drawDisplay( airspeed, TotalEnergy /*te_vario.get()*/,  TEbiPrim/*aTE*/, polar_sink, altitude.get(), t, battery, s2f_delta, as2f, te_vario.get()/*average_climb.get()*/, Switch::getCruiseState(), gflags.standard_setting, flap_pos.get() );
+				if (  (BIAS_Init > 0)  || (TAS > 15.0) ){
+					display->drawDisplay( airspeed, TotalEnergy /*te_vario.get()*/,  TotalEnergyAvg/*aTE*/, polar_sink, altitude.get(), t, battery, s2f_delta, as2f, average_climb.get(), Switch::getCruiseState(), gflags.standard_setting, flap_pos.get() );
 				}	
 				else {
-					display->drawDisplay( airspeed,  TotalEnergy /*te_vario.get()*/, TEbiPrim /*aTE*/, polar_sink, altitude.get(), t, 0.0, s2f_delta, as2f, te_vario.get()/*average_climb.get()*/, Switch::getCruiseState(), gflags.standard_setting, flap_pos.get() );
+					display->drawDisplay( airspeed,  TotalEnergy /*te_vario.get()*/, TotalEnergyAvg /*aTE*/, polar_sink, altitude.get(), t, 0.0, s2f_delta, as2f, average_climb.get(), Switch::getCruiseState(), gflags.standard_setting, flap_pos.get() );
 				}
 // fin modif gfm
 				}
@@ -1392,10 +1393,10 @@ void readSensors(void *pvParameters){
 	
 	int16_t FirsTimeSensor = 2;
 	
-	#define FreqAlpha 1.5 // Hz
+	#define FreqAlpha 1.0 // Hz
 	#define fcAoA1 (10.0/(10.0+FreqAlpha))
 	#define fcAoA2 (1.0-fcAoA1)
-	#define FreqBeta 1.0 // Hz
+	#define FreqBeta 0.5 // Hz
 	#define fcAoB1 (10.0/(10.0+FreqBeta))
 	#define fcAoB2 (1.0-fcAoB1)
 	
@@ -1485,7 +1486,7 @@ void readSensors(void *pvParameters){
 		
 		// get XCVTemp
 		// TODO temporary fix to avoid bad altitude and speed corrections due to OAT errors
-		OATemp = 15 - ( (altitude.get()/100) * 0.65 );
+		OATemp = 25 - ( (altitude.get()/100) * 0.65 );
 		/*
 		XCVTemp = bmpVario.bmpTemp;
 		OATemp = OAT.get();
@@ -1521,7 +1522,11 @@ void readSensors(void *pvParameters){
 		}
 
 		// compute CAS, ALT and Vzbaro using alpha/beta filters.  TODO consider using atmospher.h functions
-		Rho = (100.0 * statP / 287.058 / (273.15 + OATemp));
+		if (statP != 0.0) {
+			Rho = (100.0 * statP / 287.058 / (273.15 + OATemp));
+		} else {
+			Rho = RhoSLISA;
+		}
 		CASraw = sqrt(2 * dynP / RhoSLISA);
 		deltaCAS = CASraw - CAS;
 		CASprim = CASprim + betaCAS * deltaCAS;
@@ -1611,6 +1616,7 @@ void readSensors(void *pvParameters){
 		EnergyPrim = EnergyPrim + betaEnergy * deltaEnergy;
 		EnergyFilt = EnergyFilt + alphaEnergy * deltaEnergy + EnergyPrim * dtstat;
 		TotalEnergy = EnergyPrim;
+		TotalEnergyAvg = 0.9995 * TotalEnergyAvg + 0.0005 * TotalEnergy; // TODO clean total energy averager
 
 		/* TODO remove alternate TE calculation 
 		// energy calculation : correcting TE with TASbi.
@@ -1739,6 +1745,7 @@ void readSensors(void *pvParameters){
 			if ( !(count % 50) ) { 
 				// send $S1 and $S2 every 50 cycles = 5 seconds
 				sprintf(str,"$S1,%lld,%i,%i,%i,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$S2,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",
+					// $S1 stream
 					statTime, (int32_t)(statP*100.0),(int32_t)(teP*100.0), (int16_t)(dynP*10), 
 					//(int64_t)(chosenGnss->time*1000.0), (int16_t)(chosenGnss->speed.x*100), (int16_t)(chosenGnss->speed.y*100), (int16_t)(chosenGnss->speed.z*100), (int16_t)(GNSSRouteraw*10),
 					(int64_t)(0.0), (int16_t)(chosenGnss->speed.x*100), (int16_t)(chosenGnss->speed.y*100), (int16_t)(0.0), (int16_t)(0.0),			
@@ -1760,7 +1767,8 @@ void readSensors(void *pvParameters){
 					//(int32_t)(TEbiPrim*100),
 					(int32_t)(0.0),				
 					(int32_t)rint(MPU.mpu_heat_pwm),
-					(int32_t)(dtstat*1000),					
+					(int32_t)(dtstat*1000),
+					// $S2 stream
 					(int16_t)(OATemp*10.0), (int16_t)(MPUtempcel*10.0), chosenGnss->fix, chosenGnss->numSV,
 					(int32_t)(GroundGyroBias.x*100000.0), (int32_t)(GroundGyroBias.y*100000.0), (int32_t)(GroundGyroBias.z*100000.0),				
 					(int32_t)(BiasQuatGx*100000.0), (int32_t)(BiasQuatGy*100000.0), (int32_t)(BiasQuatGz*100000.0),
