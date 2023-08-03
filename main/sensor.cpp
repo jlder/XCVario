@@ -184,6 +184,7 @@ static float BankFilt = 0.0;
 static float GzPrim = 0.0;
 static float GzF = 0.0;
 static float GravityModuleErr = 0.0;
+static float AvgGravityModuleErr = -1.0;
 static float BiasGz = 0.0;
 static float Pitch = 0.0;
 static float Roll = 0.0;
@@ -647,7 +648,7 @@ void MahonyUpdateIMU(float dt, float gxraw, float gyraw, float gzraw,
 #define Nbias 8000.0 // very long period for extracting error rate of change between IMU quaternion and free quaternion
 #define alphaBias (2.0 * (2.0 * Nbias - 1.0) / Nbias / (Nbias + 1.0))
 #define betaBias (6.0 / Nbias / (Nbias + 1.0) / PERIOD40HZ)
-#define Nlimit 0.25 // stability criteria for gravity estimation from accels in m/s²
+#define Nlimit 0.2 // stability criteria for gravity estimation from accels in m/s²
 #define Kp 2.0 //2.5 // proportional feedback to sync quaternion
 #define Ki 0.15 //0.15 // integral feedback to sync quaternion
 
@@ -681,10 +682,6 @@ float deltaGz;
 	} else {
 		ModuleKineticAccelF = fcKinAcc1 * ModuleKineticAccelF +  fcKinAcc2 * ModuleKineticAccel;
 	}
-	// Kinetic acceleration min and max
-	if ( ModuleKineticAccelF < ModuleKineticAccelMin  ) ModuleKineticAccelMin = fcKinAccMinMax1 * ModuleKineticAccelMin + fcKinAccMinMax2 * ModuleKineticAccelF;
-	if ( ModuleKineticAccelF > ModuleKineticAccelMax  ) ModuleKineticAccelMax = fcKinAccMinMax1 * ModuleKineticAccelMax + fcKinAccMinMax2 * ModuleKineticAccelF;
-	KineticThreshold = ModuleKineticAccelMin + 0.05; 
 
 	// To estimate gyro Bias:
 	// - compute error between vertical vector from IMU quaternion and free quaternion
@@ -805,17 +802,18 @@ float deltaGz;
 		}
 		// if GravityModuleErr positive, high confidence in accels
 		if  ( GravityModuleErr > 0.0 ) {
-			dynKp = Kp;
-			dynKi = Ki;
+			Kgain = 1.0;
 		} else {
 			// if GravityModuleErr negative, low confidence in accels
 			// limit error magnitude
 			if ( GravityModuleErr < -5.0 ) GravityModuleErr = -5.0;
+			// compute average Gravity module error to automaticaly adjust gain
+			AvgGravityModuleErr = 0.999 * AvgGravityModuleErr + 0.001 * GravityModuleErr;
 			// compute dynamic gain function of error magnitude
-			Kgain = pow( 10.0, GravityModuleErr * 6.0 );
-			dynKp = Kgain * Kp;
-			dynKi = Kgain * Ki;
-		}		
+			Kgain = pow( 10.0, GravityModuleErr * 8.0 / pow( 2.0, abs(AvgGravityModuleErr) ) );
+		}
+		dynKp = Kgain * Kp;
+		dynKi = Kgain * Ki;		
 		// Normalise accelerometer measurement
 		recipNorm = 1.0 / AccelGravModule;
 		ax *=recipNorm;
@@ -1801,7 +1799,7 @@ void readSensors(void *pvParameters){
 					(int32_t)(FilteredWindx*100), (int32_t)(FilteredWindy*100),
 					//(int32_t)(VhHeading*10),
 					(int32_t)(0.0),				
-					(int32_t)(GravityModuleErr*1000), 
+					(int32_t)(Kgain*1000), 
 					//(int32_t)(TEbiPrim*100),
 					(int32_t)(0.0),				
 					(int32_t)rint(MPU.mpu_heat_pwm),
