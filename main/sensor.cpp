@@ -259,7 +259,10 @@ float CTmultCS = 0.0; // CT * CS
 
 static char str[500]; 	// string for flight test message broadcast on wireless // TODO reduce size
 static int64_t ProcessTimeIMU = 0.0;
-static bool BTsync = false;
+static bool BTsyncI = false;
+static bool BTsyncS12 = false;
+static int16_t BTcountI = 0;
+static int16_t BTcountS12 = 0;
 static int64_t ProcessTimeSensors = 0.0;
 static int64_t gyroTime;  // time stamp for gyros
 static int64_t prevgyroTime;
@@ -1238,18 +1241,21 @@ static void processIMU(void *pvParameters)
 				dtGyr in ms
 				<CR><LF>	
 			*/
-			while( SENstream && BTsync ) {} // wait for $S1 & S2 stream to be processed before sending $I stream.
-			BTsync = true;
+			BTcountS12 = 3;
+			while( SENstream && BTsyncS12 && BTcountS12>0 ) { // wait for $S1 & S2 stream to be processed before sending $I stream.
+				delay(1);
+				BTcountS12--;
+			}
+			BTsyncI = true;
 			sprintf(str,"$I,%lld,%i,%i,%i,%i,%i,%i,%i\r\n",
 				gyroTime,
 				(int32_t)(accelISUNEDBODY.x*10000.0), (int32_t)(accelISUNEDBODY.y*10000.0), (int32_t)(accelISUNEDBODY.z*10000.0),
 				(int32_t)(gyroISUNEDBODY.x*100000.0), (int32_t)(gyroISUNEDBODY.y*100000.0),(int32_t)(gyroISUNEDBODY.z*100000.0),
 				(int32_t)(dtGyr*1000) ); 
 			Router::sendXCV(str);
-			delay(1);
-			BTsync = false;
+			BTsyncI = false;
 		} else {
-			BTsync = false;
+			BTsyncI = false;
 		}
 
 		ProcessTimeIMU = (esp_timer_get_time()/1000.0) - gyroTime;
@@ -1748,8 +1754,12 @@ void readSensors(void *pvParameters){
 			Kinetic accel max in milli m/s²,
 			Kinetic threshold in milli m/s²
 		*/	
-			while( IMUstream && BTsync ) { } // wait for $I stream to be processed before sending $S1 and $S2 stream.
-			BTsync = true;
+			BTcountI = 3;
+			while( IMUstream && BTsyncI && BTcountI>0 ) { // wait for $I stream to be processed before sending $S1 and $S2 stream.
+				delay(1);
+				BTcountI--;
+			}
+			BTsyncS12 = true;
 			if ( !(count % 50) ) { 
 				// send $S1 and $S2 every 50 cycles = 5 seconds
 				sprintf(str,"$S1,%lld,%i,%i,%i,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$S2,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",
@@ -1813,10 +1823,9 @@ void readSensors(void *pvParameters){
 					);				
 				Router::sendXCV(str);
 			}
-			delay(1);
-			BTsync = false;
+			BTsyncS12 = false;
 		} else {
-			BTsync = false;
+			BTsyncS12 = false;
 		}		
 		
 		//
