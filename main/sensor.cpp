@@ -2271,6 +2271,9 @@ void system_startup(void *args){
 		STmultCS = S_T * C_S;
 		SSmultCT = S_S * C_T;
 		CTmultCS = C_T * C_S;
+		
+		// create mutex for BT synchronization
+		BTMutex = xSemaphoreCreateMutex();		
 	
 		char ahrs[50];
 		float accel = 0;
