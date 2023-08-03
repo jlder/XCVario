@@ -1243,10 +1243,12 @@ static void processIMU(void *pvParameters)
 			*/
 			BTcountS12 = 3;
 			while( SENstream && BTsyncS12 && BTcountS12>0 ) { // wait for $S1 & S2 stream to be processed before sending $I stream.
-				delay(1);
+				ESP_LOGI(FNAME,"wait for $S1 and $S2 to release BT: %i", (int16_t)(BTcountS12) );
+				vTaskDelay(1/ portTICK_PERIOD_MS);
 				BTcountS12--;
 			}
 			BTsyncI = true;
+			ESP_LOGI(FNAME,"send $I");
 			sprintf(str,"$I,%lld,%i,%i,%i,%i,%i,%i,%i\r\n",
 				gyroTime,
 				(int32_t)(accelISUNEDBODY.x*10000.0), (int32_t)(accelISUNEDBODY.y*10000.0), (int32_t)(accelISUNEDBODY.z*10000.0),
@@ -1756,10 +1758,12 @@ void readSensors(void *pvParameters){
 		*/	
 			BTcountI = 3;
 			while( IMUstream && BTsyncI && BTcountI>0 ) { // wait for $I stream to be processed before sending $S1 and $S2 stream.
-				delay(1);
+				vTaskDelay(1/ portTICK_PERIOD_MS);
+				ESP_LOGI(FNAME,"wait for $I to release BT: %i", (int16_t)(BTcountI) );				
 				BTcountI--;
 			}
 			BTsyncS12 = true;
+			ESP_LOGI(FNAME,"send $S1 and $S2");			
 			if ( !(count % 50) ) { 
 				// send $S1 and $S2 every 50 cycles = 5 seconds
 				sprintf(str,"$S1,%lld,%i,%i,%i,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$S2,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",
