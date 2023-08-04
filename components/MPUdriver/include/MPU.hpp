@@ -33,7 +33,6 @@
 #include "freertos/semphr.h"
 
 extern xSemaphoreHandle i2c_mutex;
-extern float mpu_heat_pwm;
 
 typedef enum temp_status { MPU_T_UNKNOWN, MPU_T_LOCKED, MPU_T_LOW, MPU_T_HIGH } temp_status_t;
 

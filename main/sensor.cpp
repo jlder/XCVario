@@ -171,11 +171,6 @@ mpud::float_axes_t gyroISUNEDMPU;
 mpud::float_axes_t gyroISUNEDBODY;
 mpud::float_axes_t gyroCorr;
 static float AccelGravModuleFilt = 0.0;
-static float ModuleKineticAccel = 0.0;
-static float ModuleKineticAccelF = 0.0;
-static float ModuleKineticAccelMin = 0.0;
-static float ModuleKineticAccelMax = 1.0;
-static float KineticThreshold = 0.1;
 static int32_t gyrobiastemptimer = 0;
 static float integralFBx = 0.0;
 static float integralFBy = 0.0;
@@ -327,7 +322,6 @@ static float ALTPrim = 0.0;
 static float Vzbaro = 0.0;
 static float ALT = 0.0;
 static float EnergyFilt = 0.0;
-static float TEbiPrim = 0.0;
 float NEnergy = 10.0;
 float alphaEnergy;
 float betaEnergy;
@@ -669,19 +663,6 @@ float dynKp = Kp;
 float dynKi = Ki;
 float deltaGz;
 
-	// Kinetic acceleration module filtered with asymetrical low pass filter (fast rise and slower decay)
-	#define fcKinAcc 0.1 // 0.1s ~ 10Hz low pass to filter kinetic accel decay
-	#define fcKinAcc1 ( fcKinAcc /( fcKinAcc + PERIOD40HZ ))
-	#define fcKinAcc2 ( 1.0 - fcKinAcc1 )
-	#define fcKinAccMinMax 40 // very low pass to filter kinetic min and max estimation
-	#define fcKinAccMinMax1 ( fcKinAccMinMax /( fcKinAccMinMax + PERIOD40HZ ))
-	#define fcKinAccMinMax2 ( 1.0 - fcKinAccMinMax1 )	
-	ModuleKineticAccel = sqrt( UbiPrim*UbiPrim + VbiPrim*VbiPrim + WbiPrim*WbiPrim );
-	if ( ModuleKineticAccelF < ModuleKineticAccel ) {
-		ModuleKineticAccelF = ModuleKineticAccel;
-	} else {
-		ModuleKineticAccelF = fcKinAcc1 * ModuleKineticAccelF +  fcKinAcc2 * ModuleKineticAccel;
-	}
 
 	// To estimate gyro Bias:
 	// - compute error between vertical vector from IMU quaternion and free quaternion
@@ -700,7 +681,7 @@ float deltaGz;
 	free_halfex = free_halfvz * halfvy - free_halfvy * halfvz;
 	free_halfey = free_halfvx * halfvz - free_halfvz * halfvx;
 	free_halfez = free_halfvy * halfvx - free_halfvx * halfvy;
-	// compute error rate of change for 3 axes using alpha/beta filters
+	// compute error rate of change for x and y axes using alpha/beta filters
 	delta_errx = free_halfex - filt_errx;
 	errx_prim = errx_prim + betaBias * delta_errx; // error rate of change for x
 	filt_errx = filt_errx + alphaBias * delta_errx + errx_prim * dt;
@@ -782,6 +763,8 @@ float deltaGz;
 		// these coefficients are adjusted dynamicaly (dynKp and dynKi) in function acceleration module proximity to GRAVITY
 		// when error is lower than a threshold, maximum Kp and Ki coefficients are used
 		// when error is higher than threshold, reduced coefficients are used.
+		// A very low pass filter is used to compute an average Accel grav Module which is used to adapt Kgain to allow some IMU corrections
+		// even in noisy environments
 		//
 		// acceleration module filtered with asymetrical low pass filter (fast rise and slower decay) 
 		if ( AccelGravModuleFilt < abs(AccelGravModule - GRAVITY) ) {
@@ -1248,7 +1231,7 @@ static void processIMU(void *pvParameters)
 		} 
 		
 		ProcessTimeIMU = (esp_timer_get_time()/1000.0) - gyroTime;
-		if ( ProcessTimeIMU > 12.5 ) {
+		if ( ProcessTimeIMU > 8 ) {
 			ESP_LOGI(FNAME,"processIMU: %i / 25", (int16_t)(ProcessTimeIMU) );
 		}		
 
@@ -1379,16 +1362,9 @@ void readSensors(void *pvParameters){
     float KAoB = 3; // 3.5 for LS6,  2.97 for Ventus 3, 3 for Taurus TBC
     float KGx = 4; // 4.1 for LS6, 12 for Ventus 3, 4 for Taurus TBC
 	
-	float TEraw;
-	float TEb = 0.0;
-	float deltaTE = 0.0;
-	float TEbPrim = 0.0;
-	float TEbiPrimraw;
 	float TASbiSquare;
 	float deltaEnergy;
 	float EnergyPrim = 0.0;
-	float deltaTEbiPrim;
-	float TEbiPrimPrim = 0.0;
 	
 	int16_t FirsTimeSensor = 2;
 	
@@ -1436,8 +1412,6 @@ void readSensors(void *pvParameters){
 	
 	int client_sync_dataIdx = 0;
 	
-	float mpu_heat_pwm = 0.0;	
-
 	while (1)
 	{ 
 		count++;
@@ -1617,24 +1591,6 @@ void readSensors(void *pvParameters){
 		TotalEnergy = EnergyPrim;
 		TotalEnergyAvg = 0.9995 * TotalEnergyAvg + 0.0005 * TotalEnergy; // TODO clean total energy averager
 
-		/* TODO remove alternate TE calculation 
-		// energy calculation : correcting TE with TASbi.
-		TEraw = (1.0 - pow( (teP-(QNH.get()-1013.25)) * 0.000986923 , 0.1902891634 ) ) * (273.15 + OATemp) * 153.846153846;
-		// Compute TE derivative using alpha/beta filter
-		#define NTEb 7.0 // TEbi alpha/beta filter coeff
-		#define alphaTEb (2.0 * (2.0 * NTEb - 1.0) / NTEb / (NTEb + 1.0))
-		#define betaTEb (6.0 / NTEb / (NTEb + 1.0) / PERIOD10HZ)	
-		deltaTE = TEraw - TEb;
-		TEbPrim = TEbPrim + betaTEb * deltaTE;
-		TEb = TEb + alphaTEb * deltaTE + TEbPrim * dtstat;
-		// Coorect TE derivative with error between TASbi and TAS
-		TEbiPrimraw = TEbPrim + (TASbiSquare - TAS * TAS) / 2.0 / GRAVITY;
-		// filter resulting TEbi derivative for pilot ( same constant as previous total energy calculation using baro/inertiel static and TAS.
-		deltaTEbiPrim = TEbiPrimraw - TEbiPrim;
-		TEbiPrimPrim = TEbiPrimPrim + betaEnergy * deltaTEbiPrim;
-		TEbiPrim = TEbiPrim + alphaEnergy * deltaTEbiPrim + TEbiPrimPrim * dtstat;
-		*/
-		
 		// compute wind speed using GNSS and horizontal true airspeed
 		Vgx = chosenGnss->speed.x; // GNSS x coordinate
 		Vgy = chosenGnss->speed.y; // GNSS y coordinate
@@ -1717,7 +1673,6 @@ void readSensors(void *pvParameters){
 			Wind speed y in cm/s,
 			Vh heading in tenth of °,
 			GravityModuleErr in thousands of unit ( >0 to get 100% Kp/Ki),
-			TEbiPrim (Total energy variation from TE corrected with TASbi) in cm/s,
 			MPU.mpu_heat_pwn integer pwm unit,
 			dtstat in ms
 			<CR><LF>		
@@ -1746,7 +1701,7 @@ void readSensors(void *pvParameters){
 			xSemaphoreTake( BTMutex, 3/portTICK_PERIOD_MS );
 			if ( !(count % 50) ) { 
 				// send $S1 and $S2 every 50 cycles = 5 seconds
-				sprintf(str,"$S1,%lld,%i,%i,%i,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$S2,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",
+				sprintf(str,"$S1,%lld,%i,%i,%i,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$S2,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",
 					// $S1 stream
 					statTime, (int32_t)(statP*100.0),(int32_t)(teP*100.0), (int16_t)(dynP*10), 
 					//(int64_t)(chosenGnss->time*1000.0), (int16_t)(chosenGnss->speed.x*100), (int16_t)(chosenGnss->speed.y*100), (int16_t)(chosenGnss->speed.z*100), (int16_t)(GNSSRouteraw*10),
@@ -1766,8 +1721,6 @@ void readSensors(void *pvParameters){
 					//(int32_t)(VhHeading*10),
 					(int32_t)(0.0),				
 					(int32_t)(GravityModuleErr*1000), 
-					//(int32_t)(TEbiPrim*100),
-					(int32_t)(0.0),				
 					(int32_t)rint(MPU.mpu_heat_pwm),
 					(int32_t)(dtstat*1000),
 					// $S2 stream
@@ -1775,13 +1728,12 @@ void readSensors(void *pvParameters){
 					(int32_t)(GroundGyroBias.x*100000.0), (int32_t)(GroundGyroBias.y*100000.0), (int32_t)(GroundGyroBias.z*100000.0),				
 					(int32_t)(BiasQuatGx*100000.0), (int32_t)(BiasQuatGy*100000.0), (int32_t)(BiasQuatGz*100000.0),
 					(int32_t)(GRAVITY*10000.0),(int16_t)BIAS_Init,
-					(int32_t)(free_Pitch*1000.0), (int32_t)(free_Roll*1000.0), (int32_t)(free_Yaw*1000.0),
-					(int32_t)(ModuleKineticAccelMin*1000.0), (int32_t)(ModuleKineticAccelMax*1000.0), (int32_t)(KineticThreshold*1000.0)		
+					(int32_t)(free_Pitch*1000.0), (int32_t)(free_Roll*1000.0), (int32_t)(free_Yaw*1000.0)
 					);				
 				Router::sendXCV(str);		
 			} else {
 				// send $S1 only every 100ms
-				sprintf(str,"$S1,%lld,%i,%i,%i,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",
+				sprintf(str,"$S1,%lld,%i,%i,%i,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",
 					statTime, (int32_t)(statP*100.0),(int32_t)(teP*100.0), (int16_t)(dynP*10), 
 					//(int64_t)(chosenGnss->time*1000.0), (int16_t)(chosenGnss->speed.x*100), (int16_t)(chosenGnss->speed.y*100), (int16_t)(chosenGnss->speed.z*100), (int16_t)(GNSSRouteraw*10),
 					(int64_t)(0.0), (int16_t)(chosenGnss->speed.x*100), (int16_t)(chosenGnss->speed.y*100), (int16_t)(0.0), (int16_t)(0.0),			
@@ -1800,8 +1752,6 @@ void readSensors(void *pvParameters){
 					//(int32_t)(VhHeading*10),
 					(int32_t)(0.0),				
 					(int32_t)(Kgain*1000), 
-					//(int32_t)(TEbiPrim*100),
-					(int32_t)(0.0),				
 					(int32_t)rint(MPU.mpu_heat_pwm),
 					(int32_t)(dtstat*1000) 				
 					);				
@@ -1969,7 +1919,7 @@ void readSensors(void *pvParameters){
 		}
 
 		ProcessTimeSensors = (esp_timer_get_time()/1000.0) - ProcessTimeSensors;
-		if ( ProcessTimeSensors > 50 ) {
+		if ( ProcessTimeSensors > 30 ) {
 			ESP_LOGI(FNAME,"readSensors: %i / 100", (int16_t)(ProcessTimeSensors) );
 		}	
 
