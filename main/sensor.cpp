@@ -263,7 +263,7 @@ static int64_t prevgyroTime;
 static float dtGyr = PERIOD40HZ; // period between last gyro samples
 static int64_t statTime; // time stamp for statP
 static int64_t prevstatTime;
-static float dtstat = PERIOD10HZ;
+static float dtStat = PERIOD10HZ;
 static float statP=0; // raw static pressure
 static int64_t teTime; // time stamp for teP
 static float teP=0; // raw te pressure
@@ -322,18 +322,16 @@ static float ALTPrim = 0.0;
 static float Vzbaro = 0.0;
 static float ALT = 0.0;
 static float EnergyFilt = 0.0;
+static float deltaTE;
+static float TEPrim = 0.0;
+static float TEFilt = 0.0;
+
 float NEnergy = 10.0;
 float alphaEnergy;
 float betaEnergy;
 float PeriodVelbi = 2.5;
 float fcVelbi1;
 float fcVelbi2;
-#define NCAS 7.0 // CAS alpha/beta filter coeff
-#define alphaCAS (2.0 * (2.0 * NCAS - 1.0) / NCAS / (NCAS + 1.0))
-#define betaCAS (6.0 / NCAS / (NCAS + 1.0) / PERIOD10HZ)
-#define NALT 7.0 // ALT alpha/beta coeff
-#define alphaALT (2.0 * (2.0 * NALT - 1.0) / NALT / (NALT + 1.0))
-#define betaALT (6.0 / NALT / (NALT + 1.0) / PERIOD10HZ)
 
 static float Ubi = 0.0;
 static float Vbi = 0.0;
@@ -913,6 +911,8 @@ static void processIMU(void *pvParameters)
 			prevgyroTime = gyroTime;
 			gyroTime = esp_timer_get_time()/1000.0; // record time of gyro measurement in milli second
 			dtGyr = (gyroTime - prevgyroTime) / 1000.0; // period between last two valid samples in second
+			if (dtGyr == 0) dtGyr = PERIOD40HZ;
+			if (dtGyr > 3*PERIOD40HZ) dtGyr = 3*PERIOD40HZ;			
 			gyroDPS = mpud::gyroDegPerSec(gyroRaw, GYRO_FS); // For compatibility with Eckhard code only. Convert raw gyro to Gyro_FS full scale in degre per second 
 			gyroRPS = mpud::gyroRadPerSec(gyroRaw, GYRO_FS); // convert raw gyro to Gyro_FS full scale
 			// convert gyro coordinates to ISU : rad/s NED MPU and remove bias
@@ -947,11 +947,11 @@ static void processIMU(void *pvParameters)
 		// compute acceleration module variation
 		#define NAccel 6.0 // accel alpha/beta filter coeff
 		#define alfaAccelModule (2.0 * (2.0 * NAccel - 1.0) / NAccel / (NAccel + 1.0))
-		#define betaAccelModule (6.0 / NAccel / (NAccel + 1.0) / PERIOD40HZ)
+		#define betaAccelModule (6.0 / NAccel / (NAccel + 1.0) )
 
 		deltaAccelModule = sqrt( accelISUNEDBODY.x * accelISUNEDBODY.x + accelISUNEDBODY.y * accelISUNEDBODY.y + accelISUNEDBODY.z * accelISUNEDBODY.z ) - AccelModuleFilt;
 		// filter gyro with alfa/beta
-		AccelModulePrimFilt = AccelModulePrimFilt + betaAccelModule * deltaAccelModule;
+		AccelModulePrimFilt = AccelModulePrimFilt + betaAccelModule * deltaAccelModule / dtGyr;
 		AccelModuleFilt = AccelModuleFilt + alfaAccelModule * deltaAccelModule + AccelModulePrimFilt * dtGyr;
 		// aysmétric filter with fast raise and slow decay
 		#define fcAccelLevel 3.0 // 3Hz low pass to filter 
@@ -966,10 +966,10 @@ static void processIMU(void *pvParameters)
 		// compute gyro module variation
 		#define NGyro 6.0 // gyro alpha/beta coeff
 		#define alfaGyroModule (2.0 * (2.0 * NGyro - 1.0) / NGyro / (NGyro + 1.0))
-		#define betaGyroModule (6.0 / NGyro / (NGyro + 1.0) / PERIOD40HZ)		
+		#define betaGyroModule (6.0 / NGyro / (NGyro + 1.0) )		
 		deltaGyroModule =  sqrt( gyroCorr.x * gyroCorr.x + gyroCorr.y * gyroCorr.y + gyroCorr.z * gyroCorr.z ) - GyroModuleFilt;
 		// filter gyro with alfa/beta
-		GyroModulePrimFilt = GyroModulePrimFilt + betaGyroModule * deltaGyroModule;
+		GyroModulePrimFilt = GyroModulePrimFilt + betaGyroModule * deltaGyroModule / dtGyr;
 		GyroModuleFilt = GyroModuleFilt + alfaGyroModule * deltaGyroModule + GyroModulePrimFilt * dtGyr;
 		// aysmétric filter with fast raise and slow decay
 		#define fcGyroLevel 3.0 // 3Hz low pass to filter 
@@ -1062,15 +1062,15 @@ static void processIMU(void *pvParameters)
 			// KInectic accels alpha/beta short filter
 			#define NKinAccS 7.0 // accel kinetic alpha/beta filter coeff
 			#define alphaKinAccS (2.0 * (2.0 * NKinAccS - 1.0) / NKinAccS / (NKinAccS + 1.0))
-			#define betaKinAccS (6.0 / NKinAccS / (NKinAccS + 1.0) / PERIOD40HZ)			
+			#define betaKinAccS (6.0 / NKinAccS / (NKinAccS + 1.0) )			
 			deltaUiPrimS = UiPrim - UiPrimSF;
-			UiPrimPrimS = UiPrimPrimS + betaKinAccS * deltaUiPrimS;
+			UiPrimPrimS = UiPrimPrimS + betaKinAccS * deltaUiPrimS / dtGyr;
 			UiPrimSF = UiPrimSF + alphaKinAccS * deltaUiPrimS + UiPrimPrimS * dtGyr;
 			deltaViPrimS = ViPrim - ViPrimSF;
-			ViPrimPrimS = ViPrimPrimS + betaKinAccS * deltaViPrimS;
+			ViPrimPrimS = ViPrimPrimS + betaKinAccS * deltaViPrimS / dtGyr;
 			ViPrimSF = ViPrimSF + alphaKinAccS * deltaViPrimS + ViPrimPrimS * dtGyr;
 			deltaWiPrimS = WiPrim - WiPrimSF;
-			WiPrimPrimS = WiPrimPrimS + betaKinAccS * deltaWiPrimS;
+			WiPrimPrimS = WiPrimPrimS + betaKinAccS * deltaWiPrimS / dtGyr;
 			WiPrimSF = WiPrimSF + alphaKinAccS * deltaWiPrimS + WiPrimPrimS * dtGyr;
 
 			// Compute baro interial acceleration in body frame
@@ -1216,8 +1216,7 @@ static void processIMU(void *pvParameters)
 				Acceleration in BODU Z-Axis in tenth milli m/s²,				
 				Rotation BODY X-Axis in hundredth of milli rad/s,
 				Rotation BODY Y-Axis in hundredth of milli rad/s,
-				Rotation BODY Z-Axis in hundredth of milli rad/s,
-				dtGyr in ms
+				Rotation BODY Z-Axis in hundredth of milli rad/s
 				<CR><LF>	
 			*/
 			xSemaphoreTake( BTMutex, 3/portTICK_PERIOD_MS );
@@ -1376,9 +1375,6 @@ void readSensors(void *pvParameters){
 	#define fcAoB2 (1.0-fcAoB1)
 	
 	float deltaGNSSRoute;	
-	#define NGNSS 7.0 // GNSS alpha/beta. Sample rate is 0 Hz = 0.1 second
-	#define alphaGNSSRoute (2.0 * (2.0 * NGNSS - 1.0) / NGNSS / (NGNSS + 1.0))
-	#define betaGNSSRoute (6.0 / NGNSS / (NGNSS + 1.0) / PERIOD10HZ)
 
 	// Wind speed variables
 	float Vgx;
@@ -1415,7 +1411,7 @@ void readSensors(void *pvParameters){
 	// compute once the filter parameters in functions of values in FLASH
 	NEnergy = te_filt.get() / PERIOD10HZ; // Total Energy alpha/beta filter coeff (period ~ delay * 10)
 	alphaEnergy = (2.0 * (2.0 * NEnergy - 1.0) / NEnergy / (NEnergy + 1.0));
-	betaEnergy = (6.0 / NEnergy / (NEnergy + 1.0) / PERIOD10HZ);	
+	betaEnergy = (6.0 / NEnergy / (NEnergy + 1.0) );	
 	
 	
 	while (1)
@@ -1433,7 +1429,9 @@ void readSensors(void *pvParameters){
 		if ( ok ) {
 			prevstatTime = statTime;
 			statTime = esp_timer_get_time()/1000.0; // record static time in milli second
-			dtstat = (statTime - prevstatTime) / 1000.0; // period between last two valid static pressure samples in second	
+			dtStat = (statTime - prevstatTime) / 1000.0; // period between last two valid static pressure samples in second	
+			if (dtStat == 0) dtStat = PERIOD10HZ;
+			if (dtStat > 3*PERIOD10HZ) dtStat = 3*PERIOD10HZ;
 			statP = p;
 			// for compatibility with Eckhard code
 			baroP = p;
@@ -1455,7 +1453,9 @@ void readSensors(void *pvParameters){
 		if( ok ) {
 			prevdynPTime = dynPTime;
 			dynPTime = esp_timer_get_time()/1000.0; // record dynPTimeTE time in milli second		
-			dtdynP = (dynPTime - prevdynPTime) / 1000.0; // period between last two valid dynamic pressure samples in second			
+			dtdynP = (dynPTime - prevdynPTime) / 1000.0; // period between last two valid dynamic pressure samples in second
+			if (dtdynP == 0) dtdynP = PERIOD10HZ;
+			if (dtdynP > 3*PERIOD10HZ) dtdynP = 3*PERIOD10HZ;			
 			dynP = 0;
 			if ( p > 60 ) dynP = p; // TODO decide if a dynP should be aboce certain value to be valid
 			// for compatibility with Eckhard code
@@ -1489,11 +1489,14 @@ void readSensors(void *pvParameters){
 		
 		// alpha/beta filter on GNSS route to reduce noise and get route variation
 		// GNSSRoute and GNSSRoutePrim are only computed if TAS > 15 m/s
+		#define NGNSS 7.0 // GNSS alpha/beta. Sample rate is 0 Hz = 0.1 second
+		#define alphaGNSSRoute (2.0 * (2.0 * NGNSS - 1.0) / NGNSS / (NGNSS + 1.0))
+		#define betaGNSSRoute (6.0 / NGNSS / (NGNSS + 1.0))		
 		if ( TAS > 15.0 ) {
 			deltaGNSSRoute = GNSSRouteraw - GNSSRoute;
 			if ( deltaGNSSRoute > 180.0 ) deltaGNSSRoute = deltaGNSSRoute - 360.0;
 			if ( deltaGNSSRoute < -180.0 ) deltaGNSSRoute = deltaGNSSRoute + 360.0;			
-			GNSSRoutePrim = GNSSRoutePrim + betaGNSSRoute * deltaGNSSRoute;
+			GNSSRoutePrim = GNSSRoutePrim + betaGNSSRoute * deltaGNSSRoute / dtStat;
 			GNSSRoute = GNSSRoute + alphaGNSSRoute * deltaGNSSRoute + GNSSRoutePrim * PERIOD10HZ;	//TODO consider changing 0.1 with actual GNSS time difference
 		} else {
 			GNSSRoutePrim = 0.0;
@@ -1506,24 +1509,31 @@ void readSensors(void *pvParameters){
 		} else {
 			Rho = RhoSLISA;
 		}
+		#define NCAS 7.0 // CAS alpha/beta filter coeff
+		#define alphaCAS (2.0 * (2.0 * NCAS - 1.0) / NCAS / (NCAS + 1.0))
+		#define betaCAS (6.0 / NCAS / (NCAS + 1.0) )
 		CASraw = sqrt(2 * dynP / RhoSLISA);
 		deltaCAS = CASraw - CAS;
-		CASprim = CASprim + betaCAS * deltaCAS;
+		CASprim = CASprim + betaCAS * deltaCAS / dtdynP;
 		CAS = CAS + alphaCAS * deltaCAS + CASprim * dtdynP;
 		Rhocorr = sqrt(RhoSLISA/Rho);
 		TAS = Rhocorr * CAS;
 		TASprim = Rhocorr * CASprim;
+		
+		#define NALT 7.0 // ALT alpha/beta coeff
+		#define alphaALT (2.0 * (2.0 * NALT - 1.0) / NALT / (NALT + 1.0))
+		#define betaALT (6.0 / NALT / (NALT + 1.0) )		
 		ALTraw = (1.0 - pow( (statP-(QNH.get()-1013.25)) * 0.000986923 , 0.1902891634 ) ) * (273.15 + OATemp) * 153.846153846;
 		if ( FirsTimeSensor > 0 ) { // initialize Altitude and Energy filters
 			ALT = ALTraw;
 			ALTbi = ALT;
 			EnergyFilt = ALTbi+ TAS * TAS / 9.807 / 2.0;
-			dtstat = 0.1;
+			dtStat = PERIOD10HZ;
 			FirsTimeSensor--;
 		}
 		deltaALT = ALTraw - ALT;
-		ALTPrim = ALTPrim + betaALT * deltaALT;
-		ALT = ALT + alphaALT * deltaALT + ALTPrim * dtstat;
+		ALTPrim = ALTPrim + betaALT * deltaALT / dtStat;
+		ALT = ALT + alphaALT * deltaALT + ALTPrim * dtStat;
 		// in glider operation, gaining altitude and energy is considered positive. However in NED representation vertical axis is positive pointing down.
 		// therefore Vzbaro in NED is the opposite of altitude variation.
 		Vzbaro = - ALTPrim;
@@ -1561,16 +1571,16 @@ void readSensors(void *pvParameters){
 		// U/V/WbPrimS are used to compute U/V/WbiPrim, baro inertial accelerations
 		#define NBaroAccS 6.0 // accel kinetic alpha/beta filter coeff
 		#define alphaBaroAccS (2.0 * (2.0 * NBaroAccS - 1.0) / NBaroAccS / (NBaroAccS + 1.0))
-		#define betaBaroAccS (6.0 / NBaroAccS / (NBaroAccS + 1.0) / PERIOD10HZ)			
+		#define betaBaroAccS (6.0 / NBaroAccS / (NBaroAccS + 1.0) )			
 		deltaUbS = Ub - UbFS;
-		UbPrimS = UbPrimS + betaBaroAccS * deltaUbS;
-		UbFS = UbFS + alphaBaroAccS * deltaUbS + UbPrimS * dtstat;
+		UbPrimS = UbPrimS + betaBaroAccS * deltaUbS / dtStat;
+		UbFS = UbFS + alphaBaroAccS * deltaUbS + UbPrimS * dtStat;
 		deltaVbS = Vb - VbFS;
-		VbPrimS = VbPrimS + betaBaroAccS * deltaVbS;
-		VbFS = VbFS + alphaBaroAccS * deltaVbS + VbPrimS * dtstat;			
+		VbPrimS = VbPrimS + betaBaroAccS * deltaVbS / dtStat;
+		VbFS = VbFS + alphaBaroAccS * deltaVbS + VbPrimS * dtStat;			
 		deltaWbS = Wb - WbFS;
-		WbPrimS = WbPrimS + betaBaroAccS * deltaWbS;
-		WbFS = WbFS + alphaBaroAccS * deltaWbS + WbPrimS * dtstat;
+		WbPrimS = WbPrimS + betaBaroAccS * deltaWbS / dtStat;
+		WbFS = WbFS + alphaBaroAccS * deltaWbS + WbPrimS * dtStat;
 			
 		// baro interial vertical speed in earth frame
 		Vzbi = -sinPitch * Ubi + sinRoll * cosPitch * Vbi + cosRoll * cosPitch * Wbi;		
@@ -1587,15 +1597,27 @@ void readSensors(void *pvParameters){
 		#define PeriodAltbi 0.75 // period in second for baro/inertial altitude. Baro/inertial velocity improves baro sensor response
 		#define fcAltbi1 ( PeriodAltbi / ( PeriodAltbi + PERIOD10HZ ))
 		#define fcAltbi2 ( 1.0 - fcAltbi1 )		
-		ALTbi = fcAltbi1 * ( ALTbi - Vzbi * dtstat ) + fcAltbi2	* ALT;
+		ALTbi = fcAltbi1 * ( ALTbi - Vzbi * dtStat ) + fcAltbi2	* ALT;
 		
-		TASbiSquare = Ubi * Ubi + Vbi * Vbi + Wbi * Wbi;
 		// energy calculation : variation of potential and kinetic energy
+		#define NTE 7.0 // ALT alpha/beta coeff
+		#define alphaTE (2.0 * (2.0 * NTE - 1.0) / NTE / (NTE + 1.0))
+		#define betaTE (6.0 / NTE / (NTE + 1.0) )
+		TASbiSquare = Ubi * Ubi + Vbi * Vbi + Wbi * Wbi;
 		deltaEnergy = ( ALTbi + TASbiSquare / GRAVITY ) - EnergyFilt;
-		EnergyPrim = EnergyPrim + betaEnergy * deltaEnergy;
-		EnergyFilt = EnergyFilt + alphaEnergy * deltaEnergy + EnergyPrim * dtstat;
-		TotalEnergy = EnergyPrim;
-		TotalEnergyAvg = 0.9995 * TotalEnergyAvg + 0.0005 * TotalEnergy; // TODO clean total energy averager
+		EnergyPrim = EnergyPrim + betaTE * deltaEnergy / dtStat; // variation of total energy
+		EnergyFilt = EnergyFilt + alphaTE * deltaEnergy + EnergyPrim * dtStat;
+
+		// filter total energy variation for display to pilot
+		deltaTE = EnergyPrim - TEFilt;
+		TEPrim = TEPrim + betaEnergy * deltaTE / dtStat;
+		TEFilt = TEFilt + alphaEnergy * deltaTE + TEPrim * dtStat;
+		TotalEnergy = TEFilt;
+		// Total energy integration over 20 seconds
+		#define PeriodTEAvg 20
+		#define fcTEAvg1 ( PeriodTEAvg / ( PeriodTEAvg + PERIOD10HZ ))
+		#define fcTEAvg2 ( 1.0 - fcTEAvg1 )			
+		TotalEnergyAvg = fcTEAvg1 * TotalEnergyAvg + fcTEAvg2 * TotalEnergy;
 
 		// compute wind speed using GNSS and horizontal true airspeed
 		Vgx = chosenGnss->speed.x; // GNSS x coordinate

@@ -44,7 +44,7 @@ void change_mc() {
 void change_tefilter() {
 		NEnergy = te_filt.get() / PERIOD10HZ; // Total Energy alpha/beta filter coeff (period ~ delay * 10)
 		alphaEnergy = (2.0 * (2.0 * NEnergy - 1.0) / NEnergy / (NEnergy + 1.0));
-		betaEnergy = (6.0 / NEnergy / (NEnergy + 1.0) / PERIOD10HZ);	
+		betaEnergy = (6.0 / NEnergy / (NEnergy + 1.0) );	
 }
 
 void change_bifilt(){

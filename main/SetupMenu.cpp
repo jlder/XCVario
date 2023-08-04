@@ -2008,7 +2008,7 @@ void SetupMenu::flight_menu_create( MenuEntry *top ){
 int tefilt_adj( SetupMenuValFloat * p ){
 		NEnergy = te_filt.get() / PERIOD10HZ; // Total Energy alpha/beta filter coeff (period ~ delay * 10)
 		alphaEnergy = (2.0 * (2.0 * NEnergy - 1.0) / NEnergy / (NEnergy + 1.0));
-		betaEnergy = (6.0 / NEnergy / (NEnergy + 1.0) / PERIOD10HZ);
+		betaEnergy = (6.0 / NEnergy / (NEnergy + 1.0) );
 	return 0;
 }
 
