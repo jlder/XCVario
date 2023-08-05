@@ -1960,7 +1960,7 @@ void readTemp(void *pvParameters){
 				if ( delta_temperature > 0.1 )  delta_temperature = 0.1; // limit temperature variation to 0.1°C /s in case of outliers within "normal" temperature range.
 				if ( delta_temperature < -0.1 )  delta_temperature = -0.1;				
 				temperature =  temperature + 0.25 * delta_temperature; // A bit low pass as strategy against toggling
-				if( temperature != temp_prev ){
+				if( abs(temperature - temp_prev) > 0.1 ){
 					OAT.set( std::round(temperature*10)/10 );
 					ESP_LOGI(FNAME,"NEW temperature=%2.1f, prev T=%2.1f", temperature, temp_prev );
 					temp_prev = temperature;
