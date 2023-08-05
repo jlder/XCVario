@@ -126,8 +126,6 @@ extern float NEnergy;
 extern float alphaEnergy;
 extern float betaEnergy;
 extern float PeriodVelbi;
-extern float fcVelbi1;
-extern float fcVelbi2;
 
 
 #endif

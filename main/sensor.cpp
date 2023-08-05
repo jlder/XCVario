@@ -637,9 +637,6 @@ void MahonyUpdateIMU(float dt, float gxraw, float gyraw, float gzraw,
 					float ax, float ay, float az, 
 					float &Bias_Gx, float &Bias_Gy, float &Bias_Gz ) {
 
-#define Nbias 8000.0 // very long period for extracting error rate of change between IMU quaternion and free quaternion
-#define alphaBias (2.0 * (2.0 * Nbias - 1.0) / Nbias / (Nbias + 1.0))
-#define betaBias (6.0 / Nbias / (Nbias + 1.0) / PERIOD40HZ)
 #define Nlimit 0.2 // stability criteria for gravity estimation from accels in m/s²
 #define Kp 2.0 //2.5 // proportional feedback to sync quaternion
 #define Ki 0.15 //0.15 // integral feedback to sync quaternion
@@ -656,7 +653,6 @@ float halfex = 0.0;
 float halfey = 0.0;
 float halfez = 0.0;
 float qa, qb, qc, free_halfvx, free_halfvy, free_halfvz;
-//float GravityModuleErr = 0.0; TODO
 float dynKp = Kp;
 float dynKi = Ki;
 float deltaGz;
@@ -680,6 +676,9 @@ float deltaGz;
 	free_halfey = free_halfvx * halfvz - free_halfvz * halfvx;
 	free_halfez = free_halfvy * halfvx - free_halfvx * halfvy;
 	// compute error rate of change for x and y axes using alpha/beta filters
+	#define Nbias 8000.0 // very long period for extracting error rate of change between IMU quaternion and free quaternion
+	#define alphaBias (2.0 * (2.0 * Nbias - 1.0) / Nbias / (Nbias + 1.0))
+	#define betaBias (6.0 / Nbias / (Nbias + 1.0) / PERIOD40HZ)	
 	delta_errx = free_halfex - filt_errx;
 	errx_prim = errx_prim + betaBias * delta_errx; // error rate of change for x
 	filt_errx = filt_errx + alphaBias * delta_errx + errx_prim * dt;
@@ -859,10 +858,6 @@ static void processIMU(void *pvParameters)
 	mpud::raw_axes_t accelRaw;
 	mpud::raw_axes_t gyroRaw;
 	
-	#define NAccelPrim 7.0	// ~6 Hz alpha/beta filter coeff for accel derivative estimation
-	#define alphaAcc (2.0 * (2.0 * NAccelPrim - 1.0) / NAccelPrim / (NAccelPrim + 1.0))
-	#define betaAcc (6.0 / NAccelPrim / (NAccelPrim + 1.0) / PERIOD40HZ)	
-
 	// variables for accel calibration
 	float accelMaxx = 0.0;
 	float accelMaxy = 0.0;
@@ -899,15 +894,13 @@ static void processIMU(void *pvParameters)
 	
 	// compute once the filter parameters in functions of values in FLASH
 	PeriodVelbi = velbi_period.get(); // period in second for baro/inertial velocity. period long enough to reduce effect of baro wind gradients
-	fcVelbi1 = ( PeriodVelbi / ( PeriodVelbi + PERIOD40HZ ));
-	fcVelbi2 = ( 1.0 - fcVelbi1 );
 	
 	while (1) {
 
 		TickType_t xLastWakeTime_mpu =xTaskGetTickCount();
 		
 		// get gyro data
-		if( MPU.rotation(&gyroRaw) == ESP_OK ){
+		if( MPU.rotation(&gyroRaw) == ESP_OK ){ // read raw gyro data
 			prevgyroTime = gyroTime;
 			gyroTime = esp_timer_get_time()/1000.0; // record time of gyro measurement in milli second
 			dtGyr = (gyroTime - prevgyroTime) / 1000.0; // period between last two valid samples in second
@@ -932,7 +925,7 @@ static void processIMU(void *pvParameters)
 			gyroCorr.z = gyroISUNEDBODY.z;// + BiasQuatGz;  // error on z should be removed
 		}
 		// get accel data
-		if( MPU.acceleration(&accelRaw) == ESP_OK ){
+		if( MPU.acceleration(&accelRaw) == ESP_OK ){ // read raw acceleration
 			accelG = mpud::accelGravity(accelRaw, mpud::ACCEL_FS_8G);  // For compatibility with Eckhard code only. Convert raw data to to 8G full scale
 			// convert accels coordinates to ISU : m/s² NED MPU
 			accelISUNEDMPU.x = ((-accelG.z*9.807) - currentAccelBias.x ) * currentAccelGain.x;
@@ -948,7 +941,6 @@ static void processIMU(void *pvParameters)
 		#define NAccel 6.0 // accel alpha/beta filter coeff
 		#define alfaAccelModule (2.0 * (2.0 * NAccel - 1.0) / NAccel / (NAccel + 1.0))
 		#define betaAccelModule (6.0 / NAccel / (NAccel + 1.0) )
-
 		deltaAccelModule = sqrt( accelISUNEDBODY.x * accelISUNEDBODY.x + accelISUNEDBODY.y * accelISUNEDBODY.y + accelISUNEDBODY.z * accelISUNEDBODY.z ) - AccelModuleFilt;
 		// filter gyro with alfa/beta
 		AccelModulePrimFilt = AccelModulePrimFilt + betaAccelModule * deltaAccelModule / dtGyr;
@@ -981,16 +973,16 @@ static void processIMU(void *pvParameters)
 			GyroModulePrimLevel = fcGL1 * GyroModulePrimLevel +  fcGL2 * abs(GyroModulePrimFilt);
 		}
 
-		if ( AttitudeInit < 10 ) {
-			if ( AttitudeInit == 0 ) {
+		if ( AttitudeInit < 10 ) { // initialize quaternions at xcvario start
+			if ( AttitudeInit == 0 ) { // initialize roll, pitch and yaw 
 				RollInit = atan2(-accelISUNEDBODY.y , -accelISUNEDBODY.z);
 				PitchInit = asin( accelISUNEDBODY.x / sqrt(accelISUNEDBODY.x*accelISUNEDBODY.x+accelISUNEDBODY.y * accelISUNEDBODY.y + accelISUNEDBODY.z * accelISUNEDBODY.z));
 				YawInit   = 0.0;
-			} else {
+			} else { // filter roll, pitch and yaw over 10 samples
 				RollInit = 0.75 * RollInit + 0.25 * atan2(-accelISUNEDBODY.y , -accelISUNEDBODY.z);
 				PitchInit = 0.75 * PitchInit + 0.25 * asin( accelISUNEDBODY.x / sqrt(accelISUNEDBODY.x*accelISUNEDBODY.x+accelISUNEDBODY.y * accelISUNEDBODY.y + accelISUNEDBODY.z * accelISUNEDBODY.z));
 			}
-
+			// compute quaternion corresponding to initial attitude
 			q0=((cos(RollInit/2.0)*cos(PitchInit/2.0)*cos(YawInit/2.0)+sin(RollInit/2.0)*sin(PitchInit/2.0)*sin(YawInit/2.0)));
 			q1=((sin(RollInit/2.0)*cos(PitchInit/2.0)*cos(YawInit/2.0)-cos(RollInit/2.0)*sin(PitchInit/2.0)*sin(YawInit/2.0)));
 			q2=((cos(RollInit/2.0)*sin(PitchInit/2.0)*cos(YawInit/2.0)+sin(RollInit/2.0)*cos(PitchInit/2.0)*sin(YawInit/2.0)));
@@ -1000,9 +992,9 @@ static void processIMU(void *pvParameters)
 			free_q2 = q2;
 			free_q3 = q3;
 			AttitudeInit++;
-		} else {
+		} else { // after xcvario is started and attitude initialized
 			// Update IMU
-			// only consider centrifugal forces if TAS > 10 m/s
+			// only consider centrifugal forces if TAS > 15 m/s
 			if ( TAS > 15.0 ) {
 			// estimate gravity in body frame taking into account centrifugal corrections
 				gravISUNEDBODY.x = accelISUNEDBODY.x - gyroCorr.y * Wbi + gyroCorr.z * Vbi;
@@ -1015,7 +1007,7 @@ static void processIMU(void *pvParameters)
 				gravISUNEDBODY.z = accelISUNEDBODY.z;
 			}
 
-			// Update quaternion
+			// Update quaternions
 			// gyroISUNEDBODY corresponds to raw gyro and BiasQuatGx,y,z to the gyros bias
 			MahonyUpdateIMU( dtGyr, gyroISUNEDBODY.x, gyroISUNEDBODY.y, gyroISUNEDBODY.z,
 							-gravISUNEDBODY.x, -gravISUNEDBODY.y, -gravISUNEDBODY.z,
@@ -1050,16 +1042,16 @@ static void processIMU(void *pvParameters)
 			sinPitch = sin( Pitch );
 
 			// compute kinetic acceleration from accels, gravity from IMU and centrifugal forces from accels and baro inertial speeds
-			// gravity estimation using IMU quaternion
+			// compute gravity estimation using IMU quaternion
 			GravIMU.x = -GRAVITY * 2.0 * (q1 * q3 - q0 * q2);
 			GravIMU.y = -GRAVITY * 2.0 * (q2 * q3 + q0 * q1);
 			GravIMU.z = -GRAVITY * (q0 * q0 - q1 * q1 - q2 * q2 + q3 * q3);
-			// Kinetic accelerations using accelerations, corrected with gravity and centrifugal accels
+			// compute kinetic accelerations using accelerations, corrected with gravity and centrifugal accels
 			UiPrim = accelISUNEDBODY.x - GravIMU.x - gyroCorr.y * Wbi + gyroCorr.z * Vbi;
 			ViPrim = accelISUNEDBODY.y - GravIMU.y - gyroCorr.z * Ubi + gyroCorr.x * Wbi;			
 			WiPrim = accelISUNEDBODY.z - GravIMU.z + gyroCorr.y * Ubi - gyroCorr.x * Vbi;
 
-			// KInectic accels alpha/beta short filter
+			// Kinectic accels alpha/beta short filter
 			#define NKinAccS 7.0 // accel kinetic alpha/beta filter coeff
 			#define alphaKinAccS (2.0 * (2.0 * NKinAccS - 1.0) / NKinAccS / (NKinAccS + 1.0))
 			#define betaKinAccS (6.0 / NKinAccS / (NKinAccS + 1.0) )			
@@ -1074,6 +1066,8 @@ static void processIMU(void *pvParameters)
 			WiPrimSF = WiPrimSF + alphaKinAccS * deltaWiPrimS + WiPrimPrimS * dtGyr;
 
 			// Compute baro interial acceleration in body frame
+			fcVelbi1 = ( PeriodVelbi / ( PeriodVelbi + dtGyr ));
+			fcVelbi2 = ( 1.0 - fcVelbi1 );			
 			UbiPrim = fcVelbi1 * ( UbiPrim + UiPrimPrimS * dtGyr ) + fcVelbi2 * UbPrimS;
 			VbiPrim = fcVelbi1 * ( VbiPrim + ViPrimPrimS * dtGyr ) + fcVelbi2 * VbPrimS;			
 			WbiPrim = fcVelbi1 * ( WbiPrim + WiPrimPrimS * dtGyr ) + fcVelbi2 * WbPrimS;
@@ -1085,6 +1079,7 @@ static void processIMU(void *pvParameters)
 		}
 
 		// When TAS < 15 m/s the vario is considered potentially stable on ground
+		// This is when bias and local gravity are estimated
 		if ( TAS < 15.0 ) {
 			// Estimate gyro bias and gravity up to 10 times, except if doing Lab test then only one estimation is performed
 			if ( (BIAS_Init < 10 && !LABtest) || BIAS_Init < 1 ) {
@@ -1096,7 +1091,7 @@ static void processIMU(void *pvParameters)
 					// if temperature conditions has been stable for more than 30 seconds (1200 = 30x40hz) and there is very little angular and acceleration variation
 					if ( (gyrobiastemptimer > 1200) && (GyroModulePrimLevel < GroundGyroprimlimit) && (AccelModulePrimLevel < GroundAccelprimlimit) ) {
 						gyrostable++;
-						// during first 2.5 seconds, initialize gyro data
+						// during first 2.5 seconds, initialize gyro and gravity data
 						if ( gyrostable < 100 ) {
 							GxBias = gyroRPS.x;
 							GyBias = gyroRPS.y;
@@ -1106,7 +1101,7 @@ static void processIMU(void *pvParameters)
 							Gravz = accelISUNEDBODY.z;
 							averagecount = 1;
 						} else {
-							// between 2.5 seconds and 22.5 seconds, accumulate gyro data
+							// between 2.5 seconds and 22.5 seconds, accumulate gyro and gravity data
 							if ( gyrostable <900 ) {
 								averagecount++;
 								GxBias += gyroRPS.x;
@@ -1116,8 +1111,9 @@ static void processIMU(void *pvParameters)
 								Gravy += accelISUNEDBODY.y;
 								Gravz += accelISUNEDBODY.z;
 							} else {
-								// If no bias yet, after 25 seconds calculate average bias, gravity and roll/pitch
-								// If already have bias, calulate after 2 minutes to avoid risk of perturbation before takeoff
+								// If no bias/gravity yet, after 25 seconds calculate average bias, gravity and roll/pitch
+								// If bias/gravity have already been identified once, delay calculation of new bias/gravity for 2 minutes
+								// if xcvario stays stable to avoid risk of perturbation during ground operations and before takeoff
 								if ( (BIAS_Init == 0 && gyrostable > 1000) || (BIAS_Init > 0 && gyrostable > 4800) ) {
 									NewGroundGyroBias.x = GxBias / averagecount;
 									NewGroundGyroBias.y = GyBias / averagecount;
@@ -1142,6 +1138,7 @@ static void processIMU(void *pvParameters)
 				}
 			}
 			
+			// Only for laboratory calibration
 			// If required stream accel calibration data
 			if ( CALstream ) {
 				// If gyro are stable
@@ -1219,7 +1216,7 @@ static void processIMU(void *pvParameters)
 				Rotation BODY Z-Axis in hundredth of milli rad/s
 				<CR><LF>	
 			*/
-			xSemaphoreTake( BTMutex, 3/portTICK_PERIOD_MS );
+			xSemaphoreTake( BTMutex, 3/portTICK_PERIOD_MS ); // prevent BT conflicts for 3ms max.
 			sprintf(str,"$I,%lld,%i,%i,%i,%i,%i,%i\r\n",
 				gyroTime,
 				(int32_t)(accelISUNEDBODY.x*10000.0), (int32_t)(accelISUNEDBODY.y*10000.0), (int32_t)(accelISUNEDBODY.z*10000.0),
@@ -1366,13 +1363,6 @@ void readSensors(void *pvParameters){
 	float EnergyPrim = 0.0;
 	
 	int16_t FirsTimeSensor = 2;
-	
-	#define FreqAlpha 1.0 // Hz
-	#define fcAoA1 (10.0/(10.0+FreqAlpha))
-	#define fcAoA2 (1.0-fcAoA1)
-	#define FreqBeta 0.5 // Hz
-	#define fcAoB1 (10.0/(10.0+FreqBeta))
-	#define fcAoB2 (1.0-fcAoB1)
 	
 	float deltaGNSSRoute;	
 
@@ -1537,7 +1527,14 @@ void readSensors(void *pvParameters){
 		// in glider operation, gaining altitude and energy is considered positive. However in NED representation vertical axis is positive pointing down.
 		// therefore Vzbaro in NED is the opposite of altitude variation.
 		Vzbaro = - ALTPrim;
+		
 		// compute AoA (Angle of attack) and AoB (Angle od slip)
+		#define FreqAlpha 1.0 // Hz
+		#define fcAoA1 (10.0/(10.0+FreqAlpha))
+		#define fcAoA2 (1.0-fcAoA1)
+		#define FreqBeta 0.5 // Hz
+		#define fcAoB1 (10.0/(10.0+FreqBeta))
+		#define fcAoB2 (1.0-fcAoB1)		
 		WingLoad = gross_weight.get() / polar_wingarea.get();  // should be only computed when pilot change weight settings in XCVario
 		if ( (dynP>100.0) && (CAS>10.0) && (TAS>10.0) && (abs(accelISUNEDBODY.z) > 1.0) ) { // compute AoA and AoB only when dynamic pressure is above 100 Pa, CAS & TAS abobe 10m/s and accel z above 1 m/s²
 			CL = -accelISUNEDBODY.z * 2 / RhoSLISA * WingLoad / CAS / CAS;

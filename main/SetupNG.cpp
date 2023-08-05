@@ -49,8 +49,6 @@ void change_tefilter() {
 
 void change_bifilt(){
 		PeriodVelbi = velbi_period.get(); // period in second for baro/inertial velocity. period long enough to reduce effect of baro wind gradients
-		fcVelbi1 = ( PeriodVelbi / ( PeriodVelbi + PERIOD40HZ ));
-		fcVelbi2 = ( 1.0 - fcVelbi1 );
 }
 
 void change_ballast() {
