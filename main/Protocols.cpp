@@ -631,9 +631,9 @@ void Protocols::parseNMEA( const char *str ){
 			sleep(3);
 			esp_restart();				
 		} else {
-			sprintf(strx,"$ACC format error. Need to type: $ACC,bias_x,bias_y,bias_z,gain_x,gain_y,gain_z\r\n");
+			sprintf(strx,"$ACC format error. Need to type: $SETACC,bias_x,bias_y,bias_z,gain_x,gain_y,gain_z\r\n");
 			Router::sendXCV(strx);
-			sprintf(strx,"example: $ACC,0.02,-0.001,0.004,1.02,0.98,1.003\r\n");
+			sprintf(strx,"example: $SETACC,0.02,-0.001,0.004,1.02,0.98,1.003\r\n");
 			Router::sendXCV(strx);
 		}
 	} else if( !strncmp( str, "$GETACC", 7 ) ) {
@@ -669,9 +669,9 @@ void Protocols::parseNMEA( const char *str ){
 
 			esp_restart();			
 		} else {
-			sprintf(strx,"$INST format error. Need to type: $INST,tilt,sway,dist_to_cg respectively in rad, rad and meter\r\n");
+			sprintf(strx,"$INST format error. Need to type: $SETINST,tilt,sway,dist_to_cg respectively in rad, rad and meter\r\n");
 			Router::sendXCV(strx);
-			sprintf(strx,"example: $INST,0.14,0.52,1.1\r\n");
+			sprintf(strx,"example: $SETINST,0.14,0.52,1.1\r\n");
 			Router::sendXCV(strx);
 		}
 	} else if( !strncmp( str, "$GETINST", 8 ) ) {

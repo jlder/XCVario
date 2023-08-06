@@ -641,6 +641,8 @@ void MahonyUpdateIMU(float dt, float gxraw, float gyraw, float gzraw,
 #define Kp 2.0 //2.5 // proportional feedback to sync quaternion
 #define Ki 0.15 //0.15 // integral feedback to sync quaternion
 
+#define Gyroprimlimit 0.3
+
 #define WingLevel 0.04 // max lateral gravity acceleration (normalized acceleration) to consider wings are ~ < 5° bank. Value is half sinus of angle
 #define GMaxBias 0.001 // 1 mrad/s
 
@@ -657,7 +659,7 @@ float dynKp = Kp;
 float dynKi = Ki;
 float deltaGz;
 
-
+	/* // TO DO remove bias estimation to reduce cpu load
 	// To estimate gyro Bias:
 	// - compute error between vertical vector from IMU quaternion and free quaternion
 	// - estimate bias by computing error rate of change on each axis using long term alpha/beta filter
@@ -698,7 +700,7 @@ float deltaGz;
 	#define fcBank 0.67 // 1.5Hz low pass to filter for testing stability criteria
 	#define fcBank1 ( fcBank /( fcBank + PERIOD40HZ ))
 	#define fcBank2 ( 1.0 - fcBank1 )
-	#define Gyroprimlimit 0.3
+
 	if ( BankFilt < abs(halfvy) ) {
 		BankFilt = abs(halfvy);
 	} else {
@@ -717,7 +719,7 @@ float deltaGz;
 		if ( Bias_Gz < -GMaxBias ) Bias_Gz = -GMaxBias;
 	} else {
 		GzF = gzraw - GNSSRoutePrim;
-	}
+	} */ // TO DO remove bias estimation to reduce cpu load
 	
 	// Update free quaternion by integrating rate of change
 	gx = gxraw * 0.5 * dt;
@@ -909,9 +911,6 @@ static void processIMU(void *pvParameters)
 			gyroDPS = mpud::gyroDegPerSec(gyroRaw, GYRO_FS); // For compatibility with Eckhard code only. Convert raw gyro to Gyro_FS full scale in degre per second 
 			gyroRPS = mpud::gyroRadPerSec(gyroRaw, GYRO_FS); // convert raw gyro to Gyro_FS full scale
 			// convert gyro coordinates to ISU : rad/s NED MPU and remove bias
-			if ( abs(GroundGyroBias.x - NewGroundGyroBias.x) > 0.0001 ) GroundGyroBias.x = 0.99 * GroundGyroBias.x + 0.01 * NewGroundGyroBias.x;
-			if ( abs(GroundGyroBias.y - NewGroundGyroBias.y) > 0.0001 ) GroundGyroBias.y = 0.99 * GroundGyroBias.y + 0.01 * NewGroundGyroBias.y;	
-			if ( abs(GroundGyroBias.z - NewGroundGyroBias.z) > 0.0001 ) GroundGyroBias.z = 0.99 * GroundGyroBias.z + 0.01 * NewGroundGyroBias.z;			
 			gyroISUNEDMPU.x = -(gyroRPS.z - GroundGyroBias.z);
 			gyroISUNEDMPU.y = -(gyroRPS.y - GroundGyroBias.y);
 			gyroISUNEDMPU.z = -(gyroRPS.x - GroundGyroBias.x);
@@ -937,42 +936,6 @@ static void processIMU(void *pvParameters)
 			accelISUNEDBODY.z = -S_T * accelISUNEDMPU.x + SSmultCT * accelISUNEDMPU.y + CTmultCS * accelISUNEDMPU.z;
 		}
 		
-		// compute acceleration module variation
-		#define NAccel 6.0 // accel alpha/beta filter coeff
-		#define alfaAccelModule (2.0 * (2.0 * NAccel - 1.0) / NAccel / (NAccel + 1.0))
-		#define betaAccelModule (6.0 / NAccel / (NAccel + 1.0) )
-		deltaAccelModule = sqrt( accelISUNEDBODY.x * accelISUNEDBODY.x + accelISUNEDBODY.y * accelISUNEDBODY.y + accelISUNEDBODY.z * accelISUNEDBODY.z ) - AccelModuleFilt;
-		// filter gyro with alfa/beta
-		AccelModulePrimFilt = AccelModulePrimFilt + betaAccelModule * deltaAccelModule / dtGyr;
-		AccelModuleFilt = AccelModuleFilt + alfaAccelModule * deltaAccelModule + AccelModulePrimFilt * dtGyr;
-		// aysmétric filter with fast raise and slow decay
-		#define fcAccelLevel 3.0 // 3Hz low pass to filter 
-		#define fcAL1 (40.0/(40.0+fcAccelLevel))
-		#define fcAL2 (1.0-fcAL1)		
-		if ( AccelModulePrimLevel < abs(AccelModulePrimFilt) ) {
-			AccelModulePrimLevel = abs(AccelModulePrimFilt);
-		} else {
-			AccelModulePrimLevel = fcAL1 * AccelModulePrimLevel +  fcAL2 * abs(AccelModulePrimFilt);
-		}	
-		
-		// compute gyro module variation
-		#define NGyro 6.0 // gyro alpha/beta coeff
-		#define alfaGyroModule (2.0 * (2.0 * NGyro - 1.0) / NGyro / (NGyro + 1.0))
-		#define betaGyroModule (6.0 / NGyro / (NGyro + 1.0) )		
-		deltaGyroModule =  sqrt( gyroCorr.x * gyroCorr.x + gyroCorr.y * gyroCorr.y + gyroCorr.z * gyroCorr.z ) - GyroModuleFilt;
-		// filter gyro with alfa/beta
-		GyroModulePrimFilt = GyroModulePrimFilt + betaGyroModule * deltaGyroModule / dtGyr;
-		GyroModuleFilt = GyroModuleFilt + alfaGyroModule * deltaGyroModule + GyroModulePrimFilt * dtGyr;
-		// aysmétric filter with fast raise and slow decay
-		#define fcGyroLevel 3.0 // 3Hz low pass to filter 
-		#define fcGL1 (40.0/(40.0+fcGyroLevel))
-		#define fcGL2 (1.0-fcGL1)		
-		if ( GyroModulePrimLevel < abs(GyroModulePrimFilt) ) {
-			GyroModulePrimLevel = abs(GyroModulePrimFilt);
-		} else {
-			GyroModulePrimLevel = fcGL1 * GyroModulePrimLevel +  fcGL2 * abs(GyroModulePrimFilt);
-		}
-
 		if ( AttitudeInit < 10 ) { // initialize quaternions at xcvario start
 			if ( AttitudeInit == 0 ) { // initialize roll, pitch and yaw 
 				RollInit = atan2(-accelISUNEDBODY.y , -accelISUNEDBODY.z);
@@ -1081,6 +1044,41 @@ static void processIMU(void *pvParameters)
 		// When TAS < 15 m/s the vario is considered potentially stable on ground
 		// This is when bias and local gravity are estimated
 		if ( TAS < 15.0 ) {
+			// compute acceleration module variation
+			#define NAccel 6.0 // accel alpha/beta filter coeff
+			#define alfaAccelModule (2.0 * (2.0 * NAccel - 1.0) / NAccel / (NAccel + 1.0))
+			#define betaAccelModule (6.0 / NAccel / (NAccel + 1.0) )
+			deltaAccelModule = sqrt( accelISUNEDBODY.x * accelISUNEDBODY.x + accelISUNEDBODY.y * accelISUNEDBODY.y + accelISUNEDBODY.z * accelISUNEDBODY.z ) - AccelModuleFilt;
+			// filter gyro with alfa/beta
+			AccelModulePrimFilt = AccelModulePrimFilt + betaAccelModule * deltaAccelModule / dtGyr;
+			AccelModuleFilt = AccelModuleFilt + alfaAccelModule * deltaAccelModule + AccelModulePrimFilt * dtGyr;
+			// aysmétric filter with fast raise and slow decay
+			#define fcAccelLevel 3.0 // 3Hz low pass to filter 
+			#define fcAL1 (40.0/(40.0+fcAccelLevel))
+			#define fcAL2 (1.0-fcAL1)		
+			if ( AccelModulePrimLevel < abs(AccelModulePrimFilt) ) {
+				AccelModulePrimLevel = abs(AccelModulePrimFilt);
+			} else {
+				AccelModulePrimLevel = fcAL1 * AccelModulePrimLevel +  fcAL2 * abs(AccelModulePrimFilt);
+			}	
+			
+			// compute gyro module variation
+			#define NGyro 6.0 // gyro alpha/beta coeff
+			#define alfaGyroModule (2.0 * (2.0 * NGyro - 1.0) / NGyro / (NGyro + 1.0))
+			#define betaGyroModule (6.0 / NGyro / (NGyro + 1.0) )		
+			deltaGyroModule =  sqrt( gyroCorr.x * gyroCorr.x + gyroCorr.y * gyroCorr.y + gyroCorr.z * gyroCorr.z ) - GyroModuleFilt;
+			// filter gyro with alfa/beta
+			GyroModulePrimFilt = GyroModulePrimFilt + betaGyroModule * deltaGyroModule / dtGyr;
+			GyroModuleFilt = GyroModuleFilt + alfaGyroModule * deltaGyroModule + GyroModulePrimFilt * dtGyr;
+			// aysmétric filter with fast raise and slow decay
+			#define fcGyroLevel 3.0 // 3Hz low pass to filter 
+			#define fcGL1 (40.0/(40.0+fcGyroLevel))
+			#define fcGL2 (1.0-fcGL1)		
+			if ( GyroModulePrimLevel < abs(GyroModulePrimFilt) ) {
+				GyroModulePrimLevel = abs(GyroModulePrimFilt);
+			} else {
+				GyroModulePrimLevel = fcGL1 * GyroModulePrimLevel +  fcGL2 * abs(GyroModulePrimFilt);
+			}			
 			// Estimate gyro bias and gravity up to 10 times, except if doing Lab test then only one estimation is performed
 			if ( (BIAS_Init < 10 && !LABtest) || BIAS_Init < 1 ) {
 				// When MPU temperature is controled and temperature is locked   or   when there is no temperature control
@@ -1137,9 +1135,13 @@ static void processIMU(void *pvParameters)
 					}
 				}
 			}
+			// Adjust progressively ground gyro bias with new ground bias estimate
+			if ( abs(GroundGyroBias.x - NewGroundGyroBias.x) > 0.0001 ) GroundGyroBias.x = 0.99 * GroundGyroBias.x + 0.01 * NewGroundGyroBias.x;
+			if ( abs(GroundGyroBias.y - NewGroundGyroBias.y) > 0.0001 ) GroundGyroBias.y = 0.99 * GroundGyroBias.y + 0.01 * NewGroundGyroBias.y;	
+			if ( abs(GroundGyroBias.z - NewGroundGyroBias.z) > 0.0001 ) GroundGyroBias.z = 0.99 * GroundGyroBias.z + 0.01 * NewGroundGyroBias.z;			
 			
-			// Only for laboratory calibration
-			// If required stream accel calibration data
+			// Only for laboratory calibration of the accelerometers
+			// stream accel data and compute offsts/gains
 			if ( CALstream ) {
 				// If gyro are stable
 				if ( GyroModulePrimLevel < GroundGyroprimlimit ) {
@@ -1477,6 +1479,7 @@ void readSensors(void *pvParameters){
 		const gnss_data_t *chosenGnss = (gnss2->fix >= gnss1->fix) ? gnss2 : gnss1;
 		GNSSRouteraw = chosenGnss->route;
 		
+		/* // TO DO temporary remove GNSS route variation estimation
 		// alpha/beta filter on GNSS route to reduce noise and get route variation
 		// GNSSRoute and GNSSRoutePrim are only computed if TAS > 15 m/s
 		#define NGNSS 7.0 // GNSS alpha/beta. Sample rate is 0 Hz = 0.1 second
@@ -1491,7 +1494,7 @@ void readSensors(void *pvParameters){
 		} else {
 			GNSSRoutePrim = 0.0;
 			GNSSRoute = 0.0;
-		}
+		} */ // TO DO temporary remove GNSS route variation estimation
 
 		// compute CAS, ALT and Vzbaro using alpha/beta filters.  TODO consider using atmospher.h functions
 		if (statP != 0.0) {
@@ -1616,6 +1619,7 @@ void readSensors(void *pvParameters){
 		#define fcTEAvg2 ( 1.0 - fcTEAvg1 )			
 		TotalEnergyAvg = fcTEAvg1 * TotalEnergyAvg + fcTEAvg2 * TotalEnergy;
 
+		/* // TODO temporary removal of wind estimation
 		// compute wind speed using GNSS and horizontal true airspeed
 		Vgx = chosenGnss->speed.x; // GNSS x coordinate
 		Vgy = chosenGnss->speed.y; // GNSS y coordinate
@@ -1657,7 +1661,7 @@ void readSensors(void *pvParameters){
 				VhPrev = Vh;
 				tickDSR = 1;
 			}
-		}
+		} */ // TODO temporary removal of wind estimation
 		
 		if ( SENstream ) {
 		/* Sensor data
@@ -1709,11 +1713,12 @@ void readSensors(void *pvParameters){
 			IMU Gyro bias z in hundredth of milli rad/s,
 			Local Gravity in tenth of milli m/s²,
 			Number of ground bias estimations,
+			XCVtemp (temperature inside vario) in tenth of °C
 		*/	
 			xSemaphoreTake( BTMutex, 3/portTICK_PERIOD_MS );
 			if ( !(count % 50) ) { 
 				// send $S1 and $S2 every 50 cycles = 5 seconds
-				sprintf(str,"$S1,%lld,%i,%i,%i,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$S2,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",
+				sprintf(str,"$S1,%lld,%i,%i,%i,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$S2,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",
 				// $S1 stream
 					statTime, (int32_t)(statP*100.0),(int32_t)(teP*100.0), (int16_t)(dynP*10), 
 					(int64_t)(chosenGnss->time*1000.0), (int16_t)(chosenGnss->speed.x*100), (int16_t)(chosenGnss->speed.y*100), (int16_t)(chosenGnss->speed.z*100), (int16_t)(GNSSRouteraw*10),
@@ -1731,7 +1736,7 @@ void readSensors(void *pvParameters){
 					(int16_t)(OATemp*10.0), (int16_t)(MPUtempcel*10.0), chosenGnss->fix, chosenGnss->numSV,
 					(int32_t)(GroundGyroBias.x*100000.0), (int32_t)(GroundGyroBias.y*100000.0), (int32_t)(GroundGyroBias.z*100000.0),				
 					(int32_t)(BiasQuatGx*100000.0), (int32_t)(BiasQuatGy*100000.0), (int32_t)(BiasQuatGz*100000.0),
-					(int32_t)(GRAVITY*10000.0),(int16_t)BIAS_Init
+					(int32_t)(GRAVITY*10000.0),(int16_t)BIAS_Init,(int16_t)(XCVTemp*10.0)
 					);				
 				Router::sendXCV(str);		
 			} else {
