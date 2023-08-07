@@ -1215,14 +1215,16 @@ static void processIMU(void *pvParameters)
 				Acceleration in BODU Z-Axis in tenth milli m/s²,				
 				Rotation BODY X-Axis in hundredth of milli rad/s,
 				Rotation BODY Y-Axis in hundredth of milli rad/s,
-				Rotation BODY Z-Axis in hundredth of milli rad/s
+				Rotation BODY Z-Axis in hundredth of milli rad/s,
+				ProcessTimeIMU in milli second
 				<CR><LF>	
 			*/
 			xSemaphoreTake( BTMutex, 3/portTICK_PERIOD_MS ); // prevent BT conflicts for 3ms max.
-			sprintf(str,"$I,%lld,%i,%i,%i,%i,%i,%i\r\n",
+			sprintf(str,"$I,%lld,%i,%i,%i,%i,%i,%i,%i\r\n",
 				gyroTime,
 				(int32_t)(accelISUNEDBODY.x*10000.0), (int32_t)(accelISUNEDBODY.y*10000.0), (int32_t)(accelISUNEDBODY.z*10000.0),
-				(int32_t)(gyroISUNEDBODY.x*100000.0), (int32_t)(gyroISUNEDBODY.y*100000.0),(int32_t)(gyroISUNEDBODY.z*100000.0)
+				(int32_t)(gyroISUNEDBODY.x*100000.0), (int32_t)(gyroISUNEDBODY.y*100000.0),(int32_t)(gyroISUNEDBODY.z*100000.0),
+				(int32_t) ProcessTimeIMU
 				); 
 			Router::sendXCV(str);
 			xSemaphoreGive( BTMutex );
@@ -1696,7 +1698,8 @@ void readSensors(void *pvParameters){
 			MPU.mpu_heat_pwn integer pwm unit,
 			free quaternion Pitch in milli rad,
 			free quaternion Roll in milli rad,
-			free quaternion Yaw in milli rad
+			free quaternion Yaw in milli rad,
+			ProcessTimeSensors in milli second
 			<CR><LF>		
 		*/
 		/* 
@@ -1718,7 +1721,7 @@ void readSensors(void *pvParameters){
 			xSemaphoreTake( BTMutex, 3/portTICK_PERIOD_MS );
 			if ( !(count % 50) ) { 
 				// send $S1 and $S2 every 50 cycles = 5 seconds
-				sprintf(str,"$S1,%lld,%i,%i,%i,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$S2,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",
+				sprintf(str,"$S1,%lld,%i,%i,%i,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$S2,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",
 				// $S1 stream
 					statTime, (int32_t)(statP*100.0),(int32_t)(teP*100.0), (int16_t)(dynP*10), 
 					(int64_t)(chosenGnss->time*1000.0), (int16_t)(chosenGnss->speed.x*100), (int16_t)(chosenGnss->speed.y*100), (int16_t)(chosenGnss->speed.z*100), (int16_t)(GNSSRouteraw*10),
@@ -1732,6 +1735,7 @@ void readSensors(void *pvParameters){
 					(int32_t)(Kgain*1000), 
 					(int32_t)rint(MPU.mpu_heat_pwm),
 					(int32_t)(free_Pitch*1000.0), (int32_t)(free_Roll*1000.0), (int32_t)(free_Yaw*1000.0),
+					(int32_t) ProcessTimeSensors,
 					// $S2 stream
 					(int16_t)(OATemp*10.0), (int16_t)(MPUtempcel*10.0), chosenGnss->fix, chosenGnss->numSV,
 					(int32_t)(GroundGyroBias.x*100000.0), (int32_t)(GroundGyroBias.y*100000.0), (int32_t)(GroundGyroBias.z*100000.0),				
@@ -1741,7 +1745,7 @@ void readSensors(void *pvParameters){
 				Router::sendXCV(str);		
 			} else {
 				// send $S1 only every 100ms
-				sprintf(str,"$S1,%lld,%i,%i,%i,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",
+				sprintf(str,"$S1,%lld,%i,%i,%i,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",
 					statTime, (int32_t)(statP*100.0),(int32_t)(teP*100.0), (int16_t)(dynP*10), 
 					(int64_t)(chosenGnss->time*1000.0), (int16_t)(chosenGnss->speed.x*100), (int16_t)(chosenGnss->speed.y*100), (int16_t)(chosenGnss->speed.z*100), (int16_t)(GNSSRouteraw*10),
 					(int32_t)(Pitch*1000.0), (int32_t)(Roll*1000.0), (int32_t)(Yaw*1000.0),
@@ -1753,7 +1757,8 @@ void readSensors(void *pvParameters){
 					(int32_t)(VhHeading*10),
 					(int32_t)(Kgain*1000), 
 					(int32_t)rint(MPU.mpu_heat_pwm),
-					(int32_t)(free_Pitch*1000.0), (int32_t)(free_Roll*1000.0), (int32_t)(free_Yaw*1000.0)				
+					(int32_t)(free_Pitch*1000.0), (int32_t)(free_Roll*1000.0), (int32_t)(free_Yaw*1000.0),
+					(int32_t) ProcessTimeSensors					
 					);				
 				Router::sendXCV(str);
 			}
