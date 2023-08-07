@@ -107,6 +107,7 @@ xSemaphoreHandle xMutex=NULL;
 xSemaphoreHandle spiMutex=NULL;
 
 xSemaphoreHandle BTMutex=NULL;
+xSemaphoreHandle dataMutex=NULL;
 
 S2F Speed2Fly;
 Protocols OV( &Speed2Fly );
@@ -911,10 +912,11 @@ static void processIMU(void *pvParameters)
 			gyroDPS = mpud::gyroDegPerSec(gyroRaw, GYRO_FS); // For compatibility with Eckhard code only. Convert raw gyro to Gyro_FS full scale in degre per second 
 			gyroRPS = mpud::gyroRadPerSec(gyroRaw, GYRO_FS); // convert raw gyro to Gyro_FS full scale
 			// convert gyro coordinates to ISU : rad/s NED MPU and remove bias
+			xSemaphoreTake( dataMutex, 2/portTICK_PERIOD_MS ); // prevent data conflicts for 2ms max.			
 			gyroISUNEDMPU.x = -(gyroRPS.z - GroundGyroBias.z);
 			gyroISUNEDMPU.y = -(gyroRPS.y - GroundGyroBias.y);
 			gyroISUNEDMPU.z = -(gyroRPS.x - GroundGyroBias.x);
-			// convert NEDMPU to NEDBODY
+			// convert NEDMPU to NEDBODY			
 			gyroISUNEDBODY.x = C_T * gyroISUNEDMPU.x + STmultSS * gyroISUNEDMPU.y + STmultCS * gyroISUNEDMPU.z;
 			gyroISUNEDBODY.y = C_S * gyroISUNEDMPU.y - S_S * gyroISUNEDMPU.z;
 			gyroISUNEDBODY.z = -S_T * gyroISUNEDMPU.x + SSmultCT  * gyroISUNEDMPU.y + CTmultCS * gyroISUNEDMPU.z;
@@ -922,6 +924,7 @@ static void processIMU(void *pvParameters)
 			gyroCorr.x = gyroISUNEDBODY.x;// + BiasQuatGx;  // error on x should be added
 			gyroCorr.y = gyroISUNEDBODY.y;// + BiasQuatGy;  // error on y should be added
 			gyroCorr.z = gyroISUNEDBODY.z;// + BiasQuatGz;  // error on z should be removed
+			xSemaphoreGive( dataMutex );
 		}
 		// get accel data
 		if( MPU.acceleration(&accelRaw) == ESP_OK ){ // read raw acceleration
@@ -931,9 +934,11 @@ static void processIMU(void *pvParameters)
 			accelISUNEDMPU.y = ((-accelG.y*9.807) - currentAccelBias.y ) * currentAccelGain.y;
 			accelISUNEDMPU.z = ((-accelG.x*9.807) - currentAccelBias.z ) * currentAccelGain.z;
 			// convert from MPU to BODY
+			xSemaphoreTake( dataMutex, 2/portTICK_PERIOD_MS ); // prevent data conflicts for 2ms max.			
 			accelISUNEDBODY.x = C_T * accelISUNEDMPU.x + STmultSS * accelISUNEDMPU.y + STmultCS * accelISUNEDMPU.z - ( gyroCorr.y * gyroCorr.y + gyroCorr.z * gyroCorr.z ) * DistCGVario;
 			accelISUNEDBODY.y = C_S * accelISUNEDMPU.y - S_S * accelISUNEDMPU.z;
 			accelISUNEDBODY.z = -S_T * accelISUNEDMPU.x + SSmultCT * accelISUNEDMPU.y + CTmultCS * accelISUNEDMPU.z;
+			xSemaphoreGive( dataMutex );
 		}
 		
 		if ( AttitudeInit < 10 ) { // initialize quaternions at xcvario start
@@ -1030,7 +1035,8 @@ static void processIMU(void *pvParameters)
 
 			// Compute baro interial acceleration in body frame
 			fcVelbi1 = ( PeriodVelbi / ( PeriodVelbi + dtGyr ));
-			fcVelbi2 = ( 1.0 - fcVelbi1 );			
+			fcVelbi2 = ( 1.0 - fcVelbi1 );
+			xSemaphoreTake( dataMutex, 2/portTICK_PERIOD_MS ); // prevent data conflicts for 2ms max.			
 			UbiPrim = fcVelbi1 * ( UbiPrim + UiPrimPrimS * dtGyr ) + fcVelbi2 * UbPrimS;
 			VbiPrim = fcVelbi1 * ( VbiPrim + ViPrimPrimS * dtGyr ) + fcVelbi2 * VbPrimS;			
 			WbiPrim = fcVelbi1 * ( WbiPrim + WiPrimPrimS * dtGyr ) + fcVelbi2 * WbPrimS;
@@ -1039,6 +1045,7 @@ static void processIMU(void *pvParameters)
 			Ubi = fcVelbi1 * ( Ubi + UbiPrim * dtGyr ) + fcVelbi2 * Ub;
 			Vbi = fcVelbi1 * ( Vbi + VbiPrim * dtGyr ) + fcVelbi2 * Vb;
 			Wbi = fcVelbi1 * ( Wbi + WbiPrim * dtGyr ) + fcVelbi2 * Wb;
+			xSemaphoreGive( dataMutex );
 		}
 
 		// When TAS < 15 m/s the vario is considered potentially stable on ground
@@ -1541,6 +1548,7 @@ void readSensors(void *pvParameters){
 		#define fcAoB1 (10.0/(10.0+FreqBeta))
 		#define fcAoB2 (1.0-fcAoB1)		
 		WingLoad = gross_weight.get() / polar_wingarea.get();  // should be only computed when pilot change weight settings in XCVario
+		xSemaphoreTake( dataMutex, 1/portTICK_PERIOD_MS ); // prevent data conflicts for 1ms max.		
 		if ( (dynP>100.0) && (CAS>10.0) && (TAS>10.0) && (abs(accelISUNEDBODY.z) > 1.0) ) { // compute AoA and AoB only when dynamic pressure is above 100 Pa, CAS & TAS abobe 10m/s and accel z above 1 m/s²
 			CL = -accelISUNEDBODY.z * 2 / RhoSLISA * WingLoad / CAS / CAS;
 			dAoA = ( CL - prevCL ) / CLA;
@@ -1586,6 +1594,11 @@ void readSensors(void *pvParameters){
 			
 		// baro interial vertical speed in earth frame
 		Vzbi = -sinPitch * Ubi + sinRoll * cosPitch * Vbi + cosRoll * cosPitch * Wbi;		
+
+		// baro inertial TAS square in any frame
+		TASbiSquare = Ubi * Ubi + Vbi * Vbi + Wbi * Wbi;
+
+		xSemaphoreGive( dataMutex );
 		
 		// energy variation calculation d(E/mg)/dt = d(ALT + 1/2 1/g TAS²)/dt
 		// to remove unwanted pneumatic variations, mainly due to wind gradients, use long period (~3-4 s) complementary filter to provide baro/inertial velocity
@@ -1605,7 +1618,7 @@ void readSensors(void *pvParameters){
 		#define NTE 7.0 // ALT alpha/beta coeff
 		#define alphaTE (2.0 * (2.0 * NTE - 1.0) / NTE / (NTE + 1.0))
 		#define betaTE (6.0 / NTE / (NTE + 1.0) )
-		TASbiSquare = Ubi * Ubi + Vbi * Vbi + Wbi * Wbi;
+
 		deltaEnergy = ( ALTbi + TASbiSquare / GRAVITY ) - EnergyFilt;
 		EnergyPrim = EnergyPrim + betaTE * deltaEnergy / dtStat; // variation of total energy
 		EnergyFilt = EnergyFilt + alphaTE * deltaEnergy + EnergyPrim * dtStat;
@@ -2226,7 +2239,9 @@ void system_startup(void *args){
 		CTmultCS = C_T * C_S;
 		
 		// create mutex for BT synchronization
-		BTMutex = xSemaphoreCreateMutex();		
+		BTMutex = xSemaphoreCreateMutex();	
+		// create mutex for data synchronization between processIMU and readSensors
+		dataMutex = xSemaphoreCreateMutex();	
 	
 		char ahrs[50];
 		float accel = 0;
