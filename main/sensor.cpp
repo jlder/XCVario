@@ -783,6 +783,7 @@ float deltaGz;
 			// when on ground compute error using both accel and gyro module variation
 			GravityModuleErr =  (Nlimit - AccelGravModuleFilt) + (GyroModulePrimLevel - Gyroprimlimit);
 		}
+		/*
 		// if GravityModuleErr positive, high confidence in accels
 		if  ( GravityModuleErr > 0.0 ) {
 			Kgain = 1.0;
@@ -796,7 +797,20 @@ float deltaGz;
 			Kgain = pow( 10.0, GravityModuleErr * 8.0 / pow( 2.0, abs(AvgGravityModuleErr) ) );
 		}
 		dynKp = Kgain * Kp;
-		dynKi = Kgain * Ki;		
+		dynKi = Kgain * Ki;	*/	
+		
+		// TODO OLD Kgain
+		if  ( GravityModuleErr > 0.0 ) {
+			Kgain = 1.0;
+		} else {
+			// if GravityModuleErr negative, low confidence in accels
+			// limit error magnitude
+			if ( GravityModuleErr < -5.0 ) GravityModuleErr = -5.0;
+			// compute dynamic gain function of error magnitude
+			Kgain = pow( 10.0, GravityModuleErr * 2.0 );
+		}
+		dynKp = Kgain * Kp;
+		dynKi = Kgain * Ki;	
 		// Normalise accelerometer measurement
 		recipNorm = 1.0 / AccelGravModule;
 		ax *=recipNorm;
@@ -1878,7 +1892,8 @@ void readSensors(void *pvParameters){
 			free quaternion Pitch in milli rad,
 			free quaternion Roll in milli rad,
 			free quaternion Yaw in milli rad,
-			ProcessTimeSensors in milli second
+			ProcessTimeSensors in milli second,
+			GravityModuleErr in hundredth of unit
 			<CR><LF>		
 		*/
 		/* 
@@ -1902,7 +1917,7 @@ void readSensors(void *pvParameters){
 			xSemaphoreTake( BTMutex, 3/portTICK_PERIOD_MS );
 			if ( !(count % 50) ) { 
 				// send $S1 and $S2 every 50 cycles = 5 seconds
-				sprintf(str,"$S1,%lld,%i,%i,%i,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$S2,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",
+				sprintf(str,"$S1,%lld,%i,%i,%i,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$S2,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",
 				// $S1 stream
 					statTime, (int32_t)(statP*100.0),(int32_t)(teP*100.0), (int16_t)(dynP*10), 
 					(int64_t)(chosenGnss->time*1000.0), (int16_t)(chosenGnss->speed.x*100), (int16_t)(chosenGnss->speed.y*100), (int16_t)(chosenGnss->speed.z*100), (int16_t)(GNSSRouteraw*10),
@@ -1917,6 +1932,7 @@ void readSensors(void *pvParameters){
 					(int32_t)rint(MPU.mpu_heat_pwm),
 					(int32_t)(free_Pitch*1000.0), (int32_t)(free_Roll*1000.0), (int32_t)(free_Yaw*1000.0),
 					(int32_t) ProcessTimeSensors,
+					(int32_t) GravityModuleErr*100,					
 					// $S2 stream
 					(int16_t)(OATemp*10.0), (int16_t)(MPUtempcel*10.0), chosenGnss->fix, chosenGnss->numSV,
 					(int32_t)(GroundGyroBias.x*100000.0), (int32_t)(GroundGyroBias.y*100000.0), (int32_t)(GroundGyroBias.z*100000.0),				
@@ -1926,7 +1942,7 @@ void readSensors(void *pvParameters){
 				Router::sendXCV(str);		
 			} else {
 				// send $S1 only every 100ms
-				sprintf(str,"$S1,%lld,%i,%i,%i,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",
+				sprintf(str,"$S1,%lld,%i,%i,%i,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",
 					statTime, (int32_t)(statP*100.0),(int32_t)(teP*100.0), (int16_t)(dynP*10), 
 					(int64_t)(chosenGnss->time*1000.0), (int16_t)(chosenGnss->speed.x*100), (int16_t)(chosenGnss->speed.y*100), (int16_t)(chosenGnss->speed.z*100), (int16_t)(GNSSRouteraw*10),
 					(int32_t)(Pitch*1000.0), (int32_t)(Roll*1000.0), (int32_t)(Yaw*1000.0),
@@ -1939,7 +1955,8 @@ void readSensors(void *pvParameters){
 					(int32_t)(Kgain*1000), 
 					(int32_t)rint(MPU.mpu_heat_pwm),
 					(int32_t)(free_Pitch*1000.0), (int32_t)(free_Roll*1000.0), (int32_t)(free_Yaw*1000.0),
-					(int32_t) ProcessTimeSensors					
+					(int32_t) ProcessTimeSensors,
+					(int32_t) GravityModuleErr*100					
 					);				
 				Router::sendXCV(str);
 			}
