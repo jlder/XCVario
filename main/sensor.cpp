@@ -660,15 +660,17 @@ float dynKp = Kp;
 float dynKi = Ki;
 float deltaGz;
 
+	// Estimate direction of gravity from IMU quaternion
+	halfvx = q1 * q3 - q0 * q2;
+	halfvy = q0 * q1 + q2 * q3;
+	halfvz = q0 * q0 - 0.5 + q3 * q3;
+	
 	/* // TO DO remove bias estimation to reduce cpu load
 	// To estimate gyro Bias:
 	// - compute error between vertical vector from IMU quaternion and free quaternion
 	// - estimate bias by computing error rate of change on each axis using long term alpha/beta filter
 	//
-	// Estimate direction of gravity from IMU quaternion
-	halfvx = q1 * q3 - q0 * q2;
-	halfvy = q0 * q1 + q2 * q3;
-	halfvz = q0 * q0 - 0.5 + q3 * q3;
+
 	// Estimate direction of vertical from free quaternion
 	free_halfvx = free_q1 * free_q3 - free_q0 * free_q2;
 	free_halfvy = free_q0 * free_q1 + free_q2 * free_q3;
