@@ -1932,7 +1932,7 @@ void readSensors(void *pvParameters){
 					(int32_t)rint(MPU.mpu_heat_pwm),
 					(int32_t)(free_Pitch*1000.0), (int32_t)(free_Roll*1000.0), (int32_t)(free_Yaw*1000.0),
 					(int32_t) ProcessTimeSensors,
-					(int32_t) GravityModuleErr*100,					
+					(int32_t) (GravityModuleErr*1000),					
 					// $S2 stream
 					(int16_t)(OATemp*10.0), (int16_t)(MPUtempcel*10.0), chosenGnss->fix, chosenGnss->numSV,
 					(int32_t)(GroundGyroBias.x*100000.0), (int32_t)(GroundGyroBias.y*100000.0), (int32_t)(GroundGyroBias.z*100000.0),				
@@ -1956,7 +1956,7 @@ void readSensors(void *pvParameters){
 					(int32_t)rint(MPU.mpu_heat_pwm),
 					(int32_t)(free_Pitch*1000.0), (int32_t)(free_Roll*1000.0), (int32_t)(free_Yaw*1000.0),
 					(int32_t) ProcessTimeSensors,
-					(int32_t) GravityModuleErr*100					
+					(int32_t) (GravityModuleErr*1000)					
 					);				
 				Router::sendXCV(str);
 			}
