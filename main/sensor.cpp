@@ -951,7 +951,7 @@ static void processIMU(void *pvParameters)
 			accelISUNEDMPU.z = ((-accelG.x*9.807) - currentAccelBias.z ) * currentAccelGain.z;
 			// convert from MPU to BODY
 			xSemaphoreTake( dataMutex, 2/portTICK_PERIOD_MS ); // prevent data conflicts for 2ms max.			
-			accelISUNEDBODY.x = C_T * accelISUNEDMPU.x + STmultSS * accelISUNEDMPU.y + STmultCS * accelISUNEDMPU.z - ( gyroCorr.y * gyroCorr.y + gyroCorr.z * gyroCorr.z ) * DistCGVario;
+			accelISUNEDBODY.x = C_T * accelISUNEDMPU.x + STmultSS * accelISUNEDMPU.y + STmultCS * accelISUNEDMPU.z + ( gyroCorr.y * gyroCorr.y + gyroCorr.z * gyroCorr.z ) * DistCGVario;
 			accelISUNEDBODY.y = C_S * accelISUNEDMPU.y - S_S * accelISUNEDMPU.z;
 			accelISUNEDBODY.z = -S_T * accelISUNEDMPU.x + SSmultCT * accelISUNEDMPU.y + CTmultCS * accelISUNEDMPU.z;
 			xSemaphoreGive( dataMutex );
@@ -1560,10 +1560,10 @@ void readSensors(void *pvParameters){
 		Vzbaro = - ALTPrim;
 		
 		// compute AoA (Angle of attack) and AoB (Angle od slip)
-		#define FreqAlpha 1.0 // Hz
+		#define FreqAlpha 0.5 // Hz
 		#define fcAoA1 (10.0/(10.0+FreqAlpha))
 		#define fcAoA2 (1.0-fcAoA1)
-		#define FreqBeta 0.5 // Hz
+		#define FreqBeta 2.0 // Hz
 		#define fcAoB1 (10.0/(10.0+FreqBeta))
 		#define fcAoB2 (1.0-fcAoB1)		
 		WingLoad = gross_weight.get() / polar_wingarea.get();  // should be only computed when pilot change weight settings in XCVario
@@ -1573,7 +1573,7 @@ void readSensors(void *pvParameters){
 			dAoA = ( CL - prevCL ) / CLA;
 			prevCL = CL;
 			if (abs(accelISUNEDBODY.z) > 1.0) { //when not close to Az=0, hybridation of aoa from drag & aoa from lift
-				AoARaw = -(accelISUNEDBODY.x / accelISUNEDBODY.z) + Speed2Fly.cw( CAS ) / Speed2Fly.getN();
+				AoARaw = -(accelISUNEDBODY.x / accelISUNEDBODY.z) - Speed2Fly.cw( CAS ) / Speed2Fly.getN();
 				AoA = fcAoA1 * ( AoA + dAoA ) + fcAoA2 * AoARaw ;
 			}  else { //when  close to Az=0, only aoa from lift considered
                 AoA = ( AoA + dAoA ) ;
