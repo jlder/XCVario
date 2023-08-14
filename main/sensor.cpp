@@ -638,9 +638,9 @@ void MahonyUpdateIMU(float dt, float gxraw, float gyraw, float gzraw,
 					float ax, float ay, float az, 
 					float &Bias_Gx, float &Bias_Gy, float &Bias_Gz ) {
 
-#define Nlimit 0.2 // stability criteria for gravity estimation from accels in m/s²
-#define Kp 2.0 //2.5 // proportional feedback to sync quaternion
-#define Ki 0.15 //0.15 // integral feedback to sync quaternion
+#define Nlimit 0.15 // stability criteria for gravity estimation from accels in m/s²
+#define Kp 0.2 // proportional feedback to sync quaternion
+#define Ki 0.02 // integral feedback to sync quaternion
 
 #define Gyroprimlimit 0.3
 
@@ -809,7 +809,7 @@ float deltaGz;
 			// limit error magnitude
 			if ( GravityModuleErr < -5.0 ) GravityModuleErr = -5.0;
 			// compute dynamic gain function of error magnitude
-			Kgain = pow( 10.0, GravityModuleErr * 2.0 );
+			Kgain = pow( 10.0, GravityModuleErr * 4.0 );
 		}
 		dynKp = Kgain * Kp;
 		dynKi = Kgain * Ki;	
