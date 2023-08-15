@@ -665,7 +665,7 @@ float deltaGz;
 	halfvy = q0 * q1 + q2 * q3;
 	halfvz = q0 * q0 - 0.5 + q3 * q3;
 	
-	/* // TO DO remove bias estimation to reduce cpu load
+	// TO DO test and optimize bias estimation to reduce cpu load
 	// To estimate gyro Bias:
 	// - compute error between vertical vector from IMU quaternion and free quaternion
 	// - estimate bias by computing error rate of change on each axis using long term alpha/beta filter
@@ -679,16 +679,15 @@ float deltaGz;
 	// half error is sum of cross product between IMU quaternion and free quaternion
 	free_halfex = free_halfvz * halfvy - free_halfvy * halfvz;
 	free_halfey = free_halfvx * halfvz - free_halfvz * halfvx;
-	free_halfez = free_halfvy * halfvx - free_halfvx * halfvy;
 	// compute error rate of change for x and y axes using alpha/beta filters
 	#define Nbias 8000.0 // very long period for extracting error rate of change between IMU quaternion and free quaternion
 	#define alphaBias (2.0 * (2.0 * Nbias - 1.0) / Nbias / (Nbias + 1.0))
-	#define betaBias (6.0 / Nbias / (Nbias + 1.0) / PERIOD40HZ)	
+	#define betaBias (6.0 / Nbias / (Nbias + 1.0))	
 	delta_errx = free_halfex - filt_errx;
-	errx_prim = errx_prim + betaBias * delta_errx; // error rate of change for x
+	errx_prim = errx_prim + betaBias * delta_errx / dt; // error rate of change for x
 	filt_errx = filt_errx + alphaBias * delta_errx + errx_prim * dt;
 	delta_erry = free_halfey - filt_erry;
-	erry_prim = erry_prim + betaBias * delta_erry; // error rate of change for y
+	erry_prim = erry_prim + betaBias * delta_erry / dt; // error rate of change for y
 	filt_erry = filt_erry + alphaBias * delta_erry + erry_prim * dt;
 	// error from cross product is half total error, 2.0 factor is applied to obtain bias
 	Bias_Gx = 2.0 * errx_prim;
@@ -712,9 +711,9 @@ float deltaGz;
 	if ( ( (TAS > 15.0) && (BankFilt < WingLevel) ) || ( (TAS<15.0) && (GyroModulePrimLevel < Gyroprimlimit)) ) {
 		#define NGzBias 10000
 		#define alphaBiasGz (2.0 * (2.0 * NGzBias - 1.0) / NGzBias / (NGzBias + 1.0))
-		#define betaBiasGz (6.0 / NGzBias / (NGzBias + 1.0) / PERIOD40HZ)
+		#define betaBiasGz (6.0 / NGzBias / (NGzBias + 1.0) )
 		deltaGz = (gzraw - GNSSRoutePrim) - GzF;
-		GzPrim = GzPrim + betaBiasGz * deltaGz ;
+		GzPrim = GzPrim + betaBiasGz * deltaGz / dt ;
 		GzF = GzF + alphaBiasGz  * deltaGz + GzPrim * dt;
 		BiasGz = BiasGz +  alphaBiasGz  * deltaGz + GzPrim * dt;
 		Bias_Gz = -BiasGz ;
@@ -722,7 +721,7 @@ float deltaGz;
 		if ( Bias_Gz < -GMaxBias ) Bias_Gz = -GMaxBias;
 	} else {
 		GzF = gzraw - GNSSRoutePrim;
-	} */ // TO DO remove bias estimation to reduce cpu load
+	} 
 	
 	// Update free quaternion by integrating rate of change
 	gx = gxraw * 0.5 * dt;
@@ -1396,8 +1395,8 @@ void readSensors(void *pvParameters){
 	float deltaGNSSRoute;	
 
 	// Wind speed variables
-	float Vgx;
-	float Vgy;
+	float Vgx = 0.0;
+	float Vgy = 0.0;
 	float VgxPrev = 0.0;
 	float VgyPrev = 0.0;
 	float DeltaVgx;
@@ -1422,7 +1421,7 @@ void readSensors(void *pvParameters){
 	float VhAvg = 0.0;
 	float VhHeading = 0.0;
 
-	#define DSR 10 // maximum number of samples spacing to compute wind.
+	#define DSR 15 // maximum number of samples spacing to compute wind.
 	int16_t tickDSR = 1;
 	
 	int client_sync_dataIdx = 0;
@@ -1653,16 +1652,16 @@ void readSensors(void *pvParameters){
 		#define fcTEAvg2 ( 1.0 - fcTEAvg1 )			
 		TotalEnergyAvg = fcTEAvg1 * TotalEnergyAvg + fcTEAvg2 * TotalEnergy;
 
-		/* // TODO temporary removal of wind estimation
+		// TODO test and optimze wind calculation
 		// compute wind speed using GNSS and horizontal true airspeed
-		Vgx = chosenGnss->speed.x; // GNSS x coordinate
-		Vgy = chosenGnss->speed.y; // GNSS y coordinate
+		Vgx = 0.5 * Vgx + 0.5 * chosenGnss->speed.x; // GNSS x coordinate with short low pass
+		Vgy = 0.5 * Vgy + 0.5 * chosenGnss->speed.y; // GNSS y coordinate with short low pass
 		DeltaVgx = Vgx-VgxPrev; // Variation of x speed coordinate
 		DeltaVgy = Vgy-VgyPrev; // Variation of y speed coordinate
 		SegmentSquare = DeltaVgx*DeltaVgx+DeltaVgy*DeltaVgy; // squared module of segment between speed vectors extremities
 		Segment = sqrt(SegmentSquare); // module of segment
 		VhAvg = ( Vh + VhPrev ) / 2; // average horizontal speed
-		if ( (abs(Vh-VhPrev)<0.35) && (Segment > 1.0) && (VgxPrev != 0.0) && (VgyPrev != 0.0) && (DeltaVgx != 0.0) && (DeltaVgy != 0.0) && (VhAvg > Segment/2) ) {
+		if ( (abs(Vh-VhPrev)<0.3) && (Segment > 0.75) && (VgxPrev != 0.0) && (VgyPrev != 0.0) && (DeltaVgx != 0.0) && (DeltaVgy != 0.0) && (VhAvg > Segment/2) ) {
 			MidSegmentx = (Vgx+VgxPrev)/2; // mid segment x
 			MidSegmenty = (Vgy+VgyPrev)/2; // mid segment y
 			Median = sqrt(VhAvg*VhAvg-SegmentSquare/4); // module of median between segment center and true airspedd origin (usinf average of current and previous true airspeed
@@ -1695,7 +1694,7 @@ void readSensors(void *pvParameters){
 				VhPrev = Vh;
 				tickDSR = 1;
 			}
-		} */ // TODO temporary removal of wind estimation
+		} 
 		
 		//
 		// Eckhard code
