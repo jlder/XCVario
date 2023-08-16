@@ -929,20 +929,22 @@ static void processIMU(void *pvParameters)
 			if (dtGyr > 3*PERIOD40HZ) dtGyr = 3*PERIOD40HZ;			
 			gyroDPS = mpud::gyroDegPerSec(gyroRaw, GYRO_FS); // For compatibility with Eckhard code only. Convert raw gyro to Gyro_FS full scale in degre per second 
 			gyroRPS = mpud::gyroRadPerSec(gyroRaw, GYRO_FS); // convert raw gyro to Gyro_FS full scale
-			// convert gyro coordinates to ISU : rad/s NED MPU and remove bias
-			xSemaphoreTake( dataMutex, 2/portTICK_PERIOD_MS ); // prevent data conflicts for 2ms max.			
-			gyroISUNEDMPU.x = -(gyroRPS.z - GroundGyroBias.z);
-			gyroISUNEDMPU.y = -(gyroRPS.y - GroundGyroBias.y);
-			gyroISUNEDMPU.z = -(gyroRPS.x - GroundGyroBias.x);
-			// convert NEDMPU to NEDBODY			
-			gyroISUNEDBODY.x = C_T * gyroISUNEDMPU.x + STmultSS * gyroISUNEDMPU.y + STmultCS * gyroISUNEDMPU.z;
-			gyroISUNEDBODY.y = C_S * gyroISUNEDMPU.y - S_S * gyroISUNEDMPU.z;
-			gyroISUNEDBODY.z = -S_T * gyroISUNEDMPU.x + SSmultCT  * gyroISUNEDMPU.y + CTmultCS * gyroISUNEDMPU.z;
-			// correct gyro with flight gyro estimation
-			gyroCorr.x = gyroISUNEDBODY.x;// + BiasQuatGx;  // error on x should be added
-			gyroCorr.y = gyroISUNEDBODY.y;// + BiasQuatGy;  // error on y should be added
-			gyroCorr.z = gyroISUNEDBODY.z;// + BiasQuatGz;  // error on z should be removed
-			xSemaphoreGive( dataMutex );
+			if ( abs(gyroRPS.x) < M_PI && abs(gyroRPS.y) < M_PI && abs(gyroRPS.z) < M_PI ) { // discard zickets
+				// convert gyro coordinates to ISU : rad/s NED MPU and remove bias
+				xSemaphoreTake( dataMutex, 2/portTICK_PERIOD_MS ); // prevent data conflicts for 2ms max.			
+				gyroISUNEDMPU.x = -(gyroRPS.z - GroundGyroBias.z);
+				gyroISUNEDMPU.y = -(gyroRPS.y - GroundGyroBias.y);
+				gyroISUNEDMPU.z = -(gyroRPS.x - GroundGyroBias.x);
+				// convert NEDMPU to NEDBODY			
+				gyroISUNEDBODY.x = C_T * gyroISUNEDMPU.x + STmultSS * gyroISUNEDMPU.y + STmultCS * gyroISUNEDMPU.z;
+				gyroISUNEDBODY.y = C_S * gyroISUNEDMPU.y - S_S * gyroISUNEDMPU.z;
+				gyroISUNEDBODY.z = -S_T * gyroISUNEDMPU.x + SSmultCT  * gyroISUNEDMPU.y + CTmultCS * gyroISUNEDMPU.z;
+				// correct gyro with flight gyro estimation
+				gyroCorr.x = gyroISUNEDBODY.x;// + BiasQuatGx;  // error on x should be added
+				gyroCorr.y = gyroISUNEDBODY.y;// + BiasQuatGy;  // error on y should be added
+				gyroCorr.z = gyroISUNEDBODY.z;// + BiasQuatGz;  // error on z should be removed
+				xSemaphoreGive( dataMutex );
+			}
 		}
 		// get accel data
 		if( MPU.acceleration(&accelRaw) == ESP_OK ){ // read raw acceleration
@@ -951,12 +953,14 @@ static void processIMU(void *pvParameters)
 			accelISUNEDMPU.x = ((-accelG.z*9.807) - currentAccelBias.x ) * currentAccelGain.x;
 			accelISUNEDMPU.y = ((-accelG.y*9.807) - currentAccelBias.y ) * currentAccelGain.y;
 			accelISUNEDMPU.z = ((-accelG.x*9.807) - currentAccelBias.z ) * currentAccelGain.z;
-			// convert from MPU to BODY
-			xSemaphoreTake( dataMutex, 2/portTICK_PERIOD_MS ); // prevent data conflicts for 2ms max.			
-			accelISUNEDBODY.x = C_T * accelISUNEDMPU.x + STmultSS * accelISUNEDMPU.y + STmultCS * accelISUNEDMPU.z + ( gyroCorr.y * gyroCorr.y + gyroCorr.z * gyroCorr.z ) * DistCGVario;
-			accelISUNEDBODY.y = C_S * accelISUNEDMPU.y - S_S * accelISUNEDMPU.z;
-			accelISUNEDBODY.z = -S_T * accelISUNEDMPU.x + SSmultCT * accelISUNEDMPU.y + CTmultCS * accelISUNEDMPU.z;
-			xSemaphoreGive( dataMutex );
+			if ( abs(accelISUNEDMPU.x) < 5.0 && abs(accelISUNEDMPU.y) < 5.0 && abs(accelISUNEDMPU.z) < 5.0 ) { // remove zickets
+				// convert from MPU to BODY
+				xSemaphoreTake( dataMutex, 2/portTICK_PERIOD_MS ); // prevent data conflicts for 2ms max.			
+				accelISUNEDBODY.x = C_T * accelISUNEDMPU.x + STmultSS * accelISUNEDMPU.y + STmultCS * accelISUNEDMPU.z + ( gyroCorr.y * gyroCorr.y + gyroCorr.z * gyroCorr.z ) * DistCGVario;
+				accelISUNEDBODY.y = C_S * accelISUNEDMPU.y - S_S * accelISUNEDMPU.z;
+				accelISUNEDBODY.z = -S_T * accelISUNEDMPU.x + SSmultCT * accelISUNEDMPU.y + CTmultCS * accelISUNEDMPU.z;
+				xSemaphoreGive( dataMutex );
+			}
 		}
 		
 		if ( AttitudeInit < 10 ) { // initialize quaternions at xcvario start
