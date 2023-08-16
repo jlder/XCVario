@@ -768,13 +768,16 @@ float deltaGz;
 		// even in noisy environments
 		//
 		// acceleration module filtered with asymetrical low pass filter (fast rise and slower decay) 
-		if ( AccelGravModuleFilt < abs(AccelGravModule - GRAVITY) ) {
-			AccelGravModuleFilt = abs(AccelGravModule - GRAVITY); // immediate rise
-		} else {
-			#define fcGrav 0.2 // 5Hz low pass to filter for testing stability criteria during decays
-			#define fcGrav1 ( fcGrav /( fcGrav + PERIOD40HZ ))
-			#define fcGrav2 ( 1.0 - fcGrav1 )
-			AccelGravModuleFilt = fcGrav1 * AccelGravModuleFilt + fcGrav2 * abs(AccelGravModule - GRAVITY);
+		if ( AccelGravModuleFilt < abs(AccelGravModule - GRAVITY) ) { // faster rise
+			#define fcGravRis 3.0 // 3Hz low pass to filter rising gravity error for testing stability criteria during decays
+			#define fcGravRis1 ( fcGravRis /( fcGravRis + PERIOD40HZ ))
+			#define fcGravRis2 ( 1.0 - fcGravRis1 )
+			AccelGravModuleFilt = fcGravRis1 * AccelGravModuleFilt + fcGravRis2 * abs(AccelGravModule - GRAVITY);			
+		} else { // slower decay
+			#define fcGravDec 1.0 // 1Hz low pass to filter decaying gravity error for testing stability criteria during decays
+			#define fcGravDec1 ( fcGravDec /( fcGravDec + PERIOD40HZ ))
+			#define fcGravDec2 ( 1.0 - fcGravDec1 )
+			AccelGravModuleFilt = fcGravDec1 * AccelGravModuleFilt + fcGravDec2 * abs(AccelGravModule - GRAVITY);
 		}
 		if ( TAS > 15 ) {
 			// when moving compute error between acceleration module and local gravity (GRAVITY) in relation to Nlimit
@@ -1506,7 +1509,6 @@ void readSensors(void *pvParameters){
 		const gnss_data_t *chosenGnss = (gnss2->fix >= gnss1->fix) ? gnss2 : gnss1;
 		GNSSRouteraw = chosenGnss->route;
 		
-		/* // TO DO temporary remove GNSS route variation estimation
 		// alpha/beta filter on GNSS route to reduce noise and get route variation
 		// GNSSRoute and GNSSRoutePrim are only computed if TAS > 15 m/s
 		#define NGNSS 7.0 // GNSS alpha/beta. Sample rate is 0 Hz = 0.1 second
@@ -1521,7 +1523,7 @@ void readSensors(void *pvParameters){
 		} else {
 			GNSSRoutePrim = 0.0;
 			GNSSRoute = 0.0;
-		} */ // TO DO temporary remove GNSS route variation estimation
+		}
 
 		// compute CAS, ALT and Vzbaro using alpha/beta filters.  TODO consider using atmospher.h functions
 		if (statP != 0.0) {
