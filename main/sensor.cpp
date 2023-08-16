@@ -639,8 +639,8 @@ void MahonyUpdateIMU(float dt, float gxraw, float gyraw, float gzraw,
 					float &Bias_Gx, float &Bias_Gy, float &Bias_Gz ) {
 
 #define Nlimit 0.15 // stability criteria for gravity estimation from accels in m/s²
-#define Kp 0.2 // proportional feedback to sync quaternion
-#define Ki 0.02 // integral feedback to sync quaternion
+#define Kp 1.0 // proportional feedback to sync quaternion
+#define Ki 0.1 // integral feedback to sync quaternion
 
 #define Gyroprimlimit 0.3
 
@@ -1894,7 +1894,7 @@ void readSensors(void *pvParameters){
 			free quaternion Roll in milli rad,
 			free quaternion Yaw in milli rad,
 			ProcessTimeSensors in milli second,
-			GravityModuleErr in hundredth of unit
+			GravityModuleErr in thousans of unit
 			<CR><LF>		
 		*/
 		/* 
