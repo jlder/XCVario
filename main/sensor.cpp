@@ -250,12 +250,12 @@ float Sway = 0.0; // vario installation roll angle
 float Tilt = 0.0; // vario installation pitch angle
 float S_S = 0.0; // sinus Sway
 float S_T = 0.0; // sinus Tilt
-float C_S = 0.0; // cos Sway
-float C_T = 0.0; // cos tilt	
+float C_S = 1.0; // cos Sway
+float C_T = 1.0; // cos tilt
 float STmultSS = 0.0; // ST * SS
 float STmultCS = 0.0; // ST * CS
 float SSmultCT = 0.0; // SS * CT
-float CTmultCS = 0.0; // CT * CS
+float CTmultCS = 1.0; // CT * CS
 
 
 static char str[500]; 	// string for flight test message broadcast on wireless // TODO reduce size
@@ -724,7 +724,7 @@ float deltaGz;
 	} else {
 		GzF = gzraw - GNSSRoutePrim;
 	} 
-	
+	*/
 	// Update free quaternion by integrating rate of change
 	gx = gxraw * 0.5 * dt;
 	gy = gyraw * 0.5 * dt;
@@ -789,7 +789,7 @@ float deltaGz;
 			// when on ground compute error using both accel and gyro module variation
 			GravityModuleErr =  (Nlimit - AccelGravModuleFilt) + (GyroModulePrimLevel - Gyroprimlimit);
 		}
-		/*
+
 		// if GravityModuleErr positive, high confidence in accels
 		if  ( GravityModuleErr > 0.0 ) {
 			Kgain = 1.0;
@@ -919,7 +919,7 @@ static void processIMU(void *pvParameters)
 	PrevgyroRPS.z = 0.0;
 	PrevaccelISUNEDMPU.x = 0.0;
 	PrevaccelISUNEDMPU.y = 0.0;
-	PrevaccelISUNEDMPU.z = 9.807;
+	PrevaccelISUNEDMPU.z = -9.807;
 	
 	// compute once the filter parameters in functions of values in FLASH
 	PeriodVelbi = velbi_period.get(); // period in second for baro/inertial velocity. period long enough to reduce effect of baro wind gradients
@@ -964,6 +964,11 @@ static void processIMU(void *pvParameters)
 			accelISUNEDMPU.y = ((-accelG.y*9.807) - currentAccelBias.y ) * currentAccelGain.y;
 			accelISUNEDMPU.z = ((-accelG.x*9.807) - currentAccelBias.z ) * currentAccelGain.z;
 			// eliminate accel variations above 5 m/s²
+			if (PrevaccelISUNEDMPU.x==0.0 && PrevaccelISUNEDMPU.y==0.0 && PrevaccelISUNEDMPU.z==-9.807 ){
+				PrevaccelISUNEDMPU.x =accelISUNEDBODY.x;
+				PrevaccelISUNEDMPU.y =accelISUNEDBODY.y;
+				PrevaccelISUNEDMPU.z =accelISUNEDBODY.z;
+			}
 			if ( abs(accelISUNEDMPU.x-PrevaccelISUNEDMPU.x) < 5.0 && abs(accelISUNEDMPU.y-PrevaccelISUNEDMPU.y) < 5.0 && abs(accelISUNEDMPU.z-PrevaccelISUNEDMPU.z) < 5.0 ) { // remove zickets
 				// convert from MPU to BODY
 				xSemaphoreTake( dataMutex, 2/portTICK_PERIOD_MS ); // prevent data conflicts for 2ms max.			
