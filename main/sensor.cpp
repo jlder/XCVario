@@ -919,7 +919,7 @@ static void processIMU(void *pvParameters)
 	PrevgyroRPS.z = 0.0;
 	PrevaccelISUNEDMPU.x = 0.0;
 	PrevaccelISUNEDMPU.y = 0.0;
-	PrevaccelISUNEDMPU.z = 0.0;
+	PrevaccelISUNEDMPU.z = 9.807;
 	
 	// compute once the filter parameters in functions of values in FLASH
 	PeriodVelbi = velbi_period.get(); // period in second for baro/inertial velocity. period long enough to reduce effect of baro wind gradients
@@ -1401,9 +1401,9 @@ void readSensors(void *pvParameters){
 	float WingLoad = 40.0;
 	float AoA = 0.0;
 	float AoB = 0.0;
-    float CLA = 5.67; // CLA=2*PI/(1+2/AR) = 5.75 for LS6, 5.98 for Ventus 3, 5.67 for Taurus
-    float KAoB = 3; // 3.5 for LS6,  2.97 for Ventus 3, 3 for Taurus TBC
-    float KGx = 4; // 4.1 for LS6, 12 for Ventus 3, 4 for Taurus TBC
+    float CLA = 5.75; // CLA=2*PI/(1+2/AR) = 5.75 for LS6, 5.98 for Ventus 3, 5.67 for Taurus
+    float KAoB = 3.5; // 3.5 for LS6,  2.97 for Ventus 3, 3 for Taurus TBC
+    float KGx = 4.1; // 4.1 for LS6, 12 for Ventus 3, 4 for Taurus TBC
 	
 	float TASbiSquare;
 	float deltaEnergy;
