@@ -166,8 +166,10 @@ BTSender btsender;
 
 // IMU variables	
 mpud::float_axes_t accelISUNEDMPU;
+mpud::float_axes_t PrevaccelISUNEDMPU;
 mpud::float_axes_t accelISUNEDBODY;	
 mpud::float_axes_t gyroRPS;
+mpud::float_axes_t PrevgyroRPS;
 mpud::float_axes_t gyroISUNEDMPU;
 mpud::float_axes_t gyroISUNEDBODY;
 mpud::float_axes_t gyroCorr;
@@ -912,6 +914,12 @@ static void processIMU(void *pvParameters)
 	int16_t AttitudeInit = 0;
 	// initialize prevgyrotime
 	prevgyroTime = esp_timer_get_time()/1000.0;
+	PrevgyroRPS.x = 0.0;
+	PrevgyroRPS.y = 0.0;
+	PrevgyroRPS.z = 0.0;
+	PrevaccelISUNEDMPU.x = 0.0;
+	PrevaccelISUNEDMPU.y = 0.0;
+	PrevaccelISUNEDMPU.z = 0.0;
 	
 	// compute once the filter parameters in functions of values in FLASH
 	PeriodVelbi = velbi_period.get(); // period in second for baro/inertial velocity. period long enough to reduce effect of baro wind gradients
@@ -929,7 +937,8 @@ static void processIMU(void *pvParameters)
 			if (dtGyr > 3*PERIOD40HZ) dtGyr = 3*PERIOD40HZ;			
 			gyroDPS = mpud::gyroDegPerSec(gyroRaw, GYRO_FS); // For compatibility with Eckhard code only. Convert raw gyro to Gyro_FS full scale in degre per second 
 			gyroRPS = mpud::gyroRadPerSec(gyroRaw, GYRO_FS); // convert raw gyro to Gyro_FS full scale
-			if ( abs(gyroRPS.x) < M_PI && abs(gyroRPS.y) < M_PI && abs(gyroRPS.z) < M_PI ) { // discard zickets
+			// eliminate gyro variations above PI rd/s
+			if ( abs(gyroRPS.x-PrevgyroRPS.x) < M_PI && abs(gyroRPS.y-PrevgyroRPS.y) < M_PI && abs(gyroRPS.z-PrevgyroRPS.z) < M_PI ) { // discard zickets
 				// convert gyro coordinates to ISU : rad/s NED MPU and remove bias
 				xSemaphoreTake( dataMutex, 2/portTICK_PERIOD_MS ); // prevent data conflicts for 2ms max.			
 				gyroISUNEDMPU.x = -(gyroRPS.z - GroundGyroBias.z);
@@ -944,6 +953,7 @@ static void processIMU(void *pvParameters)
 				gyroCorr.y = gyroISUNEDBODY.y;// + BiasQuatGy;  // error on y should be added
 				gyroCorr.z = gyroISUNEDBODY.z;// + BiasQuatGz;  // error on z should be removed
 				xSemaphoreGive( dataMutex );
+				PrevgyroRPS = gyroRPS;
 			}
 		}
 		// get accel data
@@ -953,13 +963,15 @@ static void processIMU(void *pvParameters)
 			accelISUNEDMPU.x = ((-accelG.z*9.807) - currentAccelBias.x ) * currentAccelGain.x;
 			accelISUNEDMPU.y = ((-accelG.y*9.807) - currentAccelBias.y ) * currentAccelGain.y;
 			accelISUNEDMPU.z = ((-accelG.x*9.807) - currentAccelBias.z ) * currentAccelGain.z;
-			if ( abs(accelISUNEDMPU.x) < 5.0 && abs(accelISUNEDMPU.y) < 5.0 && abs(accelISUNEDMPU.z) < 5.0 ) { // remove zickets
+			// eliminate accel variations above 5 m/s²
+			if ( abs(accelISUNEDMPU.x-PrevaccelISUNEDMPU.x) < 5.0 && abs(accelISUNEDMPU.y-PrevaccelISUNEDMPU.y) < 5.0 && abs(accelISUNEDMPU.z-PrevaccelISUNEDMPU.z) < 5.0 ) { // remove zickets
 				// convert from MPU to BODY
 				xSemaphoreTake( dataMutex, 2/portTICK_PERIOD_MS ); // prevent data conflicts for 2ms max.			
 				accelISUNEDBODY.x = C_T * accelISUNEDMPU.x + STmultSS * accelISUNEDMPU.y + STmultCS * accelISUNEDMPU.z + ( gyroCorr.y * gyroCorr.y + gyroCorr.z * gyroCorr.z ) * DistCGVario;
 				accelISUNEDBODY.y = C_S * accelISUNEDMPU.y - S_S * accelISUNEDMPU.z;
 				accelISUNEDBODY.z = -S_T * accelISUNEDMPU.x + SSmultCT * accelISUNEDMPU.y + CTmultCS * accelISUNEDMPU.z;
 				xSemaphoreGive( dataMutex );
+				PrevaccelISUNEDMPU = accelISUNEDMPU;				
 			}
 		}
 		
@@ -1389,9 +1401,9 @@ void readSensors(void *pvParameters){
 	float WingLoad = 40.0;
 	float AoA = 0.0;
 	float AoB = 0.0;
-    float CLA = 5.75; // CLA=2*PI/(1+2/AR) = 5.75 for LS6, 5.98 for Ventus 3, 5.67 for Taurus
-    float KAoB = 3.5; // 3.5 for LS6,  2.97 for Ventus 3, 3 for Taurus TBC
-    float KGx = 4.1; // 4.1 for LS6, 12 for Ventus 3, 4 for Taurus TBC
+    float CLA = 5.67; // CLA=2*PI/(1+2/AR) = 5.75 for LS6, 5.98 for Ventus 3, 5.67 for Taurus
+    float KAoB = 3; // 3.5 for LS6,  2.97 for Ventus 3, 3 for Taurus TBC
+    float KGx = 4; // 4.1 for LS6, 12 for Ventus 3, 4 for Taurus TBC
 	
 	float TASbiSquare;
 	float deltaEnergy;
