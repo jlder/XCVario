@@ -724,7 +724,7 @@ float deltaGz;
 	} else {
 		GzF = gzraw - GNSSRoutePrim;
 	} 
-	*/
+	
 	// Update free quaternion by integrating rate of change
 	gx = gxraw * 0.5 * dt;
 	gy = gyraw * 0.5 * dt;
@@ -789,7 +789,8 @@ float deltaGz;
 			// when on ground compute error using both accel and gyro module variation
 			GravityModuleErr =  (Nlimit - AccelGravModuleFilt) + (GyroModulePrimLevel - Gyroprimlimit);
 		}
-
+		
+		/* TODO need to rework the concept of AGC for Kgain
 		// if GravityModuleErr positive, high confidence in accels
 		if  ( GravityModuleErr > 0.0 ) {
 			Kgain = 1.0;
@@ -1406,9 +1407,9 @@ void readSensors(void *pvParameters){
 	float WingLoad = 40.0;
 	float AoA = 0.0;
 	float AoB = 0.0;
-    float CLA = 5.75; // CLA=2*PI/(1+2/AR) = 5.75 for LS6, 5.98 for Ventus 3, 5.67 for Taurus
-    float KAoB = 3.5; // 3.5 for LS6,  2.97 for Ventus 3, 3 for Taurus TBC
-    float KGx = 4.1; // 4.1 for LS6, 12 for Ventus 3, 4 for Taurus TBC
+    float CLA = 5.67; // CLA=2*PI/(1+2/AR) = 5.75 for LS6, 5.98 for Ventus 3, 5.67 for Taurus
+    float KAoB = 3.0; // 3.5 for LS6,  2.97 for Ventus 3, 3 for Taurus TBC
+    float KGx = 4.0; // 4.1 for LS6, 12 for Ventus 3, 4 for Taurus TBC
 	
 	float TASbiSquare;
 	float deltaEnergy;
