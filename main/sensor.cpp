@@ -149,6 +149,17 @@ mpud::float_axes_t gyroDPS;
 mpud::float_axes_t accelG_Prev;
 mpud::float_axes_t gyroDPS_Prev; 
 
+//!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+//
+// glider specific parameters
+//
+//!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+float CLA = 5.75; // CLA=2*PI/(1+2/AR) = 5.75 for LS6, 5.98 for Ventus 3, 5.67 for Taurus
+float KAoB = 3.5; // 3.5 for LS6,  2.97 for Ventus 3, 3 for Taurus TBC
+float KGx = 4.1; // 4.1 for LS6, 12 for Ventus 3, 4 for Taurus TBC
+#define MaxGyroVariation 1.0 // 1.0 for LS6, TBD for Taurus
+#define MaxAccelVariation 10.0 // 10.0 for LS6, TBD for Taurus
+
 // Fligth Test
 float deltaGyroModule = 0.0;	// gyro module alfa/beta filter for gyro stability test
 float GyroModulePrimFilt = 0.0;
@@ -944,7 +955,7 @@ static void processIMU(void *pvParameters)
 			gyroRPS = mpud::gyroRadPerSec(gyroRaw, GYRO_FS); // convert raw gyro to Gyro_FS full scale
 			// eliminate gyro variations above PI rd/s
 			//if ( abs(gyroRPS.x-PrevgyroRPS.x) < M_PI && abs(gyroRPS.y-PrevgyroRPS.y) < M_PI && abs(gyroRPS.z-PrevgyroRPS.z) < M_PI ) { // discard zickets
-			if ( abs(gyroRPS.x-PrevgyroRPS.x) < 1.0 && abs(gyroRPS.y-PrevgyroRPS.y) < 1.0 && abs(gyroRPS.z-PrevgyroRPS.z) < 1.0 ) { // discard zickets
+			if ( abs(gyroRPS.x-PrevgyroRPS.x) < MaxGyroVariation && abs(gyroRPS.y-PrevgyroRPS.y) < MaxGyroVariation && abs(gyroRPS.z-PrevgyroRPS.z) < MaxGyroVariation ) { // discard zickets
 				// convert gyro coordinates to ISU : rad/s NED MPU and remove bias
 				xSemaphoreTake( dataMutex, 2/portTICK_PERIOD_MS ); // prevent data conflicts for 2ms max.			
 				gyroISUNEDMPU.x = -(gyroRPS.z - GroundGyroBias.z);
@@ -975,7 +986,7 @@ static void processIMU(void *pvParameters)
 				PrevaccelISUNEDMPU.y =accelISUNEDBODY.y;
 				PrevaccelISUNEDMPU.z =accelISUNEDBODY.z;
 			}
-			if ( abs(accelISUNEDMPU.x-PrevaccelISUNEDMPU.x) < 10.0 && abs(accelISUNEDMPU.y-PrevaccelISUNEDMPU.y) < 10.0 && abs(accelISUNEDMPU.z-PrevaccelISUNEDMPU.z) < 10.0 ) { // remove zickets
+			if ( abs(accelISUNEDMPU.x-PrevaccelISUNEDMPU.x) < MaxAccelVariation && abs(accelISUNEDMPU.y-PrevaccelISUNEDMPU.y) < MaxAccelVariation && abs(accelISUNEDMPU.z-PrevaccelISUNEDMPU.z) < MaxAccelVariation ) { // remove zickets
 				// convert from MPU to BODY
 				xSemaphoreTake( dataMutex, 2/portTICK_PERIOD_MS ); // prevent data conflicts for 2ms max.			
 				accelISUNEDBODY.x = C_T * accelISUNEDMPU.x + STmultSS * accelISUNEDMPU.y + STmultCS * accelISUNEDMPU.z + ( gyroCorr.y * gyroCorr.y + gyroCorr.z * gyroCorr.z ) * DistCGVario;
@@ -1412,9 +1423,6 @@ void readSensors(void *pvParameters){
 	float WingLoad = 40.0;
 	float AoA = 0.0;
 	float AoB = 0.0;
-    float CLA = 5.75; // CLA=2*PI/(1+2/AR) = 5.75 for LS6, 5.98 for Ventus 3, 5.67 for Taurus
-    float KAoB = 3.5; // 3.5 for LS6,  2.97 for Ventus 3, 3 for Taurus TBC
-    float KGx = 4.1; // 4.1 for LS6, 12 for Ventus 3, 4 for Taurus TBC
 	
 	float TASbiSquare;
 	float deltaEnergy;
