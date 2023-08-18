@@ -943,7 +943,8 @@ static void processIMU(void *pvParameters)
 			gyroDPS = mpud::gyroDegPerSec(gyroRaw, GYRO_FS); // For compatibility with Eckhard code only. Convert raw gyro to Gyro_FS full scale in degre per second 
 			gyroRPS = mpud::gyroRadPerSec(gyroRaw, GYRO_FS); // convert raw gyro to Gyro_FS full scale
 			// eliminate gyro variations above PI rd/s
-			if ( abs(gyroRPS.x-PrevgyroRPS.x) < M_PI && abs(gyroRPS.y-PrevgyroRPS.y) < M_PI && abs(gyroRPS.z-PrevgyroRPS.z) < M_PI ) { // discard zickets
+			//if ( abs(gyroRPS.x-PrevgyroRPS.x) < M_PI && abs(gyroRPS.y-PrevgyroRPS.y) < M_PI && abs(gyroRPS.z-PrevgyroRPS.z) < M_PI ) { // discard zickets
+			if ( abs(gyroRPS.x-PrevgyroRPS.x) < 1.0 && abs(gyroRPS.y-PrevgyroRPS.y) < 1.0 && abs(gyroRPS.z-PrevgyroRPS.z) < 1.0 ) { // discard zickets
 				// convert gyro coordinates to ISU : rad/s NED MPU and remove bias
 				xSemaphoreTake( dataMutex, 2/portTICK_PERIOD_MS ); // prevent data conflicts for 2ms max.			
 				gyroISUNEDMPU.x = -(gyroRPS.z - GroundGyroBias.z);
@@ -974,7 +975,7 @@ static void processIMU(void *pvParameters)
 				PrevaccelISUNEDMPU.y =accelISUNEDBODY.y;
 				PrevaccelISUNEDMPU.z =accelISUNEDBODY.z;
 			}
-			if ( abs(accelISUNEDMPU.x-PrevaccelISUNEDMPU.x) < 5.0 && abs(accelISUNEDMPU.y-PrevaccelISUNEDMPU.y) < 5.0 && abs(accelISUNEDMPU.z-PrevaccelISUNEDMPU.z) < 5.0 ) { // remove zickets
+			if ( abs(accelISUNEDMPU.x-PrevaccelISUNEDMPU.x) < 10.0 && abs(accelISUNEDMPU.y-PrevaccelISUNEDMPU.y) < 10.0 && abs(accelISUNEDMPU.z-PrevaccelISUNEDMPU.z) < 10.0 ) { // remove zickets
 				// convert from MPU to BODY
 				xSemaphoreTake( dataMutex, 2/portTICK_PERIOD_MS ); // prevent data conflicts for 2ms max.			
 				accelISUNEDBODY.x = C_T * accelISUNEDMPU.x + STmultSS * accelISUNEDMPU.y + STmultCS * accelISUNEDMPU.z + ( gyroCorr.y * gyroCorr.y + gyroCorr.z * gyroCorr.z ) * DistCGVario;
@@ -1883,7 +1884,7 @@ void readSensors(void *pvParameters){
 		}
 
 		ProcessTimeSensors = (esp_timer_get_time()/1000.0) - ProcessTimeSensors;
-		if ( ProcessTimeSensors > 30 ) {
+		if ( ProcessTimeSensors > 35 ) {
 			ESP_LOGI(FNAME,"readSensors: %i / 100", (int16_t)(ProcessTimeSensors) );
 		}
 
