@@ -154,9 +154,9 @@ mpud::float_axes_t gyroDPS_Prev;
 // glider specific parameters
 //
 //!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-float CLA = 5.75; // CLA=2*PI/(1+2/AR) = 5.75 for LS6, 5.98 for Ventus 3, 5.67 for Taurus
-float KAoB = 3.5; // 3.5 for LS6,  2.97 for Ventus 3, 3 for Taurus TBC
-float KGx = 4.1; // 4.1 for LS6, 12 for Ventus 3, 4 for Taurus TBC
+float CLA = 5.67; // CLA=2*PI/(1+2/AR) = 5.75 for LS6, 5.98 for Ventus 3, 5.67 for Taurus
+float KAoB = 3.0; // 3.5 for LS6,  2.97 for Ventus 3, 3 for Taurus TBC
+float KGx = 4.0; // 4.1 for LS6, 12 for Ventus 3, 4 for Taurus TBC
 #define MaxGyroVariation 1.0 // 1.0 for LS6, TBD for Taurus
 #define MaxAccelVariation 10.0 // 10.0 for LS6, TBD for Taurus
 
