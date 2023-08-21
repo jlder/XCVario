@@ -154,9 +154,9 @@ mpud::float_axes_t gyroDPS_Prev;
 // glider specific parameters
 //
 //!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-float CLA = 5.75; // CLA=2*PI/(1+2/AR) = 5.75 for LS6, 5.98 for Ventus 3, 5.67 for Taurus
-float KAoB = 3.5; // 3.5 for LS6,  2.97 for Ventus 3, 3 for Taurus TBC
-float KGx = 4.1; // 4.1 for LS6, 12 for Ventus 3, 4 for Taurus TBC
+float CLA = 5.67; // CLA=2*PI/(1+2/AR) = 5.75 for LS6, 5.98 for Ventus 3, 5.67 for Taurus
+float KAoB = 3.0; // 3.5 for LS6,  2.97 for Ventus 3, 3 for Taurus TBC
+float KGx = 4.0; // 4.1 for LS6, 12 for Ventus 3, 4 for Taurus TBC
 #define MaxGyroVariation 1.0 // 1.0 for LS6, TBD for Taurus
 #define MaxAccelVariation 10.0 // 10.0 for LS6, TBD for Taurus
 
@@ -287,7 +287,10 @@ static int64_t prevdynPTime;
 static float dtdynP = PERIOD10HZ;
 static float dynP=0.0; // raw dynamic pressure
 static float PrevdynP=0.0;
-static float OATemp = 15; // OAT for pressure corrections (real or from standard atmosphere) 
+static float OATemp = 15.0; // OAT for pressure corrections (real or from standard atmosphere)
+static float ISATemp = 15.0;
+static float ISATempBias = 0.0;
+static float HasISATempBias = false;
 static float MPUtempcel; // MPU chip temperature
 static float GNSSRouteraw;
 static float GNSSRoutePrim = 0.0;
@@ -1523,9 +1526,25 @@ void readSensors(void *pvParameters){
 			PrevdynP = dynP;
 		}
 		
-		// get XCVTemp
-		// TODO temporary fix to avoid bad altitude and speed corrections due to OAT errors
-		OATemp = 25 - ( (altitude.get()/100) * 0.65 );
+		// Estimate OAT using standard temperature and difference between standard temperature and temperature of the day
+
+		if ( !HasISATempBias ) { // initialize  temp bias first time
+			ISATemp = 15.0 - ( (altitude.get()/100) * 0.65 );
+			ISATempBias = OAT.get() - ISATemp;
+			OATemp = ISATemp + ISATempBias;			
+			HasISATempBias = true;
+		} else {
+			if ( !(count % 10) ) {	// evaluation performed only every second
+				ISATemp = 15.0 - ( (altitude.get()/100) * 0.65 );
+				if (dynP < 100.0) { // when on ground fast update of temp bias
+					ISATempBias = ISATempBias * 0.9 + (OAT.get() - ISATemp) * 0.1;
+				} else { // flying slow update of temp bias
+					ISATempBias = ISATempBias * 0.999 + (OAT.get() - ISATemp) * 0.001;
+				}
+				OATemp = ISATemp + ISATempBias;
+			}
+		}
+		
 		/*
 		XCVTemp = bmpVario.bmpTemp;
 		OATemp = OAT.get();
