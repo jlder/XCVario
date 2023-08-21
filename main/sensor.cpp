@@ -154,9 +154,9 @@ mpud::float_axes_t gyroDPS_Prev;
 // glider specific parameters
 //
 //!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-float CLA = 5.67; // CLA=2*PI/(1+2/AR) = 5.75 for LS6, 5.98 for Ventus 3, 5.67 for Taurus
-float KAoB = 3.0; // 3.5 for LS6,  2.97 for Ventus 3, 3 for Taurus TBC
-float KGx = 4.0; // 4.1 for LS6, 12 for Ventus 3, 4 for Taurus TBC
+float CLA = 5.75; // CLA=2*PI/(1+2/AR) = 5.75 for LS6, 5.98 for Ventus 3, 5.67 for Taurus
+float KAoB = 3.5; // 3.5 for LS6,  2.97 for Ventus 3, 3 for Taurus TBC
+float KGx = 4.1; // 4.1 for LS6, 12 for Ventus 3, 4 for Taurus TBC
 #define MaxGyroVariation 1.0 // 1.0 for LS6, TBD for Taurus
 #define MaxAccelVariation 10.0 // 10.0 for LS6, TBD for Taurus
 
@@ -279,12 +279,14 @@ static int64_t statTime; // time stamp for statP
 static int64_t prevstatTime;
 static float dtStat = PERIOD10HZ;
 static float statP=0; // raw static pressure
+static float Prevp = 0.0;
 static int64_t teTime; // time stamp for teP
 static float teP=0; // raw te pressure
 static int64_t dynPTime;
 static int64_t prevdynPTime;
 static float dtdynP = PERIOD10HZ;
-static float dynP=0; // raw dynamic pressure
+static float dynP=0.0; // raw dynamic pressure
+static float PrevdynP=0.0;
 static float OATemp = 15; // OAT for pressure corrections (real or from standard atmosphere) 
 static float MPUtempcel; // MPU chip temperature
 static float GNSSRouteraw;
@@ -684,6 +686,7 @@ float deltaGz;
 	// - estimate bias by computing error rate of change on each axis using long term alpha/beta filter
 	//
 
+	/* // TODO remove unecessary code for flgiht test
 	// Estimate direction of vertical from free quaternion
 	free_halfvx = free_q1 * free_q3 - free_q0 * free_q2;
 	free_halfvy = free_q0 * free_q1 + free_q2 * free_q3;
@@ -734,7 +737,7 @@ float deltaGz;
 		if ( Bias_Gz < -GMaxBias ) Bias_Gz = -GMaxBias;
 	} else {
 		GzF = gzraw - GNSSRoutePrim;
-	} 
+	}  */ // TODO remove unecessary code for flgiht test
 	
 	// Update free quaternion by integrating rate of change
 	gx = gxraw * 0.5 * dt;
@@ -829,7 +832,7 @@ float deltaGz;
 			// limit error magnitude
 			if ( GravityModuleErr < -5.0 ) GravityModuleErr = -5.0;
 			// compute dynamic gain function of error magnitude
-			Kgain = pow( 10.0, GravityModuleErr * 4.0 );
+			Kgain = pow( 10.0, GravityModuleErr * 3.0 );
 		}
 		dynKp = Kgain * Kp;
 		dynKi = Kgain * Ki;	
@@ -1483,15 +1486,16 @@ void readSensors(void *pvParameters){
 		bool ok=false;
 		float p = 0;
 		p = baroSensor->readPressure(ok);
-		if ( ok ) {
+		if ( ok && ((abs(p-Prevp) < 10 ) || Prevp == 0.0) ) {
 			prevstatTime = statTime;
 			statTime = esp_timer_get_time()/1000; // record static time in milli second
 			dtStat = (statTime - prevstatTime) / 1000.0; // period between last two valid static pressure samples in second	
 			if (dtStat == 0) dtStat = PERIOD10HZ;
-			if (dtStat > 3*PERIOD10HZ) dtStat = 3*PERIOD10HZ;
+			// Allow long delays between two samples // if (dtStat > 3*PERIOD10HZ) dtStat = 3*PERIOD10HZ;
 			statP = p;
 			// for compatibility with Eckhard code
 			baroP = p;
+			Prevp = p;
 		}
 		
 		// get raw te pressure
@@ -1506,18 +1510,17 @@ void readSensors(void *pvParameters){
 		
 		// get raw dynamic pressure
 		if( asSensor )
-			p = asSensor->readPascal(0, ok);
-		if( ok ) {
+			dynP = asSensor->readPascal(0, ok);
+		if( ok && ((abs(dynP-PrevdynP) < 100 ) || Prevp == 0.0) ) {
 			prevdynPTime = dynPTime;
 			dynPTime = esp_timer_get_time()/1000.0; // record dynPTimeTE time in milli second		
 			dtdynP = (dynPTime - prevdynPTime) / 1000.0; // period between last two valid dynamic pressure samples in second
 			if (dtdynP == 0) dtdynP = PERIOD10HZ;
-			if (dtdynP > 3*PERIOD10HZ) dtdynP = 3*PERIOD10HZ;			
-			dynP = 0;
-			if ( p > 60 ) dynP = p; // TODO decide if a dynP should be aboce certain value to be valid
+			// allow long delays between two samples // if (dtdynP > 3*PERIOD10HZ) dtdynP = 3*PERIOD10HZ;			
+			if ( dynP < 60.0 ) dynP = 0.0; // TODO decide if a dynP should be aboce certain value to be valid
 			// for compatibility with Eckhard code
-			dynamicP = 0;
-			if ( p > 60 ) dynamicP = p; 
+			dynamicP = dynP;
+			PrevdynP = dynP;
 		}
 		
 		// get XCVTemp
@@ -1544,6 +1547,7 @@ void readSensors(void *pvParameters){
 		const gnss_data_t *chosenGnss = (gnss2->fix >= gnss1->fix) ? gnss2 : gnss1;
 		GNSSRouteraw = chosenGnss->route;
 		
+		/* // TODO remove route variation calculation, only used for Gz bias estimation
 		// alpha/beta filter on GNSS route to reduce noise and get route variation
 		// GNSSRoute and GNSSRoutePrim are only computed if TAS > 15 m/s
 		#define NGNSS 7.0 // GNSS alpha/beta. Sample rate is 0 Hz = 0.1 second
@@ -1558,7 +1562,7 @@ void readSensors(void *pvParameters){
 		} else {
 			GNSSRoutePrim = 0.0;
 			GNSSRoute = 0.0;
-		}
+		} */ // TODO remove route variation calculation, only used for Gz bias estimation 
 
 		// compute CAS, ALT and Vzbaro using alpha/beta filters.  TODO consider using atmospher.h functions
 		if (statP != 0.0) {
@@ -1689,6 +1693,7 @@ void readSensors(void *pvParameters){
 		#define fcTEAvg2 ( 1.0 - fcTEAvg1 )			
 		TotalEnergyAvg = fcTEAvg1 * TotalEnergyAvg + fcTEAvg2 * TotalEnergy;
 
+		/* // TODO remove wind estimation
 		// TODO test and optimze wind calculation
 		// compute wind speed using GNSS and horizontal true airspeed
 		Vgx = 0.5 * Vgx + 0.5 * chosenGnss->speed.x; // GNSS x coordinate with short low pass
@@ -1731,12 +1736,13 @@ void readSensors(void *pvParameters){
 				VhPrev = Vh;
 				tickDSR = 1;
 			}
-		} 
+		} */ // TODO remove wind estimation
 		
 		//
 		// Eckhard code
 		//
 
+		/* // TODO replace Eckhard code with flight test values
 		float iasraw = Atmosphere::pascal2kmh( dynamicP );
 
 		float T = OATemp;
@@ -1769,7 +1775,16 @@ void readSensors(void *pvParameters){
 		if( tas > 25.0 ){
 			slipAngle += ((accelG[1]*K / (as*as)) - slipAngle)*0.09;   // with atan(x) = x for small x
 			// ESP_LOGI(FNAME,"AS: %f m/s, CURSL: %f°, SLIP: %f", as, -accelG[1]*K / (as*as), slipAngle );
-		}
+		} */ // TODO replace Eckhard code with flight test values
+		
+		float iasraw = CAS;
+		float tasraw = TAS;
+		cas = CAS;
+		if( (int( ias.get()+0.5 ) != int( CAS+0.5 ) ) || !(count%20) ){
+			ias.set( CAS );  // low pass filter
+		}		
+		
+		/* // TODO remove unecessary code for flgiht test
 		xSemaphoreTake(xMutex,portMAX_DELAY );
 
 		float te = bmpVario.readTE( tasraw );
@@ -1777,12 +1792,15 @@ void readSensors(void *pvParameters){
 			te_vario.set( te );  // max 10x per second
 		}
 		xSemaphoreGive(xMutex);
+		*/ // TODO remove unecessary code for flgiht test
+		
 		// ESP_LOGI(FNAME,"count %d ccp %d", count, ccp );
 		if( !(count % ccp) ) {
 			AverageVario::recalcAvgClimb();
 		}
-		if (FLAP) { FLAP->progress(); }
-		// Flight test
+		 /* if (FLAP) { FLAP->progress(); }		*/ // TODO remove unecessary code for flgiht test
+		 
+		// TODO remove unecessary code for flgiht test
 		//xSemaphoreTake(xMutex,portMAX_DELAY );
 		//baroP = baroSensor->readPressure(ok);   // 10x per second
 		//xSemaphoreGive(xMutex);
@@ -1819,14 +1837,14 @@ void readSensors(void *pvParameters){
 			altitude.set( new_alt );
 		}
 
-		aTE = bmpVario.readAVGTE();
+		/* aTE = bmpVario.readAVGTE(); */ // TODO remove unecessary code for flgiht test
 		doAudio();
 
 		if( !Flarm::bincom && ((count % 2) == 0 ) ){
 			toyFeed();
 			vTaskDelay(2/portTICK_PERIOD_MS);
 		}
-		Router::routeXCV();
+		/* Router::routeXCV();  */ // TODO remove unecessary code for flgiht test. Verify it does not aletr FT streamq
 		// ESP_LOGI(FNAME,"Compass, have sensor=%d  hdm=%d ena=%d", compass->haveSensor(),  compass_nmea_hdt.get(),  compass_enable.get() );
 		if( compass ){
 			if( !Flarm::bincom && ! compass->calibrationIsRunning() ) {
@@ -1870,7 +1888,8 @@ void readSensors(void *pvParameters){
 		}else if( accelG[0] < gload_neg_max.get() ){
 			gload_neg_max.set(  (float)accelG[0] );
 		}
-
+		
+		/* // TODO remove unecessary code for flgiht test
 		// Check on new clients connecting
 		if ( CAN && CAN->GotNewClient() ) { // todo use also for Wifi client?!
 			while( client_sync_dataIdx < SetupCommon::numEntries() ) {
@@ -1884,6 +1903,7 @@ void readSensors(void *pvParameters){
 				CAN->ResetNewClient();
 			}
 		}
+		 */ // TODO remove unecessary code for flgiht test
 		lazyNvsCommit();
 		XCVTemp = bmpVario.bmpTemp;
 		if( gflags.haveMPU && HAS_MPU_TEMP_CONTROL ){
