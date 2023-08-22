@@ -157,7 +157,7 @@ uint32_t MPU::pi_control(int tick_count,float XCVTemp){
 	mpu_heat_pwm -= mpu_t_delta*100.0;             // P part
 	//To avoid damping of temperature correction, integral correction is only applied when pwm is close enougn to target pwm
 	// I control with Ki = 1
-	if (getSiliconTempStatus() == MPU_T_LOCKED) {
+	if (abs(mpu_t_delta) < 2.5) {
 		mpu_t_delta_i -= (mpu_t_delta)*1.0;	      // I part
 		if( mpu_t_delta_i > 127 )
 			mpu_t_delta_i = 127;

@@ -1525,6 +1525,11 @@ void readSensors(void *pvParameters){
 			dynamicP = dynP;
 			PrevdynP = dynP;
 		}
+		else {
+			dynamicP = PrevdynP;
+			dynP = PrevdynP;
+
+		}
 		
 		// Estimate OAT using standard temperature and difference between standard temperature and temperature of the day
 
@@ -1533,6 +1538,7 @@ void readSensors(void *pvParameters){
 			ISATempBias = OAT.get() - ISATemp;
 			OATemp = ISATemp + ISATempBias;			
 			HasISATempBias = true;
+			ESP_LOGI(FNAME,"ISATempBias: %0.1f  Altitude %0.1f", ISATempBias, altitude.get() );
 		} else {
 			if ( !(count % 10) ) {	// evaluation performed only every second
 				ISATemp = 15.0 - ( (altitude.get()/100) * 0.65 );
@@ -1584,7 +1590,7 @@ void readSensors(void *pvParameters){
 		} */ // TODO remove route variation calculation, only used for Gz bias estimation 
 
 		// compute CAS, ALT and Vzbaro using alpha/beta filters.  TODO consider using atmospher.h functions
-		if (statP != 0.0) {
+		if (statP > 500.0) {
 			Rho = (100.0 * statP / 287.058 / (273.15 + OATemp));
 		} else {
 			Rho = RhoSLISA;
@@ -1863,7 +1869,7 @@ void readSensors(void *pvParameters){
 			toyFeed();
 			vTaskDelay(2/portTICK_PERIOD_MS);
 		}
-		/* Router::routeXCV();  */ // TODO remove unecessary code for flgiht test. Verify it does not aletr FT streamq
+		 Router::routeXCV();   // TODO remove unecessary code for flgiht test. Verify it does not aletr FT streamq
 		// ESP_LOGI(FNAME,"Compass, have sensor=%d  hdm=%d ena=%d", compass->haveSensor(),  compass_nmea_hdt.get(),  compass_enable.get() );
 		if( compass ){
 			if( !Flarm::bincom && ! compass->calibrationIsRunning() ) {
@@ -1931,7 +1937,7 @@ void readSensors(void *pvParameters){
 		}
 
 		ProcessTimeSensors = (esp_timer_get_time()/1000.0) - ProcessTimeSensors;
-		if ( ProcessTimeSensors > 35 ) {
+		if ( ProcessTimeSensors > 15 ) {
 			ESP_LOGI(FNAME,"readSensors: %i / 100", (int16_t)(ProcessTimeSensors) );
 		}
 
