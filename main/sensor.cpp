@@ -1625,10 +1625,10 @@ void readSensors(void *pvParameters){
 		Vzbaro = - ALTPrim;
 		
 		// compute AoA (Angle of attack) and AoB (Angle od slip)
-		#define FreqAlpha 0.5 // Hz
+		#define FreqAlpha 0.25 // Hz
 		#define fcAoA1 (10.0/(10.0+FreqAlpha))
 		#define fcAoA2 (1.0-fcAoA1)
-		#define FreqBeta 2.0 // Hz
+		#define FreqBeta 1.0 // Hz
 		#define fcAoB1 (10.0/(10.0+FreqBeta))
 		#define fcAoB2 (1.0-fcAoB1)		
 		WingLoad = gross_weight.get() / polar_wingarea.get();  // should be only computed when pilot change weight settings in XCVario
@@ -2094,7 +2094,7 @@ void readTemp(void *pvParameters){
 					temp_prev = temperature;
 				}
 			}
-			ESP_LOGV(FNAME,"temperature=%f", temperature );
+			//ESP_LOGV(FNAME,"temperature=%f", temperature );
 			Flarm::tick();
 			if( compass )
 				compass->tick();
