@@ -1538,7 +1538,7 @@ void readSensors(void *pvParameters){
 		// get raw dynamic pressure
 		if( asSensor )
 			dynP = asSensor->readPascal(0, ok);
-		if( ok && ((abs(dynP-PrevdynP) < 100 ) || Prevp == 0.0) ) {
+		if( ok && ((abs(dynP-PrevdynP) < 100 ) || PrevdynP == 0.0) ) {
 			prevdynPTime = dynPTime;
 			dynPTime = esp_timer_get_time()/1000.0; // record dynPTimeTE time in milli second		
 			dtdynP = (dynPTime - prevdynPTime) / 1000.0; // period between last two valid dynamic pressure samples in second
