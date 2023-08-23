@@ -1,3 +1,14 @@
+// compile options
+//
+//#define LS6
+#define TAURUS
+//#define VENTUS3
+//
+//#define COMPUTEBIAS   // code to estimate gyro bias
+//
+//#define COMPUTEWIND   // code to compute wind with GNSS
+//
+
 
 #include "sensor.h"
 
@@ -154,11 +165,24 @@ mpud::float_axes_t gyroDPS_Prev;
 // glider specific parameters
 //
 //!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-float CLA = 5.75; // CLA=2*PI/(1+2/AR) = 5.75 for LS6, 5.98 for Ventus 3, 5.67 for Taurus
-float KAoB = 3.5; // 3.5 for LS6,  2.97 for Ventus 3, 3 for Taurus TBC
-float KGx = 4.1; // 4.1 for LS6, 12 for Ventus 3, 4 for Taurus TBC
-#define MaxGyroVariation 1.0 // 1.0 for LS6, TBD for Taurus
-#define MaxAccelVariation 10.0 // 10.0 for LS6, TBD for Taurus
+#ifdef LS6
+	float CLA = 5.75;
+	float KAoB = 3.5;
+	float KGx = 4.1;
+#endif
+#ifdef TAURUS
+	float CLA = 5.67;
+	float KAoB = 3.0;
+	float KGx = 4.0;
+#endif
+#ifdef VENTUS3
+	float CLA = 5.98;
+	float KAoB = 2.97;
+	float KGx = 12.0;
+#endif
+
+#define MaxGyroVariation 1.0 // TDB if need to change for other gliders, in particular for motor gliders
+#define MaxAccelVariation 10.0 // TDB if need to change for other gliders, in particular for motor gliders
 
 // Fligth Test
 float deltaGyroModule = 0.0;	// gyro module alfa/beta filter for gyro stability test
@@ -683,13 +707,11 @@ float deltaGz;
 	halfvy = q0 * q1 + q2 * q3;
 	halfvz = q0 * q0 - 0.5 + q3 * q3;
 	
-	// TO DO test and optimize bias estimation to reduce cpu load
+	#ifdef COMPUTEBIAS
 	// To estimate gyro Bias:
 	// - compute error between vertical vector from IMU quaternion and free quaternion
 	// - estimate bias by computing error rate of change on each axis using long term alpha/beta filter
 	//
-
-	/* // TODO remove unecessary code for flgiht test
 	// Estimate direction of vertical from free quaternion
 	free_halfvx = free_q1 * free_q3 - free_q0 * free_q2;
 	free_halfvy = free_q0 * free_q1 + free_q2 * free_q3;
@@ -711,6 +733,7 @@ float deltaGz;
 	// error from cross product is half total error, 2.0 factor is applied to obtain bias
 	Bias_Gx = 2.0 * errx_prim;
 	Bias_Gy = 2.0 * erry_prim;
+	// limit maximum bias
 	if ( Bias_Gx > GMaxBias ) Bias_Gx = GMaxBias ;
 	if ( Bias_Gx < -GMaxBias ) Bias_Gx = -GMaxBias;	
 	if ( Bias_Gy > GMaxBias ) Bias_Gy = GMaxBias ;
@@ -740,7 +763,8 @@ float deltaGz;
 		if ( Bias_Gz < -GMaxBias ) Bias_Gz = -GMaxBias;
 	} else {
 		GzF = gzraw - GNSSRoutePrim;
-	}  */ // TODO remove unecessary code for flgiht test
+	}
+	#endif
 	
 	// Update free quaternion by integrating rate of change
 	gx = gxraw * 0.5 * dt;
@@ -1551,15 +1575,6 @@ void readSensors(void *pvParameters){
 			}
 		}
 		
-		/*
-		XCVTemp = bmpVario.bmpTemp;
-		OATemp = OAT.get();
-		if( !gflags.validTemperature ) {
-			OATemp = 15 - ( (altitude.get()/100) * 0.65 );
-			ESP_LOGI(FNAME,"OATemp: %0.1f  Altitude %0.1f", OATemp, altitude.get() );
-		}
-		*/
-		
 		// get MPU temp
 		MPUtempcel = MPU.getTemperature();
 		
@@ -1572,7 +1587,7 @@ void readSensors(void *pvParameters){
 		const gnss_data_t *chosenGnss = (gnss2->fix >= gnss1->fix) ? gnss2 : gnss1;
 		GNSSRouteraw = chosenGnss->route;
 		
-		/* // TODO remove route variation calculation, only used for Gz bias estimation
+		#ifdef COMPUTEBIAS
 		// alpha/beta filter on GNSS route to reduce noise and get route variation
 		// GNSSRoute and GNSSRoutePrim are only computed if TAS > 15 m/s
 		#define NGNSS 7.0 // GNSS alpha/beta. Sample rate is 0 Hz = 0.1 second
@@ -1587,7 +1602,8 @@ void readSensors(void *pvParameters){
 		} else {
 			GNSSRoutePrim = 0.0;
 			GNSSRoute = 0.0;
-		} */ // TODO remove route variation calculation, only used for Gz bias estimation 
+		}
+		#endif
 
 		// compute CAS, ALT and Vzbaro using alpha/beta filters.  TODO consider using atmospher.h functions
 		if (statP > 500.0) {
@@ -1718,7 +1734,7 @@ void readSensors(void *pvParameters){
 		#define fcTEAvg2 ( 1.0 - fcTEAvg1 )			
 		TotalEnergyAvg = fcTEAvg1 * TotalEnergyAvg + fcTEAvg2 * TotalEnergy;
 
-		/* // TODO remove wind estimation
+		#ifdef COMPUTEWIND
 		// TODO test and optimze wind calculation
 		// compute wind speed using GNSS and horizontal true airspeed
 		Vgx = 0.5 * Vgx + 0.5 * chosenGnss->speed.x; // GNSS x coordinate with short low pass
@@ -1761,7 +1777,8 @@ void readSensors(void *pvParameters){
 				VhPrev = Vh;
 				tickDSR = 1;
 			}
-		} */ // TODO remove wind estimation
+		}
+		#endif
 		
 		//
 		// Eckhard code
