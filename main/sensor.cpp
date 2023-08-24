@@ -1526,14 +1526,14 @@ void readSensors(void *pvParameters){
 		}
 		
 		// get raw te pressure
-		xSemaphoreTake(xMutex,portMAX_DELAY );
+		// xSemaphoreTake(xMutex,portMAX_DELAY );
 		p = teSensor->readPressure(ok);
 		if ( ok ) {
 			teTime = esp_timer_get_time()/1000.0; // record TE time in milli second
 			teP = p;
 			// not sure what is required for compatibility with Eckhard code
 		}
-		xSemaphoreGive(xMutex);
+		// xSemaphoreGive(xMutex);
 		
 		// get raw dynamic pressure
 		if( asSensor )
