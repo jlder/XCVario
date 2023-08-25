@@ -4,9 +4,9 @@
 #define TAURUS
 //#define VENTUS3
 //
-//#define COMPUTEBIAS   // code to estimate gyro bias
+#define COMPUTEBIAS   // code to estimate gyro bias
 //
-//#define COMPUTEWIND   // code to compute wind with GNSS
+#define COMPUTEWIND   // code to compute wind with GNSS
 //
 
 
