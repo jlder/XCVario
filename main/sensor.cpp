@@ -4,9 +4,9 @@
 #define TAURUS
 //#define VENTUS3
 //
-//#define COMPUTEBIAS   // code to estimate gyro bias
+#define COMPUTEBIAS   // code to estimate gyro bias
 //
-//#define COMPUTEWIND   // code to compute wind with GNSS
+#define COMPUTEWIND   // code to compute wind with GNSS
 //
 
 
@@ -1562,7 +1562,7 @@ void readSensors(void *pvParameters){
 			ISATempBias = OAT.get() - ISATemp;
 			OATemp = ISATemp + ISATempBias;			
 			HasISATempBias = true;
-			ESP_LOGI(FNAME,"ISATempBias: %0.1f  Altitude %0.1f", ISATempBias, altitude.get() );
+			ESP_LOGI(FNAME,"OAT: %0.1f ISATempBias: %0.1f  Altitude %0.1f", OAT.get(),ISATempBias, altitude.get() );
 		} else {
 			if ( !(count % 10) ) {	// evaluation performed only every second
 				ISATemp = 15.0 - ( (altitude.get()/100) * 0.65 );
