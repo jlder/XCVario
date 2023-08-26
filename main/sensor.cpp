@@ -1819,9 +1819,9 @@ void readSensors(void *pvParameters){
 			// ESP_LOGI(FNAME,"AS: %f m/s, CURSL: %f°, SLIP: %f", as, -accelG[1]*K / (as*as), slipAngle );
 		} */ // TODO replace Eckhard code with flight test values
 		
-		float iasraw = CAS;
-		float tasraw = TAS;
-		cas = CAS;
+		float iasraw = CAS * 3.6;
+		float tasraw = TAS * 3.6;
+		cas = CAS * 3.6;
 		if( (int( ias.get()+0.5 ) != int( CAS+0.5 ) ) || !(count%20) ){
 			ias.set( CAS );  // low pass filter
 		}		
