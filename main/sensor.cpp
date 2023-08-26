@@ -1719,7 +1719,7 @@ void readSensors(void *pvParameters){
 		#define alphaTE (2.0 * (2.0 * NTE - 1.0) / NTE / (NTE + 1.0))
 		#define betaTE (6.0 / NTE / (NTE + 1.0) )
 
-		deltaEnergy = ( ALTbi + TASbiSquare / GRAVITY ) - EnergyFilt;
+		deltaEnergy = ( ALTbi + TASbiSquare / GRAVITY / 2.0 ) - EnergyFilt;
 		EnergyPrim = EnergyPrim + betaTE * deltaEnergy / dtStat; // variation of total energy
 		EnergyFilt = EnergyFilt + alphaTE * deltaEnergy + EnergyPrim * dtStat;
 
