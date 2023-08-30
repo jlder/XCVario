@@ -214,10 +214,16 @@ static float integralFBx = 0.0;
 static float integralFBy = 0.0;
 static float integralFBz = 0.0;
 static float BankFilt = 0.0;
+static float GxPrim = 0.0;
+static float GyPrim = 0.0;
 static float GzPrim = 0.0;
+static float GxF = 0.0;
+static float GyF = 0.0;
 static float GzF = 0.0;
 static float GravityModuleErr = 0.0;
 static float AvgGravityModuleErr = -1.0;
+static float BiasGx = 0.0;
+static float BiasGy =0.0;
 static float BiasGz = 0.0;
 static float Pitch = 0.0;
 static float Roll = 0.0;
@@ -686,9 +692,6 @@ void MahonyUpdateIMU(float dt, float gxraw, float gyraw, float gzraw,
 
 #define Gyroprimlimit 0.3
 
-#define WingLevel 0.04 // max lateral gravity acceleration (normalized acceleration) to consider wings are ~ < 5° bank. Value is half sinus of angle
-#define GMaxBias 0.001 // 1 mrad/s
-
 float gx, gy, gz;
 float AccelGravModule, QuatModule, recipNorm;
 float halfvx = 0.0;
@@ -697,95 +700,66 @@ float halfvz = 0.0;
 float halfex = 0.0;
 float halfey = 0.0;
 float halfez = 0.0;
-float qa, qb, qc, free_halfvx, free_halfvy, free_halfvz;
+float qa, qb, qc;
 float dynKp = Kp;
 float dynKi = Ki;
+float deltaGx;
+float deltaGy;
 float deltaGz;
 
 	// Estimate direction of gravity from IMU quaternion
 	halfvx = q1 * q3 - q0 * q2;
 	halfvy = q0 * q1 + q2 * q3;
 	halfvz = q0 * q0 - 0.5 + q3 * q3;
-	
+
 	#ifdef COMPUTEBIAS
-	// To estimate gyro Bias:
-	// - compute error between vertical vector from IMU quaternion and free quaternion
-	// - estimate bias by computing error rate of change on each axis using long term alpha/beta filter
-	//
-	// Estimate direction of vertical from free quaternion
-	free_halfvx = free_q1 * free_q3 - free_q0 * free_q2;
-	free_halfvy = free_q0 * free_q1 + free_q2 * free_q3;
-	free_halfvz = free_q0 * free_q0 - 0.5 + free_q3 * free_q3;
-	// compute error between IMU and free quaternions vertical
-	// half error is sum of cross product between IMU quaternion and free quaternion
-	free_halfex = free_halfvz * halfvy - free_halfvy * halfvz;
-	free_halfey = free_halfvx * halfvz - free_halfvz * halfvx;
-	// compute error rate of change for x and y axes using alpha/beta filters
-	#define Nbias 8000.0 // very long period for extracting error rate of change between IMU quaternion and free quaternion
-	#define alphaBias (2.0 * (2.0 * Nbias - 1.0) / Nbias / (Nbias + 1.0))
-	#define betaBias (6.0 / Nbias / (Nbias + 1.0))	
-	delta_errx = free_halfex - filt_errx;
-	errx_prim = errx_prim + betaBias * delta_errx / dt; // error rate of change for x
-	filt_errx = filt_errx + alphaBias * delta_errx + errx_prim * dt;
-	delta_erry = free_halfey - filt_erry;
-	erry_prim = erry_prim + betaBias * delta_erry / dt; // error rate of change for y
-	filt_erry = filt_erry + alphaBias * delta_erry + erry_prim * dt;
-	// error from cross product is half total error, 2.0 factor is applied to obtain bias
-	Bias_Gx = 2.0 * errx_prim;
-	Bias_Gy = 2.0 * erry_prim;
-	// limit maximum bias
-	if ( Bias_Gx > GMaxBias ) Bias_Gx = GMaxBias ;
-	if ( Bias_Gx < -GMaxBias ) Bias_Gx = -GMaxBias;	
-	if ( Bias_Gy > GMaxBias ) Bias_Gy = GMaxBias ;
-	if ( Bias_Gy < -GMaxBias ) Bias_Gy = -GMaxBias;
-
-	// When wing are ~ leveled , Gz bias should be the long term variation of ( Gz - d(GNSS route)/dt * ) *: GNSS route is optional
-	// test for wing leveled is using asymetrical filter with fast rise and slower decay
-	#define fcBank 0.67 // 1.5Hz low pass to filter for testing stability criteria
-	#define fcBank1 ( fcBank /( fcBank + PERIOD40HZ ))
-	#define fcBank2 ( 1.0 - fcBank1 )
-
+	// When wing are ~ leveled and GNSS route variation ~0, Gx, Gy and Gz biases should be the long term variation of Gx, Gy and Gz
+	// test for wing leveled is using asymetrical filter with fast rise and slow decay
+	#define fcBankDecay 1.0 // 1Hz low pass to filter
+	#define fcBankDecay1 ( fcBankDecay /( fcBankDecay + PERIOD40HZ ))
+	#define fcBankDecay2 ( 1.0 - fcBankDecay1 )
+	#define fcBankRise 0.25 // 4Hz low pass to filter
+	#define fcBankRise1 ( fcBankRise /( fcBankRise + PERIOD40HZ ))
+	#define fcBankRise2 ( 1.0 - fcBankRise1 )
+	#define WingLevel 0.04 // max lateral gravity acceleration (normalized acceleration) to consider wings leveled
+	#define RoutePrimLevel 0.02 // 0.02 rad/s ~ 1°/s
+	#define GMaxBias 0.003 // 3 mrad/s
 	if ( BankFilt < abs(halfvy) ) {
-		BankFilt = abs(halfvy);
+		BankFilt = fcBankRise1 * BankFilt + fcBankRise2 * abs(halfvy);	// low pass filter on rise to reduce noise		
 	} else {
-		BankFilt = fcBank1 * BankFilt + fcBank2 * abs(halfvy);	// low pass filter on estimated Bank to reduce noise
+		BankFilt = fcBankDecay1 * BankFilt + fcBankDecay2 * abs(halfvy);	// low pass filter on decay to reduce noise
 	}
-	if ( ( (TAS > 15.0) && (BankFilt < WingLevel) ) || ( (TAS<15.0) && (GyroModulePrimLevel < Gyroprimlimit)) ) {
-		#define NGzBias 10000
-		#define alphaBiasGz (2.0 * (2.0 * NGzBias - 1.0) / NGzBias / (NGzBias + 1.0))
-		#define betaBiasGz (6.0 / NGzBias / (NGzBias + 1.0) )
-		deltaGz = (gzraw - GNSSRoutePrim) - GzF;
-		GzPrim = GzPrim + betaBiasGz * deltaGz / dt ;
-		GzF = GzF + alphaBiasGz  * deltaGz + GzPrim * dt;
-		BiasGz = BiasGz +  alphaBiasGz  * deltaGz + GzPrim * dt;
-		Bias_Gz = -BiasGz ;
+	if (  (TAS > 15.0) && (BankFilt < WingLevel) && (abs(GNSSRoutePrim) < RoutePrimLevel) ) {
+		#define NGBias 10000
+		#define alphaBiasG (2.0 * (2.0 * NGBias - 1.0) / NGBias / (NGBias + 1.0))
+		#define betaBiasG (6.0 / NGBias / (NGBias + 1.0) )
+		deltaGx = gxraw - GxF;
+		GxPrim = GxPrim + betaBiasG * deltaGx / dt ;
+		GxF = GxF + alphaBiasG  * deltaGx + GxPrim * dt;
+		BiasGx = BiasGx +  alphaBiasG  * deltaGx + GxPrim * dt;
+		Bias_Gx = -BiasGx ;
+		deltaGy= gyraw - GyF;
+		GyPrim = GyPrim + betaBiasG * deltaGy / dt ;
+		GyF = GyF + alphaBiasG  * deltaGy + GyPrim * dt;
+		BiasGy = BiasGy +  alphaBiasG  * deltaGy + GyPrim * dt;
+		Bias_Gy = -BiasGy ;
+		deltaGz = gzraw - GzF;
+		GzPrim = GzPrim + betaBiasG * deltaGz / dt ;
+		GzF = GzF + alphaBiasG  * deltaGz + GzPrim * dt;
+		BiasGz = BiasGz +  alphaBiasG * deltaGz + GzPrim * dt;
+		Bias_Gz = -BiasGz ;		
 		if ( Bias_Gz > GMaxBias ) Bias_Gz = GMaxBias ;
 		if ( Bias_Gz < -GMaxBias ) Bias_Gz = -GMaxBias;
+		if ( Bias_Gx > GMaxBias ) Bias_Gx = GMaxBias ;
+		if ( Bias_Gx < -GMaxBias ) Bias_Gx = -GMaxBias;	
+		if ( Bias_Gy > GMaxBias ) Bias_Gy = GMaxBias ;
+		if ( Bias_Gy < -GMaxBias ) Bias_Gy = -GMaxBias;		
 	} else {
-		GzF = gzraw - GNSSRoutePrim;
+		GxF = gxraw;
+		GyF = gyraw;
+		GzF = gzraw;
 	}
 	#endif
-	
-	// Update free quaternion by integrating rate of change
-	gx = gxraw * 0.5 * dt;
-	gy = gyraw * 0.5 * dt;
-	gz = gzraw * 0.5 * dt;
-	qa = free_q0;
-	qb = free_q1;
-	qc = free_q2;
-	free_q0 +=(-qb * gx - qc * gy - free_q3 * gz);
-	free_q1 += (qa * gx + qc * gz - free_q3 * gy);
-	free_q2 += (qa * gy - qb * gz + free_q3 * gx);
-	free_q3 += (qa * gz + qb * gy - qc * gx);
-	// Normalise raw gyro quaternion
-	QuatModule = sqrt(free_q0 * free_q0 + free_q1 * free_q1 + free_q2 * free_q2 + free_q3 * free_q3);
-	if ( QuatModule != 0.0) {	
-		recipNorm = 1.0 / QuatModule;	
-		free_q0 *= recipNorm;
-		free_q1 *= recipNorm;
-		free_q2 *= recipNorm;
-		free_q3 *= recipNorm;
-	}	
 
 	// Update IMU quaternion
 	// IMU quaternion is updated by integrating rate of change (gyro)
@@ -823,46 +797,20 @@ float deltaGz;
 			AccelGravModuleFilt = fcGravDec1 * AccelGravModuleFilt + fcGravDec2 * abs(AccelGravModule - GRAVITY);
 		}
 		
-		/* TODO improve parameter to control Kgain
-		if ( TAS > 15 ) {
-			// when moving compute error between acceleration module and local gravity (GRAVITY) in relation to Nlimit
-			GravityModuleErr = Nlimit - AccelGravModuleFilt;
-		} else
-		{
-			// when on ground compute error using both accel and gyro module variation
-			GravityModuleErr =  (Nlimit - AccelGravModuleFilt) + (GyroModulePrimLevel - Gyroprimlimit);
-		}*/
-		
 		GravityModuleErr = Nlimit - AccelGravModuleFilt;		
 		
-		/* TODO need to rework the concept of AGC for Kgain
-		// if GravityModuleErr positive, high confidence in accels
 		if  ( GravityModuleErr > 0.0 ) {
 			Kgain = 1.0;
 		} else {
 			// if GravityModuleErr negative, low confidence in accels
 			// limit error magnitude
-			if ( GravityModuleErr < -5.0 ) GravityModuleErr = -5.0;
-			// compute average Gravity module error to automaticaly adjust gain
-			AvgGravityModuleErr = 0.999 * AvgGravityModuleErr + 0.001 * GravityModuleErr;
+			if ( GravityModuleErr < -3.0 ) GravityModuleErr = -3.0;
 			// compute dynamic gain function of error magnitude
-			Kgain = pow( 10.0, GravityModuleErr * 8.0 / pow( 2.0, abs(AvgGravityModuleErr) ) );
+			Kgain = pow( 10.0, GravityModuleErr );
 		}
 		dynKp = Kgain * Kp;
-		dynKi = Kgain * Ki;	*/	
+		dynKi = Kgain * Ki;
 		
-		// TODO OLD Kgain
-		if  ( GravityModuleErr > 0.0 ) {
-			Kgain = 1.0;
-		} else {
-			// if GravityModuleErr negative, low confidence in accels
-			// limit error magnitude
-			if ( GravityModuleErr < -5.0 ) GravityModuleErr = -5.0;
-			// compute dynamic gain function of error magnitude
-			Kgain = pow( 10.0, GravityModuleErr * 3.0 );
-		}
-		dynKp = Kgain * Kp;
-		dynKi = Kgain * Ki;	
 		// Normalise accelerometer measurement
 		recipNorm = 1.0 / AccelGravModule;
 		ax *=recipNorm;
@@ -980,7 +928,6 @@ static void processIMU(void *pvParameters)
 			gyroTime = esp_timer_get_time()/1000.0; // record time of gyro measurement in milli second
 			dtGyr = (gyroTime - prevgyroTime) / 1000.0; // period between last two valid samples in second
 			if (dtGyr == 0) dtGyr = PERIOD40HZ;
-			if (dtGyr > 3*PERIOD40HZ) dtGyr = 3*PERIOD40HZ;			
 			gyroDPS = mpud::gyroDegPerSec(gyroRaw, GYRO_FS); // For compatibility with Eckhard code only. Convert raw gyro to Gyro_FS full scale in degre per second 
 			gyroRPS = mpud::gyroRadPerSec(gyroRaw, GYRO_FS); // convert raw gyro to Gyro_FS full scale
 			// eliminate gyro variations above PI rd/s
@@ -1552,7 +1499,6 @@ void readSensors(void *pvParameters){
 		else {
 			dynamicP = PrevdynP;
 			dynP = PrevdynP;
-
 		}
 		
 		// Estimate OAT using standard temperature and difference between standard temperature and temperature of the day
@@ -1743,7 +1689,9 @@ void readSensors(void *pvParameters){
 		DeltaVgy = Vgy-VgyPrev; // Variation of y speed coordinate
 		SegmentSquare = DeltaVgx*DeltaVgx+DeltaVgy*DeltaVgy; // squared module of segment between speed vectors extremities
 		Segment = sqrt(SegmentSquare); // module of segment
-		VhAvg = ( Vh + VhPrev ) / 2; // average horizontal speed
+		// TO need to replace TASbi by horizontal component of TASbi in earth frame
+		float TASbi = sqrt( TASbiSquare );
+		VhAvg = ( TASbi + VhPrev ) / 2; // average horizontal speed
 		if ( (abs(Vh-VhPrev)<0.3) && (Segment > 0.75) && (VgxPrev != 0.0) && (VgyPrev != 0.0) && (DeltaVgx != 0.0) && (DeltaVgy != 0.0) && (VhAvg > Segment/2) ) {
 			MidSegmentx = (Vgx+VgxPrev)/2; // mid segment x
 			MidSegmenty = (Vgy+VgyPrev)/2; // mid segment y
@@ -1774,7 +1722,7 @@ void readSensors(void *pvParameters){
 			if ( tickDSR > DSR ) {
 				VgxPrev = Vgx;
 				VgyPrev = Vgy;
-				VhPrev = Vh;
+				VhPrev = TASbi;
 				tickDSR = 1;
 			}
 		}
@@ -1999,6 +1947,7 @@ void readSensors(void *pvParameters){
 		/* 
 			$S2,
 			Outside Air Temperature in tenth of °C,
+			OAT sensor temp in tenth of °C,
 			MPU temperature in tenth °C,
 			GNSS fix 0 to 5   3=3D   4= 3D diff,
 			GNSS number of satelites used,
@@ -2017,7 +1966,7 @@ void readSensors(void *pvParameters){
 			xSemaphoreTake( BTMutex, 3/portTICK_PERIOD_MS );
 			if ( !(count % 50) ) { 
 				// send $S1 and $S2 every 50 cycles = 5 seconds
-				sprintf(str,"$S1,%lld,%i,%i,%i,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$S2,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",
+				sprintf(str,"$S1,%lld,%i,%i,%i,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$S2,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",
 				// $S1 stream
 					statTime, (int32_t)(statP*100.0),(int32_t)(teP*100.0), (int16_t)(dynP*10), 
 					(int64_t)(chosenGnss->time*1000.0), (int16_t)(chosenGnss->speed.x*100), (int16_t)(chosenGnss->speed.y*100), (int16_t)(chosenGnss->speed.z*100), (int16_t)(GNSSRouteraw*10),
@@ -2034,7 +1983,7 @@ void readSensors(void *pvParameters){
 					(int32_t) ProcessTimeSensors,
 					(int32_t) (GravityModuleErr*1000),					
 					// $S2 stream
-					(int16_t)(OATemp*10.0), (int16_t)(MPUtempcel*10.0), chosenGnss->fix, chosenGnss->numSV,
+					(int16_t)(OATemp*10.0), (int16_t)(OAT.get()*10.0), (int16_t)(MPUtempcel*10.0), chosenGnss->fix, chosenGnss->numSV,
 					(int32_t)(GroundGyroBias.x*100000.0), (int32_t)(GroundGyroBias.y*100000.0), (int32_t)(GroundGyroBias.z*100000.0),				
 					(int32_t)(BiasQuatGx*100000.0), (int32_t)(BiasQuatGy*100000.0), (int32_t)(BiasQuatGz*100000.0),
 					(int32_t)(GRAVITY*10000.0),(int16_t)BIAS_Init,(int16_t)(XCVTemp*10.0), (int16_t) NEnergy, (int16_t) PeriodVelbi
