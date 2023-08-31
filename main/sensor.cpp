@@ -8,6 +8,7 @@
 //
 #define COMPUTEWIND   // code to compute wind with GNSS
 //
+#define FILTERMPU  // code to filter MPU data at ~ 7 Hz
 
 
 #include "sensor.h"
@@ -221,7 +222,6 @@ static float GxF = 0.0;
 static float GyF = 0.0;
 static float GzF = 0.0;
 static float GravityModuleErr = 0.0;
-static float AvgGravityModuleErr = -1.0;
 static float BiasGx = 0.0;
 static float BiasGy =0.0;
 static float BiasGz = 0.0;
@@ -854,6 +854,26 @@ static void processIMU(void *pvParameters)
 // - Ublox GNSS data. 
 
 	// MPU data
+	mpud::float_axes_t RawaccelISUNEDMPU;
+	mpud::float_axes_t deltaGyroRPS;
+	mpud::float_axes_t GyroRPSPrim;
+	mpud::float_axes_t GyroRPSFilt;
+	GyroRPSPrim.x = 0.0;
+	GyroRPSFilt.x = 0.0;
+	GyroRPSPrim.y = 0.0;
+	GyroRPSFilt.y = 0.0;
+	GyroRPSPrim.z = 0.0;
+	GyroRPSFilt.z = 0.0;
+
+	mpud::float_axes_t deltaaccelISUNEDMPU;
+	mpud::float_axes_t accelISUNEDMPUPrim;
+	mpud::float_axes_t accelISUNEDMPU;
+	accelISUNEDMPUPrim.x = 0.0;
+	accelISUNEDMPU.x = 0.0;
+	accelISUNEDMPUPrim.y = 0.0;
+	accelISUNEDMPU.y = 0.0;
+	accelISUNEDMPUPrim.z = 0.0;
+	accelISUNEDMPU.z = -9.807;
 
 	#define GroundAccelprimlimit 0.9 // m/s²
 	#define	GroundGyroprimlimit 0.3 // rad/s²
@@ -919,11 +939,28 @@ static void processIMU(void *pvParameters)
 			// eliminate gyro variations above PI rd/s
 			//if ( abs(gyroRPS.x-PrevgyroRPS.x) < M_PI && abs(gyroRPS.y-PrevgyroRPS.y) < M_PI && abs(gyroRPS.z-PrevgyroRPS.z) < M_PI ) { // discard zickets
 			if ( abs(gyroRPS.x-PrevgyroRPS.x) < MaxGyroVariation && abs(gyroRPS.y-PrevgyroRPS.y) < MaxGyroVariation && abs(gyroRPS.z-PrevgyroRPS.z) < MaxGyroVariation ) { // discard zickets
+				#ifdef FILTERMPU
+					#define NMPU 7.0 // MPU alpha/beta filter coeff
+					#define alfaMPU (2.0 * (2.0 * NMPU - 1.0) / NMPU / (NMPU + 1.0))
+					#define betaMPU (6.0 / NMPU / (NMPU + 1.0) )
+					deltaGyroRPS.x = gyroRPS.x - GyroRPSFilt.x;
+					GyroRPSPrim.x = GyroRPSPrim.x + betaMPU * deltaGyroRPS.x / dtGyr;
+					GyroRPSFilt.x = GyroRPSFilt.x + alfaMPU * deltaGyroRPS.x + GyroRPSPrim.x * dtGyr;
+					deltaGyroRPS.y = gyroRPS.y - GyroRPSFilt.y;
+					GyroRPSPrim.y = GyroRPSPrim.y + betaMPU * deltaGyroRPS.y / dtGyr;
+					GyroRPSFilt.y = GyroRPSFilt.y + alfaMPU * deltaGyroRPS.y + GyroRPSPrim.y * dtGyr;
+					deltaGyroRPS.z = gyroRPS.z - GyroRPSFilt.z;
+					GyroRPSPrim.z = GyroRPSPrim.z + betaMPU * deltaGyroRPS.z / dtGyr;
+					GyroRPSFilt.z = GyroRPSFilt.z + alfaMPU * deltaGyroRPS.z + GyroRPSPrim.z * dtGyr;					
+				#else
+					GyroRPSFilt = gyroRPS;
+				#endif
 				// convert gyro coordinates to ISU : rad/s NED MPU and remove bias
 				xSemaphoreTake( dataMutex, 2/portTICK_PERIOD_MS ); // prevent data conflicts for 2ms max.			
-				gyroISUNEDMPU.x = -(gyroRPS.z - GroundGyroBias.z);
-				gyroISUNEDMPU.y = -(gyroRPS.y - GroundGyroBias.y);
-				gyroISUNEDMPU.z = -(gyroRPS.x - GroundGyroBias.x);
+				gyroISUNEDMPU.x = -(GyroRPSFilt.z - GroundGyroBias.z);
+				gyroISUNEDMPU.y = -(GyroRPSFilt.y - GroundGyroBias.y);
+				gyroISUNEDMPU.z = -(GyroRPSFilt.x - GroundGyroBias.x);
+						
 				// convert NEDMPU to NEDBODY			
 				gyroISUNEDBODY.x = C_T * gyroISUNEDMPU.x + STmultSS * gyroISUNEDMPU.y + STmultCS * gyroISUNEDMPU.z;
 				gyroISUNEDBODY.y = C_S * gyroISUNEDMPU.y - S_S * gyroISUNEDMPU.z;
@@ -940,23 +977,36 @@ static void processIMU(void *pvParameters)
 		if( MPU.acceleration(&accelRaw) == ESP_OK ){ // read raw acceleration
 			accelG = mpud::accelGravity(accelRaw, mpud::ACCEL_FS_8G);  // For compatibility with Eckhard code only. Convert raw data to to 8G full scale
 			// convert accels coordinates to ISU : m/s² NED MPU
-			accelISUNEDMPU.x = ((-accelG.z*9.807) - currentAccelBias.x ) * currentAccelGain.x;
-			accelISUNEDMPU.y = ((-accelG.y*9.807) - currentAccelBias.y ) * currentAccelGain.y;
-			accelISUNEDMPU.z = ((-accelG.x*9.807) - currentAccelBias.z ) * currentAccelGain.z;
+			RawaccelISUNEDMPU.x = ((-accelG.z*9.807) - currentAccelBias.x ) * currentAccelGain.x;
+			RawaccelISUNEDMPU.y = ((-accelG.y*9.807) - currentAccelBias.y ) * currentAccelGain.y;
+			RawaccelISUNEDMPU.z = ((-accelG.x*9.807) - currentAccelBias.z ) * currentAccelGain.z;
 			// eliminate accel variations above 5 m/s²
 			if (PrevaccelISUNEDMPU.x==0.0 && PrevaccelISUNEDMPU.y==0.0 && PrevaccelISUNEDMPU.z==-9.807 ){
-				PrevaccelISUNEDMPU.x =accelISUNEDBODY.x;
-				PrevaccelISUNEDMPU.y =accelISUNEDBODY.y;
-				PrevaccelISUNEDMPU.z =accelISUNEDBODY.z;
+				PrevaccelISUNEDMPU.x =RawaccelISUNEDMPU.x;
+				PrevaccelISUNEDMPU.y =RawaccelISUNEDMPU.y;
+				PrevaccelISUNEDMPU.z =RawaccelISUNEDMPU.z;
 			}
-			if ( abs(accelISUNEDMPU.x-PrevaccelISUNEDMPU.x) < MaxAccelVariation && abs(accelISUNEDMPU.y-PrevaccelISUNEDMPU.y) < MaxAccelVariation && abs(accelISUNEDMPU.z-PrevaccelISUNEDMPU.z) < MaxAccelVariation ) { // remove zickets
+			if ( abs(RawaccelISUNEDMPU.x-PrevaccelISUNEDMPU.x) < MaxAccelVariation && abs(RawaccelISUNEDMPU.y-PrevaccelISUNEDMPU.y) < MaxAccelVariation && abs(RawaccelISUNEDMPU.z-PrevaccelISUNEDMPU.z) < MaxAccelVariation ) { // remove zickets
+				#ifdef FILTERMPU
+					deltaaccelISUNEDMPU.x = RawaccelISUNEDMPU.x - accelISUNEDMPU.x;
+					accelISUNEDMPUPrim.x = accelISUNEDMPUPrim.x + betaMPU * deltaaccelISUNEDMPU.x / dtGyr;
+					accelISUNEDMPU.x = accelISUNEDMPU.x + alfaMPU * deltaaccelISUNEDMPU.x + accelISUNEDMPUPrim.x * dtGyr;
+					deltaaccelISUNEDMPU.y = RawaccelISUNEDMPU.y - accelISUNEDMPU.y;
+					accelISUNEDMPUPrim.y = accelISUNEDMPUPrim.y + betaMPU * deltaaccelISUNEDMPU.y / dtGyr;
+					accelISUNEDMPU.y = accelISUNEDMPU.y + alfaMPU * deltaaccelISUNEDMPU.y + accelISUNEDMPUPrim.y * dtGyr;
+					deltaaccelISUNEDMPU.z = RawaccelISUNEDMPU.z - accelISUNEDMPU.z;
+					accelISUNEDMPUPrim.z = accelISUNEDMPUPrim.z + betaMPU * deltaaccelISUNEDMPU.z / dtGyr;
+					accelISUNEDMPU.z = accelISUNEDMPU.z + alfaMPU * deltaaccelISUNEDMPU.z + accelISUNEDMPUPrim.z * dtGyr;
+				#else
+					accelISUNEDMPU = RawaccelISUNEDMPU;
+				#endif
+				xSemaphoreTake( dataMutex, 2/portTICK_PERIOD_MS ); // prevent data conflicts for 2ms max.				
 				// convert from MPU to BODY
-				xSemaphoreTake( dataMutex, 2/portTICK_PERIOD_MS ); // prevent data conflicts for 2ms max.			
 				accelISUNEDBODY.x = C_T * accelISUNEDMPU.x + STmultSS * accelISUNEDMPU.y + STmultCS * accelISUNEDMPU.z + ( gyroCorr.y * gyroCorr.y + gyroCorr.z * gyroCorr.z ) * DistCGVario;
 				accelISUNEDBODY.y = C_S * accelISUNEDMPU.y - S_S * accelISUNEDMPU.z;
 				accelISUNEDBODY.z = -S_T * accelISUNEDMPU.x + SSmultCT * accelISUNEDMPU.y + CTmultCS * accelISUNEDMPU.z;
 				xSemaphoreGive( dataMutex );
-				PrevaccelISUNEDMPU = accelISUNEDMPU;				
+				PrevaccelISUNEDMPU = RawaccelISUNEDMPU;				
 			}
 		}
 		
@@ -1410,8 +1460,6 @@ void readSensors(void *pvParameters){
 	#define DSR 15 // maximum number of samples spacing to compute wind.
 	int16_t tickDSR = 1;
 	
-	int client_sync_dataIdx = 0;
-	
 	// compute once the filter parameters in functions of values in FLASH
 	NEnergy = te_filt.get() / PERIOD10HZ; // Total Energy alpha/beta filter coeff (period ~ delay * 10)
 	alphaEnergy = (2.0 * (2.0 * NEnergy - 1.0) / NEnergy / (NEnergy + 1.0));
@@ -1663,7 +1711,7 @@ void readSensors(void *pvParameters){
 		#define alphaTE (2.0 * (2.0 * NTE - 1.0) / NTE / (NTE + 1.0))
 		#define betaTE (6.0 / NTE / (NTE + 1.0) )
 		deltaEnergy = ( TASbiSquare / GRAVITY / 2.0 ) - EnergyFilt;
-		EnergyPrim = EnergyPrim + betaTE * deltaEnergy / dtStat; // variation of total energy
+		EnergyPrim = EnergyPrim + betaTE * deltaEnergy / dtStat; // variation of total energy+
 		EnergyFilt = EnergyFilt + alphaTE * deltaEnergy + EnergyPrim * dtStat;
 
 		// filter total energy variation for display to pilot
@@ -1765,8 +1813,6 @@ void readSensors(void *pvParameters){
 			// ESP_LOGI(FNAME,"AS: %f m/s, CURSL: %f°, SLIP: %f", as, -accelG[1]*K / (as*as), slipAngle );
 		} */ // TODO replace Eckhard code with flight test values
 		
-		float iasraw = CAS * 3.6;
-		float tasraw = TAS * 3.6;
 		cas = CAS * 3.6;
 		if( (int( ias.get()+0.5 ) != int( CAS+0.5 ) ) || !(count%20) ){
 			ias.set( CAS );  // low pass filter
