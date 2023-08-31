@@ -232,22 +232,6 @@ static float q0 = 1.0;
 static float q1 = 0.0;
 static float q2 = 0.0;
 static float q3 = 0.0;
-static float free_Pitch = 0.0;
-static float free_Roll = 0.0;
-static float free_Yaw = 0.0;
-static float free_q0 = 1.0;
-static float free_q1 = 0.0;
-static float free_q2 = 0.0;
-static float free_q3 = 0.0;
-static float free_halfex = 0.0;
-static float delta_errx = 0.0;
-static float filt_errx = 0.0;
-static float errx_prim = 0.0;
-static float free_halfey = 0.0;
-static float delta_erry = 0.0;
-static float filt_erry = 0.0;
-static float erry_prim = 0.0;
-static float free_halfez = 0.0;
 static float BiasQuatGx = 0.0;
 static float BiasQuatGy = 0.0;
 static float BiasQuatGz = 0.0;
@@ -385,6 +369,8 @@ float fcVelbi2;
 static float Ubi = 0.0;
 static float Vbi = 0.0;
 static float Wbi = 0.0;
+static float Vxbi = 0.0;
+static float Vybi = 0.0;
 static float Vzbi = 0.0;
 static float ALTbi = 0.0;
 
@@ -804,7 +790,7 @@ float deltaGz;
 		} else {
 			// if GravityModuleErr negative, low confidence in accels
 			// limit error magnitude
-			if ( GravityModuleErr < -3.0 ) GravityModuleErr = -3.0;
+			if ( GravityModuleErr < -2.0 ) GravityModuleErr = -2.0;
 			// compute dynamic gain function of error magnitude
 			Kgain = pow( 10.0, GravityModuleErr );
 		}
@@ -988,10 +974,6 @@ static void processIMU(void *pvParameters)
 			q1=((sin(RollInit/2.0)*cos(PitchInit/2.0)*cos(YawInit/2.0)-cos(RollInit/2.0)*sin(PitchInit/2.0)*sin(YawInit/2.0)));
 			q2=((cos(RollInit/2.0)*sin(PitchInit/2.0)*cos(YawInit/2.0)+sin(RollInit/2.0)*cos(PitchInit/2.0)*sin(YawInit/2.0)));
 			q3=((cos(RollInit/2.0)*cos(PitchInit/2.0)*sin(YawInit/2.0)-sin(RollInit/2.0)*sin(PitchInit/2.0)*cos(YawInit/2.0)));
-			free_q0 = q0;
-			free_q1 = q1;
-			free_q2 = q2;
-			free_q3 = q3;
 			AttitudeInit++;
 		} else { // after xcvario is started and attitude initialized
 			// Update IMU
@@ -1025,17 +1007,6 @@ static void processIMU(void *pvParameters)
 			if (Yaw < 0.0 ) Yaw = Yaw + 2.0 * M_PI;
 			if (Yaw > 2.0 * M_PI) Yaw = Yaw - 2.0 * M_PI;
 			
-			// Compute Euler angles from free drifting quaternion
-			if ( abs(free_q1 * free_q3 - free_q0 * free_q2) < 0.5 ) {
-				free_Pitch = asin(-2.0 * (free_q1 * free_q3 - free_q0 * free_q2));
-			} else {
-				free_Pitch = M_PI / 2.0 * signbit((free_q0 * free_q2 - free_q1 * free_q3 ));
-			}
-			free_Roll = atan2((free_q0 * free_q1 + free_q2 * free_q3), (0.5 - free_q1 * free_q1 - free_q2 * free_q2));
-			free_Yaw = atan2(2.0 * (free_q1 * free_q2 + free_q0 * free_q3), (free_q0 * free_q0 + free_q1 * free_q1 - free_q2 * free_q2 - free_q3 * free_q3));
-			if (free_Yaw < 0.0 ) free_Yaw = free_Yaw + 2.0 * M_PI;
-			if (free_Yaw > 2.0 * M_PI) free_Yaw = free_Yaw - 2.0 * M_PI;
-
 			// compute sin and cos for Roll and Pitch from IMU quaternion since they are used in multiple calculations
 			cosRoll = cos( Roll );
 			sinRoll = sin( Roll );
@@ -1625,7 +1596,7 @@ void readSensors(void *pvParameters){
 
 		// Baro acceleration derivative Short period alpha/beta filter
 		// U/V/WbPrimS are used to compute U/V/WbiPrim, baro inertial accelerations
-		#define NBaroAccS 6.0 // accel kinetic alpha/beta filter coeff
+		#define NBaroAccS 7.0 // accel kinetic alpha/beta filter coeff
 		#define alphaBaroAccS (2.0 * (2.0 * NBaroAccS - 1.0) / NBaroAccS / (NBaroAccS + 1.0))
 		#define betaBaroAccS (6.0 / NBaroAccS / (NBaroAccS + 1.0) )			
 		deltaUbS = Ub - UbFS;
@@ -1638,14 +1609,18 @@ void readSensors(void *pvParameters){
 		WbPrimS = WbPrimS + betaBaroAccS * deltaWbS / dtStat;
 		WbFS = WbFS + alphaBaroAccS * deltaWbS + WbPrimS * dtStat;
 			
-		// baro interial vertical speed in earth frame
-		Vzbi = -sinPitch * Ubi + sinRoll * cosPitch * Vbi + cosRoll * cosPitch * Wbi;		
+		// baro interial speed in earth frame
+		Vxbi = cosPitch * Ubi + sinRoll * sinPitch * Vbi + cosRoll * sinPitch * Wbi;
+		Vybi = cosRoll * Vbi - sinRoll * Wbi;
+		Vzbi = -sinPitch * Ubi + sinRoll * cosPitch * Vbi + cosRoll * cosPitch * Wbi;
 
 		// baro inertial TAS square in any frame
 		TASbiSquare = Ubi * Ubi + Vbi * Vbi + Wbi * Wbi;
 
 		xSemaphoreGive( dataMutex );
 		
+		// TODO update comment when better solution found
+		// option 1
 		// energy variation calculation d(E/mg)/dt = d(ALT + 1/2 1/g TAS²)/dt
 		// to remove unwanted pneumatic variations, mainly due to wind gradients, use long period (~3-4 s) complementary filter to provide baro/inertial velocity
 		// to compensate for slow/delayed baro altitude response, use short period (~1 s) complementary filter to provide baro/inertial altitude
@@ -1653,7 +1628,13 @@ void readSensors(void *pvParameters){
 		// ALTbi is computed from baro altitude and baro inertial vertical speed in earth frame
 		// baro inertial vertical speed in earth frame is obtained from rotation of baro inertial speed in Body frame
 		// TASbi is the sum of  baro inertial speeds square, in Body frame
-	
+		// option 2
+		// energy variation calculation d(E/mg)/dt = - Vzbi + d(1/2 1/g TASbi²)/dt
+		// to remove unwanted pneumatic variations, mainly due to wind gradients, use long period (~3-4 s) complementary filter to provide baro/inertial velocity
+		// Vzbi is computed from proection of Ubi, Vbi and Wbi into earth frame. Because it is in NED (positive pointing down), we use negative sign to be homogeneous with energy gain
+		// TASbi is the sum of  baro inertial speeds square, in Body frame		
+		
+		/* // option 1
 		// baro inertial altitude
 		#define PeriodAltbi 0.75 // period in second for baro/inertial altitude. Baro/inertial velocity improves baro sensor response
 		#define fcAltbi1 ( PeriodAltbi / ( PeriodAltbi + PERIOD10HZ ))
@@ -1661,7 +1642,7 @@ void readSensors(void *pvParameters){
 		ALTbi = fcAltbi1 * ( ALTbi - Vzbi * dtStat ) + fcAltbi2	* ALT;
 		
 		// energy calculation : variation of potential and kinetic energy
-		#define NTE 7.0 // ALT alpha/beta coeff
+		#define NTE 6.0 // ALT alpha/beta coeff
 		#define alphaTE (2.0 * (2.0 * NTE - 1.0) / NTE / (NTE + 1.0))
 		#define betaTE (6.0 / NTE / (NTE + 1.0) )
 
@@ -1673,7 +1654,25 @@ void readSensors(void *pvParameters){
 		deltaTE = EnergyPrim - TEFilt;
 		TEPrim = TEPrim + betaEnergy * deltaTE / dtStat;
 		TEFilt = TEFilt + alphaEnergy * deltaTE + TEPrim * dtStat;
+		*/
+		
+		// option 2
+	
+		// kinetic energy calculation
+		#define NTE 6.0 // ALT alpha/beta coeff
+		#define alphaTE (2.0 * (2.0 * NTE - 1.0) / NTE / (NTE + 1.0))
+		#define betaTE (6.0 / NTE / (NTE + 1.0) )
+		deltaEnergy = ( TASbiSquare / GRAVITY / 2.0 ) - EnergyFilt;
+		EnergyPrim = EnergyPrim + betaTE * deltaEnergy / dtStat; // variation of total energy
+		EnergyFilt = EnergyFilt + alphaTE * deltaEnergy + EnergyPrim * dtStat;
+
+		// filter total energy variation for display to pilot
+		deltaTE = ( -Vzbi + EnergyPrim ) - TEFilt;
+		TEPrim = TEPrim + betaEnergy * deltaTE / dtStat;
+		TEFilt = TEFilt + alphaEnergy * deltaTE + TEPrim * dtStat;	
+				
 		TotalEnergy = TEFilt;
+		
 		// Total energy integration over 20 seconds
 		#define PeriodTEAvg 20
 		#define fcTEAvg1 ( PeriodTEAvg / ( PeriodTEAvg + PERIOD10HZ ))
@@ -1689,10 +1688,9 @@ void readSensors(void *pvParameters){
 		DeltaVgy = Vgy-VgyPrev; // Variation of y speed coordinate
 		SegmentSquare = DeltaVgx*DeltaVgx+DeltaVgy*DeltaVgy; // squared module of segment between speed vectors extremities
 		Segment = sqrt(SegmentSquare); // module of segment
-		// TO need to replace TASbi by horizontal component of TASbi in earth frame
-		float TASbi = sqrt( TASbiSquare );
-		VhAvg = ( TASbi + VhPrev ) / 2; // average horizontal speed
-		if ( (abs(Vh-VhPrev)<0.3) && (Segment > 0.75) && (VgxPrev != 0.0) && (VgyPrev != 0.0) && (DeltaVgx != 0.0) && (DeltaVgy != 0.0) && (VhAvg > Segment/2) ) {
+		float Vhbi = sqrt( Vxbi * Vxbi + Vybi * Vybi );
+		VhAvg = ( Vhbi + VhPrev ) / 2; // average horizontal speed
+		if ( (Segment > 0.75) && (VhAvg > Segment/2) && (VgxPrev != 0.0) && (VgyPrev != 0.0) && (DeltaVgx != 0.0) && (DeltaVgy != 0.0) ) {
 			MidSegmentx = (Vgx+VgxPrev)/2; // mid segment x
 			MidSegmenty = (Vgy+VgyPrev)/2; // mid segment y
 			Median = sqrt(VhAvg*VhAvg-SegmentSquare/4); // module of median between segment center and true airspedd origin (usinf average of current and previous true airspeed
@@ -1722,7 +1720,7 @@ void readSensors(void *pvParameters){
 			if ( tickDSR > DSR ) {
 				VgxPrev = Vgx;
 				VgyPrev = Vgy;
-				VhPrev = TASbi;
+				VhPrev = Vhbi;
 				tickDSR = 1;
 			}
 		}
@@ -1979,7 +1977,7 @@ void readSensors(void *pvParameters){
 					(int32_t)(VhHeading*10),
 					(int32_t)(Kgain*1000), 
 					(int32_t)rint(MPU.mpu_heat_pwm),
-					(int32_t)(free_Pitch*1000.0), (int32_t)(free_Roll*1000.0), (int32_t)(free_Yaw*1000.0),
+					(int32_t)(0.0), (int32_t)(0.0), (int32_t)(0.0),
 					(int32_t) ProcessTimeSensors,
 					(int32_t) (GravityModuleErr*1000),					
 					// $S2 stream
@@ -2003,7 +2001,7 @@ void readSensors(void *pvParameters){
 					(int32_t)(VhHeading*10),
 					(int32_t)(Kgain*1000), 
 					(int32_t)rint(MPU.mpu_heat_pwm),
-					(int32_t)(free_Pitch*1000.0), (int32_t)(free_Roll*1000.0), (int32_t)(free_Yaw*1000.0),
+					(int32_t)(0.0), (int32_t)(0.0), (int32_t)(0.0),
 					(int32_t) ProcessTimeSensors,
 					(int32_t) (GravityModuleErr*1000)					
 					);				
