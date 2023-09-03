@@ -1730,13 +1730,13 @@ void readSensors(void *pvParameters){
 		#ifdef COMPUTEWIND
 		// TODO test and optimze wind calculation
 		// compute wind speed using GNSS and horizontal true airspeed
-		Vgx = 0.5 * Vgx + 0.5 * chosenGnss->speed.x; // GNSS x coordinate with short low pass
-		Vgy = 0.5 * Vgy + 0.5 * chosenGnss->speed.y; // GNSS y coordinate with short low pass
+		Vgx = 0.5 * Vgx + 0.5 * chosenGnss->speed.x; // GNSS x coordinate with short low pass to reduce noise
+		Vgy = 0.5 * Vgy + 0.5 * chosenGnss->speed.y; // GNSS y coordinate with short low pass to reduce noise
 		DeltaVgx = Vgx-VgxPrev; // Variation of x speed coordinate
 		DeltaVgy = Vgy-VgyPrev; // Variation of y speed coordinate
 		SegmentSquare = DeltaVgx*DeltaVgx+DeltaVgy*DeltaVgy; // squared module of segment between speed vectors extremities
 		Segment = sqrt(SegmentSquare); // module of segment
-		float Vhbi = sqrt( Vxbi * Vxbi + Vybi * Vybi );
+		float Vhbi = sqrt( Vxbi * Vxbi + Vybi * Vybi ); // Vhbi baro inertiel horizontal speed in earth frame
 		VhAvg = ( Vhbi + VhPrev ) / 2; // average horizontal speed
 		if ( (Segment > 0.75) && (VhAvg > Segment/2) && (VgxPrev != 0.0) && (VgyPrev != 0.0) && (DeltaVgx != 0.0) && (DeltaVgy != 0.0) ) {
 			MidSegmentx = (Vgx+VgxPrev)/2; // mid segment x
@@ -1762,7 +1762,7 @@ void readSensors(void *pvParameters){
 			VhHeading = VhHeading * 180.0 / M_PI;
 			VgxPrev = Vgx;
 			VgyPrev = Vgy;
-			VhPrev = Vh;
+			VhPrev = Vhbi;
 		} else {				
 			tickDSR++;
 			if ( tickDSR > DSR ) {
@@ -1981,9 +1981,6 @@ void readSensors(void *pvParameters){
 			Vh heading in tenth of °,
 			Kgain in thousands of unit ( >0 to get 100% Kp/Ki),
 			MPU.mpu_heat_pwn integer pwm unit,
-			free quaternion Pitch in milli rad,
-			free quaternion Roll in milli rad,
-			free quaternion Yaw in milli rad,
 			ProcessTimeSensors in milli second,
 			GravityModuleErr in thousans of unit
 			<CR><LF>		
@@ -2004,13 +2001,13 @@ void readSensors(void *pvParameters){
 			Local Gravity in tenth of milli m/s²,
 			Number of ground bias estimations,
 			XCVtemp (temperature inside vario) in tenth of °C,
-			NEnergy,
-			PeriodVelbi
+			NEnergy in units (NEnergy is multiplied by sampling period to get filter period in seconds),
+			PeriodVelbi (Baro Inertial period in tenth of seconds)
 		*/	
 			xSemaphoreTake( BTMutex, 3/portTICK_PERIOD_MS );
 			if ( !(count % 50) ) { 
 				// send $S1 and $S2 every 50 cycles = 5 seconds
-				sprintf(str,"$S1,%lld,%i,%i,%i,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$S2,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",
+				sprintf(str,"$S1,%lld,%i,%i,%i,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$S2,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",
 				// $S1 stream
 					statTime, (int32_t)(statP*100.0),(int32_t)(teP*100.0), (int16_t)(dynP*10), 
 					(int64_t)(chosenGnss->time*1000.0), (int16_t)(chosenGnss->speed.x*100), (int16_t)(chosenGnss->speed.y*100), (int16_t)(chosenGnss->speed.z*100), (int16_t)(GNSSRouteraw*10),
@@ -2023,19 +2020,18 @@ void readSensors(void *pvParameters){
 					(int32_t)(VhHeading*10),
 					(int32_t)(Kgain*1000), 
 					(int32_t)rint(MPU.mpu_heat_pwm),
-					(int32_t)(0.0), (int32_t)(0.0), (int32_t)(0.0),
 					(int32_t) ProcessTimeSensors,
 					(int32_t) (GravityModuleErr*1000),					
 					// $S2 stream
 					(int16_t)(OATemp*10.0), (int16_t)(OAT.get()*10.0), (int16_t)(MPUtempcel*10.0), chosenGnss->fix, chosenGnss->numSV,
 					(int32_t)(GroundGyroBias.x*100000.0), (int32_t)(GroundGyroBias.y*100000.0), (int32_t)(GroundGyroBias.z*100000.0),				
 					(int32_t)(BiasQuatGx*100000.0), (int32_t)(BiasQuatGy*100000.0), (int32_t)(BiasQuatGz*100000.0),
-					(int32_t)(GRAVITY*10000.0),(int16_t)BIAS_Init,(int16_t)(XCVTemp*10.0), (int16_t) NEnergy, (int16_t) PeriodVelbi
+					(int32_t)(GRAVITY*10000.0),(int16_t)BIAS_Init,(int16_t)(XCVTemp*10.0), (int16_t) NEnergy, (int16_t) (PeriodVelbi*10)
 					);				
 				Router::sendXCV(str);		
 			} else {
 				// send $S1 only every 100ms
-				sprintf(str,"$S1,%lld,%i,%i,%i,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",
+				sprintf(str,"$S1,%lld,%i,%i,%i,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",
 					statTime, (int32_t)(statP*100.0),(int32_t)(teP*100.0), (int16_t)(dynP*10), 
 					(int64_t)(chosenGnss->time*1000.0), (int16_t)(chosenGnss->speed.x*100), (int16_t)(chosenGnss->speed.y*100), (int16_t)(chosenGnss->speed.z*100), (int16_t)(GNSSRouteraw*10),
 					(int32_t)(Pitch*1000.0), (int32_t)(Roll*1000.0), (int32_t)(Yaw*1000.0),
@@ -2047,7 +2043,6 @@ void readSensors(void *pvParameters){
 					(int32_t)(VhHeading*10),
 					(int32_t)(Kgain*1000), 
 					(int32_t)rint(MPU.mpu_heat_pwm),
-					(int32_t)(0.0), (int32_t)(0.0), (int32_t)(0.0),
 					(int32_t) ProcessTimeSensors,
 					(int32_t) (GravityModuleErr*1000)					
 					);				
