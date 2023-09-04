@@ -1421,6 +1421,7 @@ void readSensors(void *pvParameters){
 	float WingLoad = 40.0;
 	float AoA = 0.0;
 	float AoB = 0.0;
+	float AccelzFiltAoA = 0.0;
 	
 	float TASbiSquare;
 	float deltaEnergy;
@@ -1589,7 +1590,7 @@ void readSensors(void *pvParameters){
 		
 		#define NALT 7.0 // ALT alpha/beta coeff
 		#define alphaALT (2.0 * (2.0 * NALT - 1.0) / NALT / (NALT + 1.0))
-		#define betaALT (6.0 / NALT / (NALT + 1.0) )		
+		#define betaALT (6.0 / NALT / (NALT + 1.0) )	
 		ALTraw = (1.0 - pow( (statP-(QNH.get()-1013.25)) * 0.000986923 , 0.1902891634 ) ) * (273.15 + OATemp) * 153.846153846;
 		if ( FirsTimeSensor > 0 ) { // initialize Altitude and Energy filters
 			ALT = ALTraw;
@@ -1606,7 +1607,7 @@ void readSensors(void *pvParameters){
 		Vzbaro = - ALTPrim;
 		
 		// compute AoA (Angle of attack) and AoB (Angle od slip)
-		#define FreqAlpha 0.25 // Hz
+		#define FreqAlpha 1.5 // Hz
 		#define fcAoA1 (10.0/(10.0+FreqAlpha))
 		#define fcAoA2 (1.0-fcAoA1)
 		#define FreqBeta 1.0 // Hz
@@ -1615,10 +1616,11 @@ void readSensors(void *pvParameters){
 		WingLoad = gross_weight.get() / polar_wingarea.get();  // should be only computed when pilot change weight settings in XCVario
 		xSemaphoreTake( dataMutex, 1/portTICK_PERIOD_MS ); // prevent data conflicts for 1ms max.		
 		if ( (dynP>100.0) && (CAS>10.0) && (TAS>10.0) && (abs(accelISUNEDBODY.z) > 1.0) ) { // compute AoA and AoB only when dynamic pressure is above 100 Pa, CAS & TAS abobe 10m/s and accel z above 1 m/s²
-			CL = -accelISUNEDBODY.z * 2 / RhoSLISA * WingLoad / CAS / CAS;
+			AccelzFiltAoA = 0.8 * AccelzFiltAoA + 0.2 * accelISUNEDBODY.z // simple ~3 Hz low pass on accel z
+			CL = -AccelzFiltAoA * 2 / RhoSLISA * WingLoad / CAS / CAS;
 			dAoA = ( CL - prevCL ) / CLA;
 			prevCL = CL;
-			if (abs(accelISUNEDBODY.z) > 1.0) { //when not close to Az=0, hybridation of aoa from drag & aoa from lift
+			if (abs(AccelzFiltAoA) > 1.0) { //when not close to Az=0, hybridation of aoa from drag & aoa from lift
 				AoARaw = -(accelISUNEDBODY.x / accelISUNEDBODY.z) - Speed2Fly.cw( CAS ) / Speed2Fly.getN();
 				AoA = fcAoA1 * ( AoA + dAoA ) + fcAoA2 * AoARaw ;
 			}  else { //when  close to Az=0, only aoa from lift considered
