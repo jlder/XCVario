@@ -1434,8 +1434,9 @@ void readSensors(void *pvParameters){
 	// Wind speed variables
 	float Vgx = 0.0;
 	float Vgy = 0.0;
-	float VgxPrev = 0.0;
-	float VgyPrev = 0.0;
+	float Vgxpast[15] = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0 };
+	float Vgypast[15] = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0 };	
+	float Vhbipast[15] = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0 };
 	float DeltaVgx;
 	float DeltaVgy;
 	float SegmentSquare;
@@ -1616,7 +1617,7 @@ void readSensors(void *pvParameters){
 		WingLoad = gross_weight.get() / polar_wingarea.get();  // should be only computed when pilot change weight settings in XCVario
 		xSemaphoreTake( dataMutex, 1/portTICK_PERIOD_MS ); // prevent data conflicts for 1ms max.		
 		if ( (dynP>100.0) && (CAS>10.0) && (TAS>10.0) && (abs(accelISUNEDBODY.z) > 1.0) ) { // compute AoA and AoB only when dynamic pressure is above 100 Pa, CAS & TAS abobe 10m/s and accel z above 1 m/s²
-			AccelzFiltAoA = 0.8 * AccelzFiltAoA + 0.2 * accelISUNEDBODY.z // simple ~3 Hz low pass on accel z
+			AccelzFiltAoA = 0.8 * AccelzFiltAoA + 0.2 * accelISUNEDBODY.z; // simple ~3 Hz low pass on accel z
 			CL = -AccelzFiltAoA * 2 / RhoSLISA * WingLoad / CAS / CAS;
 			dAoA = ( CL - prevCL ) / CLA;
 			prevCL = CL;
@@ -1729,6 +1730,7 @@ void readSensors(void *pvParameters){
 		#define fcTEAvg2 ( 1.0 - fcTEAvg1 )			
 		TotalEnergyAvg = fcTEAvg1 * TotalEnergyAvg + fcTEAvg2 * TotalEnergy;
 
+		/*
 		#ifdef COMPUTEWIND
 		// TODO test and optimze wind calculation
 		// compute wind speed using GNSS and horizontal true airspeed
@@ -1774,7 +1776,76 @@ void readSensors(void *pvParameters){
 				tickDSR = 1;
 			}
 		}
+		#endif */
+		
+		#ifdef COMPUTEWIND
+		// compute wind speed using GNSS and horizontal baro inertial true airspeed
+
+		float Vhbi; // horizontal baro inertial true airspeed
+		float VhbiAvg;
+		bool gotwind = false;
+		#define MINSEGMENT 0.75 // minimum segment size , i.e. minimu GNSS speed variation
+
+		// very short low pass filter on GNSS speed to reduce noise
+		Vgx = 0.5 * Vgx + 0.5 * chosenGnss->speed.x;
+		Vgy = 0.5 * Vgy + 0.5 * chosenGnss->speed.y;
+
+		// compute Vhbi baro inertial horizontal speed in earth frame
+		Vhbi = sqrt( Vxbi * Vxbi + Vybi * Vybi );
+
+		// consider last 15 samples to verify if speed variation is significant enough and compute wind as soon as condition is met
+		for ( int i=0; i<15 ; i++ ) {
+			if ( !gotwind ) {
+				// compute wind variation coordinates
+				DeltaVgx = Vgx-Vgxpast[i];
+				DeltaVgy = Vgy-Vgypast[i];
+				// compute segment length corresponding to GNSS speed variation ( segment square and segment)
+				SegmentSquare = DeltaVgx*DeltaVgx+DeltaVgy*DeltaVgy; // squared module of segment between gnss speed vectors
+				Segment = sqrt(SegmentSquare); // module of segment between gnss speed vectors
+				// algorithm expects horizontal true airspeed to be constant but average is used to reduce error
+				VhbiAvg = ( Vhbi + Vhbipast[i] ) / 2; // average horizontal baro inertial speed
+				// test if no wind yet and long enough segment and conditions met to avoid calc errors
+				if ( (Segment > MINSEGMENT ) && (VhAvg > Segment/2) && (Vgxpast[i] != 0.0) && (Vgypast[i] != 0.0) && (DeltaVgx != 0.0) && (DeltaVgy != 0.0) ) {
+					MidSegmentx = (Vgx+Vgxpast[i])/2; // mid segment x
+					MidSegmenty = (Vgy+Vgypast[i])/2; // mid segment y
+					Median = sqrt(VhbiAvg*VhbiAvg-SegmentSquare/4); // module of median between segment center and true airspedd origin (usinf average of current and previous true airspeed
+					MedianDirx = -DeltaVgy/Segment; // direction of median x
+					MedianDiry = DeltaVgx/Segment; // direction of median y
+					// There are two solutions to the problem
+					Windx = MidSegmentx + Median * MedianDirx; // wind x coordinate
+					Windy = MidSegmenty + Median * MedianDiry; // wind y coordinate
+					Windxalt = MidSegmentx - Median * MedianDirx; // alternate wind x coordinate
+					Windyalt = MidSegmenty - Median * MedianDiry; // alternate wind y coordinate
+					// find the solution which is on the good side of the GNSS vectors origin.
+					if ( (Windx*Windx+Windy*Windy) > (Windxalt*Windxalt+Windyalt*Windyalt) ) { // Pick wind coordinates closest to GNSS vectors origin.
+						Windx = Windxalt;
+						Windy = Windyalt;
+					}
+					// low pass filter on wind in function of segment and median size. Larger segment and median size increase filter cutoff frequency                                               
+					fcWind = 0.02 * 17.0 / Segment * Median; // fc low pass filter
+					fcWind1 = fcWind / (fcWind + 0.1); 
+					fcWind2 = 1 - fcWind1;
+					FilteredWindx = fcWind1 * FilteredWindx + fcWind2 * Windx;
+					FilteredWindy = fcWind1 * FilteredWindy + fcWind2 * Windy;
+					// using GNSS speed and wind speed, compute Vh = TAS heading
+					VhHeading = M_PI + atan2(Vgx-Windx, Vgy-Windy);
+					if ( VhHeading < 0 ) VhHeading = VhHeading + 2.0 * M_PI;
+					VhHeading = VhHeading * 180.0 / M_PI;
+					gotwind = true;
+				}
+			}
+			// slide/update  samples window
+			if ( i <14 ) {
+				Vgxpast[i+1] = Vgxpast[i];
+				Vgypast[i+1] = Vgypast[i];
+				Vhbipast[i+1] = Vhbipast[i];
+			}
+			Vgxpast[0] = Vgx;
+			Vgypast[0] = Vgy;
+			Vhbipast[0] = Vhbi;
+		}                                            
 		#endif
+		
 		
 		//
 		// Eckhard code
