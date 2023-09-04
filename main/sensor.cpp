@@ -1074,7 +1074,7 @@ static void processIMU(void *pvParameters)
 			WiPrim = accelISUNEDBODY.z - GravIMU.z + gyroCorr.y * Ubi - gyroCorr.x * Vbi;
 
 			// Kinectic accels alpha/beta short filter
-			#define NKinAccS 7.0 // accel kinetic alpha/beta filter coeff
+			#define NKinAccS 12.0 // accel kinetic alpha/beta filter coeff
 			#define alphaKinAccS (2.0 * (2.0 * NKinAccS - 1.0) / NKinAccS / (NKinAccS + 1.0))
 			#define betaKinAccS (6.0 / NKinAccS / (NKinAccS + 1.0) )			
 			deltaUiPrimS = UiPrim - UiPrimSF;
@@ -1578,7 +1578,7 @@ void readSensors(void *pvParameters){
 		} else {
 			Rho = RhoSLISA;
 		}
-		#define NCAS 7.0 // CAS alpha/beta filter coeff
+		#define NCAS 8.0 // CAS alpha/beta filter coeff
 		#define alphaCAS (2.0 * (2.0 * NCAS - 1.0) / NCAS / (NCAS + 1.0))
 		#define betaCAS (6.0 / NCAS / (NCAS + 1.0) )
 		CASraw = sqrt(2 * dynP / RhoSLISA);
@@ -1589,7 +1589,7 @@ void readSensors(void *pvParameters){
 		TAS = Rhocorr * CAS;
 		TASprim = Rhocorr * CASprim;
 		
-		#define NALT 7.0 // ALT alpha/beta coeff
+		#define NALT 8.0 // ALT alpha/beta coeff
 		#define alphaALT (2.0 * (2.0 * NALT - 1.0) / NALT / (NALT + 1.0))
 		#define betaALT (6.0 / NALT / (NALT + 1.0) )	
 		ALTraw = (1.0 - pow( (statP-(QNH.get()-1013.25)) * 0.000986923 , 0.1902891634 ) ) * (273.15 + OATemp) * 153.846153846;
@@ -1647,7 +1647,7 @@ void readSensors(void *pvParameters){
 
 		// Baro acceleration derivative Short period alpha/beta filter
 		// U/V/WbPrimS are used to compute U/V/WbiPrim, baro inertial accelerations
-		#define NBaroAccS 7.0 // accel kinetic alpha/beta filter coeff
+		#define NBaroAccS 8.0 // accel kinetic alpha/beta filter coeff
 		#define alphaBaroAccS (2.0 * (2.0 * NBaroAccS - 1.0) / NBaroAccS / (NBaroAccS + 1.0))
 		#define betaBaroAccS (6.0 / NBaroAccS / (NBaroAccS + 1.0) )			
 		deltaUbS = Ub - UbFS;
@@ -1710,7 +1710,7 @@ void readSensors(void *pvParameters){
 		// option 2
 	
 		// kinetic energy calculation
-		#define NTE 6.0 // ALT alpha/beta coeff
+		#define NTE 8.0 // ALT alpha/beta coeff
 		#define alphaTE (2.0 * (2.0 * NTE - 1.0) / NTE / (NTE + 1.0))
 		#define betaTE (6.0 / NTE / (NTE + 1.0) )
 		deltaEnergy = ( TASbiSquare / GRAVITY / 2.0 ) - EnergyFilt;
@@ -2077,10 +2077,25 @@ void readSensors(void *pvParameters){
 			NEnergy in units (NEnergy is multiplied by sampling period to get filter period in seconds),
 			PeriodVelbi (Baro Inertial period in tenth of seconds)
 		*/	
+		/* 
+			$S3,
+			UiPrim in hundred of m/s²,
+			ViPrim,
+			Wiprim,
+			UbPrimS in hubdred of m/s²,
+			VbPrimS,
+			WbPrimS,
+			UiPrimPrimS in hundred of m/s3,
+			ViPrimPrimS,
+			WiPrimPrimS,			
+			UbiPrim in hundred of m/s²,
+			VbiPrim,
+			WbiPrim,
+		*/		
 			xSemaphoreTake( BTMutex, 3/portTICK_PERIOD_MS );
 			if ( !(count % 50) ) { 
 				// send $S1 and $S2 every 50 cycles = 5 seconds
-				sprintf(str,"$S1,%lld,%i,%i,%i,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$S2,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",
+				sprintf(str,"$S1,%lld,%i,%i,%i,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$S3,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$S2,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",
 				// $S1 stream
 					statTime, (int32_t)(statP*100.0),(int32_t)(teP*100.0), (int16_t)(dynP*10), 
 					(int64_t)(chosenGnss->time*1000.0), (int16_t)(chosenGnss->speed.x*100), (int16_t)(chosenGnss->speed.y*100), (int16_t)(chosenGnss->speed.z*100), (int16_t)(GNSSRouteraw*10),
@@ -2094,7 +2109,12 @@ void readSensors(void *pvParameters){
 					(int32_t)(Kgain*1000), 
 					(int32_t)rint(MPU.mpu_heat_pwm),
 					(int32_t) ProcessTimeSensors,
-					(int32_t) (GravityModuleErr*1000),					
+					(int32_t) (GravityModuleErr*1000),
+					// $S3 stream
+					(int32_t)(UiPrim*100),(int32_t)(ViPrim*100),(int32_t)(WiPrim*100),
+					(int32_t)(UbPrimS*100), (int32_t)(VbPrimS*100),(int32_t)(WbPrimS*100),
+					(int32_t)(UiPrimPrimS*100), (int32_t)(ViPrimPrimS*100),(int32_t)(WiPrimPrimS*100),	
+					(int32_t)(UbiPrim*100), (int32_t)(VbiPrim*100),(int32_t)(WbiPrim*100),						
 					// $S2 stream
 					(int16_t)(OATemp*10.0), (int16_t)(OAT.get()*10.0), (int16_t)(MPUtempcel*10.0), chosenGnss->fix, chosenGnss->numSV,
 					(int32_t)(GroundGyroBias.x*100000.0), (int32_t)(GroundGyroBias.y*100000.0), (int32_t)(GroundGyroBias.z*100000.0),				
@@ -2104,7 +2124,7 @@ void readSensors(void *pvParameters){
 				Router::sendXCV(str);		
 			} else {
 				// send $S1 only every 100ms
-				sprintf(str,"$S1,%lld,%i,%i,%i,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",
+				sprintf(str,"$S1,%lld,%i,%i,%i,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$S3,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",
 					statTime, (int32_t)(statP*100.0),(int32_t)(teP*100.0), (int16_t)(dynP*10), 
 					(int64_t)(chosenGnss->time*1000.0), (int16_t)(chosenGnss->speed.x*100), (int16_t)(chosenGnss->speed.y*100), (int16_t)(chosenGnss->speed.z*100), (int16_t)(GNSSRouteraw*10),
 					(int32_t)(Pitch*1000.0), (int32_t)(Roll*1000.0), (int32_t)(Yaw*1000.0),
@@ -2117,7 +2137,12 @@ void readSensors(void *pvParameters){
 					(int32_t)(Kgain*1000), 
 					(int32_t)rint(MPU.mpu_heat_pwm),
 					(int32_t) ProcessTimeSensors,
-					(int32_t) (GravityModuleErr*1000)					
+					(int32_t) (GravityModuleErr*1000),
+					// $S3 stream
+					(int32_t)(UiPrim*100),(int32_t)(ViPrim*100),(int32_t)(WiPrim*100),
+					(int32_t)(UbPrimS*100), (int32_t)(VbPrimS*100),(int32_t)(WbPrimS*100),
+					(int32_t)(UiPrimPrimS*100), (int32_t)(ViPrimPrimS*100),(int32_t)(WiPrimPrimS*100),	
+					(int32_t)(UbiPrim*100), (int32_t)(VbiPrim*100),(int32_t)(WbiPrim*100)						
 					);				
 				Router::sendXCV(str);
 			}
