@@ -259,6 +259,14 @@ static float ViPrimSF = 0.0;
 static float deltaWiPrimS = 0.0;
 static float WiPrimPrimS = 0.0;
 static float WiPrimSF = 0.0;
+	
+static float errUiPrim;
+static float UiPrimCor;
+static float errViPrim;
+static float ViPrimCor;
+static float errWiPrim;
+static float WiPrimCor;
+
 // variables for gravity estimation
 mpud::float_axes_t GravIMU;
 mpud::float_axes_t gravISUNEDBODY;
@@ -920,13 +928,6 @@ static void processIMU(void *pvParameters)
 	PrevaccelISUNEDMPU.x = 0.0;
 	PrevaccelISUNEDMPU.y = 0.0;
 	PrevaccelISUNEDMPU.z = -9.807;
-	
-	float errUiPrim;
-	float UiPrimCor;
-	float errViPrim;
-	float ViPrimCor;
-	float errWiPrim;
-	float WiPrimCor;
 	
 	// compute once the filter parameters in functions of values in FLASH
 	PeriodVelbi = velbi_period.get(); // period in second for baro/inertial velocity. period long enough to reduce effect of baro wind gradients
@@ -2127,15 +2128,13 @@ void readSensors(void *pvParameters){
 		*/	
 		/* 
 			$S3,
+			static time in milli second,			
 			UiPrim in hundred of m/s²,
 			ViPrim,
 			Wiprim,
-			UbPrimS in hubdred of m/s²,
-			VbPrimS,
-			WbPrimS,
-			UiPrimPrimS in hundred of m/s3,
-			ViPrimPrimS,
-			WiPrimPrimS,			
+			errUiPrim in hubdred of m/s², (long term error (~6s) between UiPrim and UbPrim) ,
+			errViPrim,
+			errWiPrim,
 			UbiPrim in hundred of m/s²,
 			VbiPrim,
 			WbiPrim,
@@ -2143,7 +2142,7 @@ void readSensors(void *pvParameters){
 			xSemaphoreTake( BTMutex, 3/portTICK_PERIOD_MS );
 			if ( !(count % 50) ) { 
 				// send $S1 and $S2 every 50 cycles = 5 seconds
-				sprintf(str,"$S1,%lld,%i,%i,%i,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$S3,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$S2,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",
+				sprintf(str,"$S1,%lld,%i,%i,%i,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$S3,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$S2,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",
 				// $S1 stream
 					statTime, (int32_t)(statP*100.0),(int32_t)(teP*100.0), (int16_t)(dynP*10), 
 					(int64_t)(chosenGnss->time*1000.0), (int16_t)(chosenGnss->speed.x*100), (int16_t)(chosenGnss->speed.y*100), (int16_t)(chosenGnss->speed.z*100), (int16_t)(GNSSRouteraw*10),
@@ -2159,9 +2158,9 @@ void readSensors(void *pvParameters){
 					(int32_t) ProcessTimeSensors,
 					(int32_t) (GravityModuleErr*1000),
 					// $S3 stream
+					statTime,	
 					(int32_t)(UiPrim*100),(int32_t)(ViPrim*100),(int32_t)(WiPrim*100),
-					(int32_t)(UbPrimS*100), (int32_t)(VbPrimS*100),(int32_t)(WbPrimS*100),
-					(int32_t)(UiPrimPrimS*100), (int32_t)(ViPrimPrimS*100),(int32_t)(WiPrimPrimS*100),	
+					(int32_t)(errUiPrim*100), (int32_t)(errViPrim*100),(int32_t)(errWiPrim*100),
 					(int32_t)(UbiPrim*100), (int32_t)(VbiPrim*100),(int32_t)(WbiPrim*100),						
 					// $S2 stream
 					(int16_t)(OATemp*10.0), (int16_t)(OAT.get()*10.0), (int16_t)(MPUtempcel*10.0), chosenGnss->fix, chosenGnss->numSV,
@@ -2172,7 +2171,7 @@ void readSensors(void *pvParameters){
 				Router::sendXCV(str);		
 			} else {
 				// send $S1 only every 100ms
-				sprintf(str,"$S1,%lld,%i,%i,%i,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$S3,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",
+				sprintf(str,"$S1,%lld,%i,%i,%i,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$S3,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",
 					statTime, (int32_t)(statP*100.0),(int32_t)(teP*100.0), (int16_t)(dynP*10), 
 					(int64_t)(chosenGnss->time*1000.0), (int16_t)(chosenGnss->speed.x*100), (int16_t)(chosenGnss->speed.y*100), (int16_t)(chosenGnss->speed.z*100), (int16_t)(GNSSRouteraw*10),
 					(int32_t)(Pitch*1000.0), (int32_t)(Roll*1000.0), (int32_t)(Yaw*1000.0),
@@ -2187,9 +2186,9 @@ void readSensors(void *pvParameters){
 					(int32_t) ProcessTimeSensors,
 					(int32_t) (GravityModuleErr*1000),
 					// $S3 stream
+					statTime,	
 					(int32_t)(UiPrim*100),(int32_t)(ViPrim*100),(int32_t)(WiPrim*100),
-					(int32_t)(UbPrimS*100), (int32_t)(VbPrimS*100),(int32_t)(WbPrimS*100),
-					(int32_t)(UiPrimPrimS*100), (int32_t)(ViPrimPrimS*100),(int32_t)(WiPrimPrimS*100),	
+					(int32_t)(errUiPrim*100), (int32_t)(errViPrim*100),(int32_t)(errWiPrim*100),
 					(int32_t)(UbiPrim*100), (int32_t)(VbiPrim*100),(int32_t)(WbiPrim*100)						
 					);				
 				Router::sendXCV(str);
