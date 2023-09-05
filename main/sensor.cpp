@@ -921,6 +921,13 @@ static void processIMU(void *pvParameters)
 	PrevaccelISUNEDMPU.y = 0.0;
 	PrevaccelISUNEDMPU.z = -9.807;
 	
+	float errUiPrim;
+	float UiPrimCor;
+	float errViPrim;
+	float ViPrimCor;
+	float errWiPrim;
+	float WiPrimCor;
+	
 	// compute once the filter parameters in functions of values in FLASH
 	PeriodVelbi = velbi_period.get(); // period in second for baro/inertial velocity. period long enough to reduce effect of baro wind gradients
 	
@@ -1072,7 +1079,47 @@ static void processIMU(void *pvParameters)
 			UiPrim = accelISUNEDBODY.x - GravIMU.x - gyroCorr.y * Wbi + gyroCorr.z * Vbi;
 			ViPrim = accelISUNEDBODY.y - GravIMU.y - gyroCorr.z * Ubi + gyroCorr.x * Wbi;			
 			WiPrim = accelISUNEDBODY.z - GravIMU.z + gyroCorr.y * Ubi - gyroCorr.x * Vbi;
+			
+			// Kinectic accels alpha/beta filter to get long term accel variations ~6 seconds
+			#define NKinAccS 240.0 // accel kinetic alpha/beta filter coeff
+			#define alphaKinAccS (2.0 * (2.0 * NKinAccS - 1.0) / NKinAccS / (NKinAccS + 1.0))
+			#define betaKinAccS (6.0 / NKinAccS / (NKinAccS + 1.0) )			
+			deltaUiPrimS = UiPrim - UiPrimSF;
+			UiPrimPrimS = UiPrimPrimS + betaKinAccS * deltaUiPrimS / dtGyr;
+			UiPrimSF = UiPrimSF + alphaKinAccS * deltaUiPrimS + UiPrimPrimS * dtGyr;
+			deltaViPrimS = ViPrim - ViPrimSF;
+			ViPrimPrimS = ViPrimPrimS + betaKinAccS * deltaViPrimS / dtGyr;
+			ViPrimSF = ViPrimSF + alphaKinAccS * deltaViPrimS + ViPrimPrimS * dtGyr;
+			deltaWiPrimS = WiPrim - WiPrimSF;
+			WiPrimPrimS = WiPrimPrimS + betaKinAccS * deltaWiPrimS / dtGyr;
+			WiPrimSF = WiPrimSF + alphaKinAccS * deltaWiPrimS + WiPrimPrimS * dtGyr;
+			
+			// compute error between long term kinetic accels and long term pneumatic accels
+			errUiPrim = UiPrimSF - UbPrimS;
+			errViPrim = ViPrimSF - VbPrimS;			
+			errWiPrim = WiPrimSF - WbPrimS;
 
+			// correct kinetic acceleration from biais compared to baro accelerations
+			#define KpAccCor 0.04
+			UiPrimCor = UiPrim - KpAccCor * errUiPrim;
+			ViPrimCor = ViPrim - KpAccCor * errViPrim;		
+			WiPrimCor = WiPrim - KpAccCor * errWiPrim;
+			
+			// Compute baro interial acceleration in body frame
+			fcVelbi1 = ( PeriodVelbi / ( PeriodVelbi + dtGyr ));
+			fcVelbi2 = ( 1.0 - fcVelbi1 );
+			xSemaphoreTake( dataMutex, 2/portTICK_PERIOD_MS ); // prevent data conflicts for 2ms max.			
+			UbiPrim = UiPrimCor;
+			VbiPrim = ViPrimCor;
+			WbiPrim = WiPrimCor;
+			// Compute baro interial velocity in body frame
+			Ubi = fcVelbi1 * ( Ubi + UbiPrim * dtGyr ) + fcVelbi2 * Ub;
+			Vbi = fcVelbi1 * ( Vbi + VbiPrim * dtGyr ) + fcVelbi2 * Vb;
+			Wbi = fcVelbi1 * ( Wbi + WbiPrim * dtGyr ) + fcVelbi2 * Wb;
+			xSemaphoreGive( dataMutex );
+
+			/*
+			// Old solution to compute corrected kineteic accels
 			// Kinectic accels alpha/beta short filter
 			#define NKinAccS 12.0 // accel kinetic alpha/beta filter coeff
 			#define alphaKinAccS (2.0 * (2.0 * NKinAccS - 1.0) / NKinAccS / (NKinAccS + 1.0))
@@ -1100,6 +1147,7 @@ static void processIMU(void *pvParameters)
 			Vbi = fcVelbi1 * ( Vbi + VbiPrim * dtGyr ) + fcVelbi2 * Vb;
 			Wbi = fcVelbi1 * ( Wbi + WbiPrim * dtGyr ) + fcVelbi2 * Wb;
 			xSemaphoreGive( dataMutex );
+			*/
 		}
 
 		// When TAS < 15 m/s the vario is considered potentially stable on ground
@@ -1645,9 +1693,9 @@ void readSensors(void *pvParameters){
 		Vb = ( sinRoll * sinPitch * cosDHeading - cosRoll * sinDHeading ) * Vh + sinRoll * cosPitch * Vzbaro;
 		Wb = ( cosRoll * sinPitch * cosDHeading + sinRoll * sinDHeading ) * Vh + cosRoll * cosPitch * Vzbaro;
 
-		// Baro acceleration derivative Short period alpha/beta filter
+		// Long term Baro acceleration using alpha/beta filter period ~6 seconds
 		// U/V/WbPrimS are used to compute U/V/WbiPrim, baro inertial accelerations
-		#define NBaroAccS 8.0 // accel kinetic alpha/beta filter coeff
+		#define NBaroAccS 60.0 // accel kinetic alpha/beta filter coeff
 		#define alphaBaroAccS (2.0 * (2.0 * NBaroAccS - 1.0) / NBaroAccS / (NBaroAccS + 1.0))
 		#define betaBaroAccS (6.0 / NBaroAccS / (NBaroAccS + 1.0) )			
 		deltaUbS = Ub - UbFS;
