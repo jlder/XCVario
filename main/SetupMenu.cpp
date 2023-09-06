@@ -2025,7 +2025,7 @@ void SetupMenu::flighttest_menu_create( MenuEntry *top ){
 	tefilt->setPrecision(1);
 	top->addEntry( tefilt );
 	
-	SetupMenuValFloat * velbiperiod = new SetupMenuValFloat( "Baro Inert Vel period", "S",	1.0, 5.9, 0.1, bifilt_adj, true, &velbi_period );
+	SetupMenuValFloat * velbiperiod = new SetupMenuValFloat( "Baro Inert Vel period", "S",	0.5, 3.9, 0.1, bifilt_adj, true, &velbi_period );
 	velbiperiod->setHelp(PROGMEM"TE filter time");
 	velbiperiod->setPrecision(1);
 	top->addEntry( velbiperiod );
