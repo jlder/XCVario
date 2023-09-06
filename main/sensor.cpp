@@ -741,7 +741,8 @@ float deltaGz;
 		GzPrim = GzPrim + betaBiasG * deltaGz / dt ;
 		GzF = GzF + alphaBiasG  * deltaGz + GzPrim * dt;
 		BiasGz = BiasGz +  alphaBiasG * deltaGz + GzPrim * dt;
-		Bias_Gz = -BiasGz ;		
+		Bias_Gz = -BiasGz ;
+		
 		if ( Bias_Gz > GMaxBias ) Bias_Gz = GMaxBias ;
 		if ( Bias_Gz < -GMaxBias ) Bias_Gz = -GMaxBias;
 		if ( Bias_Gx > GMaxBias ) Bias_Gx = GMaxBias ;
@@ -798,7 +799,7 @@ float deltaGz;
 		} else {
 			// if GravityModuleErr negative, low confidence in accels
 			// limit error magnitude
-			if ( GravityModuleErr < -2.0 ) GravityModuleErr = -2.0;
+			if ( GravityModuleErr < -2.5 ) GravityModuleErr = -2.5;
 			// compute dynamic gain function of error magnitude
 			Kgain = pow( 10.0, GravityModuleErr );
 		}
@@ -1471,6 +1472,10 @@ void readSensors(void *pvParameters){
 	float AoA = 0.0;
 	float AoB = 0.0;
 	float AccelzFiltAoA = 0.0;
+	float deltaAoB;
+	float AoBPrim = 0.0;
+	float AoBF = 0.0;
+	float BiasAoB = 0.0;
 	
 	float TASbiSquare;
 	float deltaEnergy;
@@ -1680,6 +1685,19 @@ void readSensors(void *pvParameters){
 		} else {
 			AoA = 0.0;
 			AoB = 0.0;
+		}
+		// if TAS > 140 km/h and bank is less than 5°, long term average of AoB to detect bias
+		if (  (TAS > 38.0) && (BankFilt < 0.05) ) {
+			#define NAoBBias 1000
+			#define alphaBiasAoB (2.0 * (2.0 * NAoBBias - 1.0) / NAoBBias / (NAoBBias + 1.0))
+			#define betaBiasAoB (6.0 / NAoBBias / (NAoBBias + 1.0) )
+			deltaAoB = AoB - AoBF;
+			AoBPrim = AoBPrim + betaBiasAoB * deltaAoB / dtStat ;
+			AoBF = AoBF + alphaBiasAoB  * deltaAoB + AoBPrim * dtStat;
+			BiasAoB = BiasAoB +  alphaBiasAoB  * deltaAoB + AoBPrim * dtStat;
+		} else {
+			// reset filter when not within observation limits
+			AoBF = AoB;
 		}
 			
 		// Compute trajectory pneumatic speeds components in body frame NEDBODY
@@ -2138,11 +2156,12 @@ void readSensors(void *pvParameters){
 			UbiPrim in hundred of m/s²,
 			VbiPrim,
 			WbiPrim,
+			BiasAoB in mrad
 		*/		
 			xSemaphoreTake( BTMutex, 3/portTICK_PERIOD_MS );
 			if ( !(count % 50) ) { 
 				// send $S1 and $S2 every 50 cycles = 5 seconds
-				sprintf(str,"$S1,%lld,%i,%i,%i,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$S3,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$S2,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",
+				sprintf(str,"$S1,%lld,%i,%i,%i,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$S3,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$S2,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",
 				// $S1 stream
 					statTime, (int32_t)(statP*100.0),(int32_t)(teP*100.0), (int16_t)(dynP*10), 
 					(int64_t)(chosenGnss->time*1000.0), (int16_t)(chosenGnss->speed.x*100), (int16_t)(chosenGnss->speed.y*100), (int16_t)(chosenGnss->speed.z*100), (int16_t)(GNSSRouteraw*10),
@@ -2161,7 +2180,8 @@ void readSensors(void *pvParameters){
 					statTime,	
 					(int32_t)(UiPrim*100),(int32_t)(ViPrim*100),(int32_t)(WiPrim*100),
 					(int32_t)(errUiPrim*100), (int32_t)(errViPrim*100),(int32_t)(errWiPrim*100),
-					(int32_t)(UbiPrim*100), (int32_t)(VbiPrim*100),(int32_t)(WbiPrim*100),						
+					(int32_t)(UbiPrim*100), (int32_t)(VbiPrim*100),(int32_t)(WbiPrim*100),
+					(int32_t)(BiasAoB*1000),					
 					// $S2 stream
 					(int16_t)(OATemp*10.0), (int16_t)(OAT.get()*10.0), (int16_t)(MPUtempcel*10.0), chosenGnss->fix, chosenGnss->numSV,
 					(int32_t)(GroundGyroBias.x*100000.0), (int32_t)(GroundGyroBias.y*100000.0), (int32_t)(GroundGyroBias.z*100000.0),				
@@ -2171,7 +2191,7 @@ void readSensors(void *pvParameters){
 				Router::sendXCV(str);		
 			} else {
 				// send $S1 only every 100ms
-				sprintf(str,"$S1,%lld,%i,%i,%i,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$S3,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",
+				sprintf(str,"$S1,%lld,%i,%i,%i,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$S3,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",
 					statTime, (int32_t)(statP*100.0),(int32_t)(teP*100.0), (int16_t)(dynP*10), 
 					(int64_t)(chosenGnss->time*1000.0), (int16_t)(chosenGnss->speed.x*100), (int16_t)(chosenGnss->speed.y*100), (int16_t)(chosenGnss->speed.z*100), (int16_t)(GNSSRouteraw*10),
 					(int32_t)(Pitch*1000.0), (int32_t)(Roll*1000.0), (int32_t)(Yaw*1000.0),
@@ -2189,7 +2209,8 @@ void readSensors(void *pvParameters){
 					statTime,	
 					(int32_t)(UiPrim*100),(int32_t)(ViPrim*100),(int32_t)(WiPrim*100),
 					(int32_t)(errUiPrim*100), (int32_t)(errViPrim*100),(int32_t)(errWiPrim*100),
-					(int32_t)(UbiPrim*100), (int32_t)(VbiPrim*100),(int32_t)(WbiPrim*100)						
+					(int32_t)(UbiPrim*100), (int32_t)(VbiPrim*100),(int32_t)(WbiPrim*100),
+					(int32_t)(BiasAoB*1000)					
 					);				
 				Router::sendXCV(str);
 			}
