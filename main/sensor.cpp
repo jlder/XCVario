@@ -1916,8 +1916,8 @@ void readSensors(void *pvParameters){
 		} */ // TODO replace Eckhard code with flight test values
 		
 		cas = CAS * 3.6;
-		if( (int( ias.get()+0.5 ) != int( CAS+0.5 ) ) || !(count%20) ){
-			ias.set( CAS );  // low pass filter
+		if( (int( ias.get()+0.5 ) != int( cas+0.5 ) ) || !(count%20) ){
+			ias.set( cas );  // low pass filter
 		}		
 		
 		/* // TODO remove unecessary code for flgiht test
