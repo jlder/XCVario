@@ -1,7 +1,7 @@
 // compile options
 //
-//#define LS6
-#define TAURUS
+#define LS6
+//#define TAURUS
 //#define VENTUS3
 //
 #define COMPUTEBIAS   // code to estimate gyro bias
