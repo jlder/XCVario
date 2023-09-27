@@ -673,8 +673,8 @@ void MahonyUpdateIMU(float dt, float gxraw, float gyraw, float gzraw,
 					float &Bias_Gx, float &Bias_Gy, float &Bias_Gz ) {
 
 #define Nlimit 0.15 // stability criteria for gravity estimation from accels in m/s²
-#define Kp 1.0 // proportional feedback to sync quaternion
-#define Ki 0.1 // integral feedback to sync quaternion
+#define Kp 0.1 // proportional feedback to sync quaternion
+#define gzlimit 0.2 // gravity estimation is used with higher PI feedback when reaching limit.
 
 #define Gyroprimlimit 0.3
 
@@ -688,7 +688,7 @@ float halfey = 0.0;
 float halfez = 0.0;
 float qa, qb, qc;
 float dynKp = Kp;
-float dynKi = Ki;
+float dynKi = Kp/10;
 float deltaGx;
 float deltaGy;
 float deltaGz;
@@ -709,7 +709,7 @@ float deltaGz;
 	#define fcBankRise2 ( 1.0 - fcBankRise1 )
 	#define WingLevel 0.04 // max lateral gravity acceleration (normalized acceleration) to consider wings leveled
 	#define RoutePrimLevel 0.02 // 0.02 rad/s ~ 1°/s
-	#define GMaxBias 0.003 // 3 mrad/s
+	#define GMaxBias 0.010 // 10 mrad/s
 	if ( BankFilt < abs(halfvy) ) {
 		BankFilt = fcBankRise1 * BankFilt + fcBankRise2 * abs(halfvy);	// low pass filter on rise to reduce noise		
 	} else {
@@ -760,6 +760,18 @@ float deltaGz;
 	AccelGravModule = sqrt( ax * ax + ay * ay + az * az );
 	if ( AccelGravModule != 0.0) {
 		// gyro should be corrected using error between vertical from IMU quaternion and observered vertical from accels.
+		// gyro correction is performed with PI feedback using Kp and Ki (proportional & integral) coefficients.
+		// these coefficients are adjusted dynamicaly (dynKp and dynKi) in function of gz which is used as a proxy for turn rate 
+		
+		if  ( abs(gz) < gzlimit ) {
+			dynKp = 0.75 * dynKp + 0.25 * Kp * power(10, abs(gz) / gzlimit);
+		} else {
+			dynKp = 0.75 * dynKp + 0.25 * 10 * Kp;
+		}
+		dynKi = dynKp * 0.1;
+		
+		/*
+		// gyro should be corrected using error between vertical from IMU quaternion and observered vertical from accels.
 		// Accels are good proxy for vertical :
 		// - when the flight mechanic forces apply, this is true when the module of acceleration is close to local gravity (GRAVITY)
 		// - when on the ground, additional condition on gyro stability is required to insure accels can be used to observe vertical. 
@@ -793,9 +805,10 @@ float deltaGz;
 			if ( GravityModuleErr < -2.0 ) GravityModuleErr = -2.0;
 			// compute dynamic gain function of error magnitude
 			Kgain = pow( 10.0, GravityModuleErr );
-		}
+		} 
 		dynKp = Kgain * Kp;
 		dynKi = Kgain * Ki;
+		*/
 		
 		// Normalise accelerometer measurement
 		recipNorm = 1.0 / AccelGravModule;
