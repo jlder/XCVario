@@ -259,6 +259,11 @@ static float ViPrimSF = 0.0;
 static float deltaWiPrimS = 0.0;
 static float WiPrimPrimS = 0.0;
 static float WiPrimSF = 0.0;
+static float TASbi = 0.0;
+static float TASbiSquare = 0.0;
+static float AoA = 0.0;
+static float AoB = 0.0;
+
 // variables for gravity estimation
 mpud::float_axes_t GravIMU;
 mpud::float_axes_t gravISUNEDBODY;
@@ -764,7 +769,7 @@ float deltaGz;
 		// these coefficients are adjusted dynamicaly (dynKp and dynKi) in function of gz which is used as a proxy for turn rate 
 		
 		if  ( abs(gz) < gzlimit ) {
-			dynKp = 0.75 * dynKp + 0.25 * Kp * power(10, abs(gz) / gzlimit);
+			dynKp = 0.75 * dynKp + 0.25 * Kp * pow(10, abs(gz) / gzlimit);
 		} else {
 			dynKp = 0.75 * dynKp + 0.25 * 10 * Kp;
 		}
@@ -1042,10 +1047,16 @@ static void processIMU(void *pvParameters)
 			// Update IMU
 			// only consider centrifugal forces if TAS > 15 m/s
 			if ( TAS > 15.0 ) {
-			// estimate gravity in body frame taking into account centrifugal corrections
-				gravISUNEDBODY.x = accelISUNEDBODY.x - gyroCorr.y * Wbi + gyroCorr.z * Vbi;
-				gravISUNEDBODY.y = accelISUNEDBODY.y - gyroCorr.z * Ubi + gyroCorr.x * Wbi;
-				gravISUNEDBODY.z = accelISUNEDBODY.z + gyroCorr.y * Ubi - gyroCorr.x * Wbi;
+				// estimate gravity in body frame taking into account centrifugal corrections
+				xSemaphoreTake( dataMutex, 2/portTICK_PERIOD_MS ); // prevent data conflicts for 2ms max.
+				gravISUNEDBODY.x = accelISUNEDBODY.x - gyroCorr.y * TASbi * AoA + gyroCorr.z * TASbi * (-AoB) - UbiPrim;
+				gravISUNEDBODY.y = accelISUNEDBODY.y - gyroCorr.z * TASbi + gyroCorr.x * TASbi * AoA;
+				gravISUNEDBODY.z = accelISUNEDBODY.z + gyroCorr.y * TASbi - gyroCorr.x * TASbi * (-AoB);
+				xSemaphoreGive( dataMutex );
+				// gravISUNEDBODY.x = accelISUNEDBODY.x - gyroCorr.y * Wbi + gyroCorr.z * Vbi;
+				// gravISUNEDBODY.y = accelISUNEDBODY.y - gyroCorr.z * Ubi + gyroCorr.x * Wbi;
+				// gravISUNEDBODY.z = accelISUNEDBODY.z + gyroCorr.y * Ubi - gyroCorr.x * Wbi;
+				
 			} else {
 				// estimate gravity in body frame using accels only
 				gravISUNEDBODY.x = accelISUNEDBODY.x;
@@ -1082,12 +1093,17 @@ static void processIMU(void *pvParameters)
 			GravIMU.y = -GRAVITY * 2.0 * (q2 * q3 + q0 * q1);
 			GravIMU.z = -GRAVITY * (q0 * q0 - q1 * q1 - q2 * q2 + q3 * q3);
 			// compute kinetic accelerations using accelerations, corrected with gravity and centrifugal accels
-			UiPrim = accelISUNEDBODY.x - GravIMU.x - gyroCorr.y * Wbi + gyroCorr.z * Vbi;
-			ViPrim = accelISUNEDBODY.y - GravIMU.y - gyroCorr.z * Ubi + gyroCorr.x * Wbi;			
-			WiPrim = accelISUNEDBODY.z - GravIMU.z + gyroCorr.y * Ubi - gyroCorr.x * Vbi;
+			xSemaphoreTake( dataMutex, 2/portTICK_PERIOD_MS ); // prevent data conflicts for 2ms max.
+			UiPrim = accelISUNEDBODY.x - GravIMU.x - gyroCorr.y * TASbi * AoA + gyroCorr.z * TASbi * (-AoB);
+			ViPrim = accelISUNEDBODY.y - GravIMU.y - gyroCorr.z * TASbi + gyroCorr.x * TASbi * AoA;			
+			WiPrim = accelISUNEDBODY.z - GravIMU.z + gyroCorr.y * TASbi - gyroCorr.x * TASbi * (-AoB);
+			xSemaphoreGive( dataMutex );			
+			// UiPrim = accelISUNEDBODY.x - GravIMU.x - gyroCorr.y * Wbi + gyroCorr.z * Vbi;
+			// ViPrim = accelISUNEDBODY.y - GravIMU.y - gyroCorr.z * Ubi + gyroCorr.x * Wbi;			
+			// WiPrim = accelISUNEDBODY.z - GravIMU.z + gyroCorr.y * Ubi - gyroCorr.x * Vbi;			
 
 			// Kinectic accels alpha/beta short filter
-			#define NKinAccS 12.0 // accel kinetic alpha/beta filter coeff
+			#define NKinAccS 24.0 // accel kinetic alpha/beta filter coeff
 			#define alphaKinAccS (2.0 * (2.0 * NKinAccS - 1.0) / NKinAccS / (NKinAccS + 1.0))
 			#define betaKinAccS (6.0 / NKinAccS / (NKinAccS + 1.0) )			
 			deltaUiPrimS = UiPrim - UiPrimSF;
@@ -1112,6 +1128,11 @@ static void processIMU(void *pvParameters)
 			Ubi = fcVelbi1 * ( Ubi + UbiPrim * dtGyr ) + fcVelbi2 * Ub;
 			Vbi = fcVelbi1 * ( Vbi + VbiPrim * dtGyr ) + fcVelbi2 * Vb;
 			Wbi = fcVelbi1 * ( Wbi + WbiPrim * dtGyr ) + fcVelbi2 * Wb;
+
+			// baro inertial TAS & TAS square in any frame
+			TASbiSquare = Ubi * Ubi + Vbi * Vbi + Wbi * Wbi;
+			TASbi = sqrt( TASbiSquare );
+			
 			xSemaphoreGive( dataMutex );
 		}
 
@@ -1432,15 +1453,12 @@ void readSensors(void *pvParameters){
 	float dAoA = 0.0;
 	float AoARaw = 0.0;
 	float WingLoad = 40.0;
-	float AoA = 0.0;
-	float AoB = 0.0;
 	float AccelzFiltAoA = 0.0;
 	float deltaAoB;
 	float AoBPrim = 0.0;
 	float AoBF = 0.0;
 	float BiasAoB = 0.0;	
 	
-	float TASbiSquare;
 	float deltaEnergy;
 	float EnergyPrim = 0.0;
 	
@@ -1451,6 +1469,8 @@ void readSensors(void *pvParameters){
 	// Wind speed variables
 	float Vgx = 0.0;
 	float Vgy = 0.0;
+	float VgxPrev = 0.0;
+	float VgyPrev = 0.0;
 	float Vgxpast[15] = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0 };
 	float Vgypast[15] = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0 };	
 	float Vhbipast[15] = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0 };
@@ -1625,14 +1645,14 @@ void readSensors(void *pvParameters){
 		Vzbaro = - ALTPrim;
 		
 		// compute AoA (Angle of attack) and AoB (Angle od slip)
-		#define FreqAlpha 1.5 // Hz
+		#define FreqAlpha 0.7 // Hz
 		#define fcAoA1 (10.0/(10.0+FreqAlpha))
 		#define fcAoA2 (1.0-fcAoA1)
-		#define FreqBeta 1.0 // Hz
+		#define FreqBeta 1.5 // Hz
 		#define fcAoB1 (10.0/(10.0+FreqBeta))
 		#define fcAoB2 (1.0-fcAoB1)		
 		WingLoad = gross_weight.get() / polar_wingarea.get();  // should be only computed when pilot change weight settings in XCVario
-		xSemaphoreTake( dataMutex, 1/portTICK_PERIOD_MS ); // prevent data conflicts for 1ms max.		
+		xSemaphoreTake( dataMutex, 2/portTICK_PERIOD_MS ); // prevent data conflicts for 1ms max.		
 		if ( (dynP>100.0) && (CAS>10.0) && (TAS>10.0) && (abs(accelISUNEDBODY.z) > 1.0) ) { // compute AoA and AoB only when dynamic pressure is above 100 Pa, CAS & TAS abobe 10m/s and accel z above 1 m/s²
 			AccelzFiltAoA = 0.8 * AccelzFiltAoA + 0.2 * accelISUNEDBODY.z; // simple ~3 Hz low pass on accel z
 			CL = -AccelzFiltAoA * 2 / RhoSLISA * WingLoad / CAS / CAS;
@@ -1676,7 +1696,7 @@ void readSensors(void *pvParameters){
 
 		// Baro acceleration derivative Short period alpha/beta filter
 		// U/V/WbPrimS are used to compute U/V/WbiPrim, baro inertial accelerations
-		#define NBaroAccS 8.0 // accel kinetic alpha/beta filter coeff
+		#define NBaroAccS 7.0 // accel kinetic alpha/beta filter coeff
 		#define alphaBaroAccS (2.0 * (2.0 * NBaroAccS - 1.0) / NBaroAccS / (NBaroAccS + 1.0))
 		#define betaBaroAccS (6.0 / NBaroAccS / (NBaroAccS + 1.0) )			
 		deltaUbS = Ub - UbFS;
@@ -1693,9 +1713,6 @@ void readSensors(void *pvParameters){
 		Vxbi = cosPitch * Ubi + sinRoll * sinPitch * Vbi + cosRoll * sinPitch * Wbi;
 		Vybi = cosRoll * Vbi - sinRoll * Wbi;
 		Vzbi = -sinPitch * Ubi + sinRoll * cosPitch * Vbi + cosRoll * cosPitch * Wbi;
-
-		// baro inertial TAS square in any frame
-		TASbiSquare = Ubi * Ubi + Vbi * Vbi + Wbi * Wbi;
 
 		xSemaphoreGive( dataMutex );
 		
@@ -1759,7 +1776,6 @@ void readSensors(void *pvParameters){
 		#define fcTEAvg2 ( 1.0 - fcTEAvg1 )			
 		TotalEnergyAvg = fcTEAvg1 * TotalEnergyAvg + fcTEAvg2 * TotalEnergy;
 
-		/*
 		#ifdef COMPUTEWIND
 		// TODO test and optimze wind calculation
 		// compute wind speed using GNSS and horizontal true airspeed
@@ -1805,8 +1821,8 @@ void readSensors(void *pvParameters){
 				tickDSR = 1;
 			}
 		}
-		#endif */
-		
+		#endif
+		/*
 		#ifdef COMPUTEWIND
 		// compute wind speed using GNSS and horizontal baro inertial true airspeed
 
@@ -1834,7 +1850,7 @@ void readSensors(void *pvParameters){
 				// algorithm expects horizontal true airspeed to be constant but average is used to reduce error
 				VhbiAvg = ( Vhbi + Vhbipast[i] ) / 2; // average horizontal baro inertial speed
 				// test if no wind yet and long enough segment and conditions met to avoid calc errors
-				if ( (Segment > MINSEGMENT ) && (VhAvg > Segment/2) && (Vgxpast[i] != 0.0) && (Vgypast[i] != 0.0) && (DeltaVgx != 0.0) && (DeltaVgy != 0.0) ) {
+				if ( (Segment > MINSEGMENT ) && (VhbiAvg > Segment/2) && (Vgxpast[i] != 0.0) && (Vgypast[i] != 0.0) && (DeltaVgx != 0.0) && (DeltaVgy != 0.0) ) {
 					MidSegmentx = (Vgx+Vgxpast[i])/2; // mid segment x
 					MidSegmenty = (Vgy+Vgypast[i])/2; // mid segment y
 					Median = sqrt(VhbiAvg*VhbiAvg-SegmentSquare/4); // module of median between segment center and true airspedd origin (usinf average of current and previous true airspeed
@@ -1874,6 +1890,7 @@ void readSensors(void *pvParameters){
 			Vhbipast[0] = Vhbi;
 		}                                            
 		#endif
+		*/
 		
 		
 		//
@@ -2155,7 +2172,7 @@ void readSensors(void *pvParameters){
 				Router::sendXCV(str);		
 			} else {
 				// send $S1 only every 100ms
-				sprintf(str,"$S1,%lld,%i,%i,%i,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$S3,$i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",
+				sprintf(str,"$S1,%lld,%i,%i,%i,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$S3,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",
 					statTime, (int32_t)(statP*100.0),(int32_t)(teP*100.0), (int16_t)(dynP*10), 
 					(int64_t)(chosenGnss->time*1000.0), (int16_t)(chosenGnss->speed.x*100), (int16_t)(chosenGnss->speed.y*100), (int16_t)(chosenGnss->speed.z*100), (int16_t)(GNSSRouteraw*10),
 					(int32_t)(Pitch*1000.0), (int32_t)(Roll*1000.0), (int32_t)(Yaw*1000.0),
