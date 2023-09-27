@@ -1573,7 +1573,7 @@ void readSensors(void *pvParameters){
 				if (dynP < 100.0) { // when on ground fast update of temp bias
 					ISATempBias = ISATempBias * 0.9 + (OAT.get() - ISATemp) * 0.1;
 				} else { // flying slow update of temp bias
-					ISATempBias = ISATempBias * 0.999 + (OAT.get() - ISATemp) * 0.001;
+					ISATempBias = ISATempBias * 0.99 + (OAT.get() - ISATemp) * 0.01;
 				}
 				OATemp = ISATemp + ISATempBias;
 			}
