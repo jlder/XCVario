@@ -1638,8 +1638,14 @@ void readSensors(void *pvParameters){
 			FirsTimeSensor--;
 		}
 		deltaALT = ALTraw - ALT;
-		ALTPrim = ALTPrim + betaALT * deltaALT / dtStat;
-		ALT = ALT + alphaALT * deltaALT + ALTPrim * dtStat;
+		// filter to remove huge altitude variations when changing altitude/QNH
+		if ( abs(deltaALT) > 3.0 ) { // do not filter and compute altitude variation when difference between raw altitude and filtered altitude is more than 3.0 (30 m/s)
+			ALTPrim = 0.0;
+			ALT = ALTraw;
+		} else {
+			ALTPrim = ALTPrim + betaALT * deltaALT / dtStat;
+			ALT = ALT + alphaALT * deltaALT + ALTPrim * dtStat;
+		}
 		// in glider operation, gaining altitude and energy is considered positive. However in NED representation vertical axis is positive pointing down.
 		// therefore Vzbaro in NED is the opposite of altitude variation.
 		Vzbaro = - ALTPrim;
