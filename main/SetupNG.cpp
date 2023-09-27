@@ -397,6 +397,6 @@ SetupNG<float>			sway("XCV_SWAY", 0.0);
 SetupNG<float>			distCG("DIST_CG_XCVARIO", 0.0);
 SetupNG<float>			gravity("LOCAL_GRAVITY", 9.807);
 SetupNG<float>          mpu_temperature("MPUTEMP", 45.0, true, SYNC_FROM_MASTER, PERSISTENT, chg_mpu_target );    // default for AHRS chip temperature (XCV 2023)
-SetupNG<float> 			te_filt( "TE FILTER",1.0, true, SYNC_FROM_MASTER, PERSISTENT, change_tefilter );
-SetupNG<float> 			velbi_period( "VELBI_PERIOD",2.5, true, SYNC_FROM_MASTER, PERSISTENT, change_bifilt );
+SetupNG<float> 			te_filt( "TE FILTER",2.0, true, SYNC_FROM_MASTER, PERSISTENT, change_tefilter );
+SetupNG<float> 			velbi_period( "VELBI_PERIOD",4.0, true, SYNC_FROM_MASTER, PERSISTENT, change_bifilt );
 
