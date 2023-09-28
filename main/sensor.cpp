@@ -930,6 +930,10 @@ static void processIMU(void *pvParameters)
 	float RollInit = 0.0;
 	float YawInit = 0.0;
 	int16_t AttitudeInit = 0;
+	
+	float GyrxzAmp	= 0.0;
+	float DynPeriodVelbi = 3.0;	
+	
 	// initialize prevgyrotime
 	prevgyroTime = esp_timer_get_time()/1000.0;
 	PrevgyroRPS.x = 0.0;
@@ -938,6 +942,8 @@ static void processIMU(void *pvParameters)
 	PrevaccelISUNEDMPU.x = 0.0;
 	PrevaccelISUNEDMPU.y = 0.0;
 	PrevaccelISUNEDMPU.z = -9.807;
+	
+	
 	
 	// compute once the filter parameters in functions of values in FLASH
 	PeriodVelbi = velbi_period.get(); // period in second for baro/inertial velocity. period long enough to reduce effect of baro wind gradients
@@ -1117,7 +1123,14 @@ static void processIMU(void *pvParameters)
 			WiPrimSF = WiPrimSF + alphaKinAccS * deltaWiPrimS + WiPrimPrimS * dtGyr;
 
 			// Compute baro interial acceleration in body frame
-			fcVelbi1 = ( PeriodVelbi / ( PeriodVelbi + dtGyr ));
+			// adjust bi filter in function of gyro x and z amplitude
+			GyrxzAmp = abs(gyroCorr.x) + abs(gyroCorr.z / 2.0);
+			if ( GyrxzAmp < 0.4 ) {
+				DynPeriodVelbi = 0.99 * DynPeriodVelbi + 0.01 * ( PeriodVelbi / ( 1 + GyrxzAmp / 0.04 ) );
+			} else {
+				DynPeriodVelbi = 0.99 * DynPeriodVelbi + 0.001 * PeriodVelbi;
+			}
+			fcVelbi1 = ( DynPeriodVelbi / ( DynPeriodVelbi + dtGyr ));
 			fcVelbi2 = ( 1.0 - fcVelbi1 );
 			xSemaphoreTake( dataMutex, 2/portTICK_PERIOD_MS ); // prevent data conflicts for 2ms max.			
 			UbiPrim = fcVelbi1 * ( UbiPrim + UiPrimPrimS * dtGyr ) + fcVelbi2 * UbPrimS;
