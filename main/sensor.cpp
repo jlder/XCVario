@@ -194,6 +194,8 @@ float deltaAccelModule = 0.0;	// accel module alfa/beta filter for gyro stabilit
 float AccelModulePrimFilt = 0.0;
 float AccelModuleFilt = 0.0;
 float AccelModulePrimLevel = 0.0;
+float dynKp = 0.1;
+float DynPeriodVelbi = 4.0;
 
 
 // Magnetic sensor / compass
@@ -692,7 +694,6 @@ float halfex = 0.0;
 float halfey = 0.0;
 float halfez = 0.0;
 float qa, qb, qc;
-float dynKp = Kp;
 float dynKi = Kp/10;
 float deltaGx;
 float deltaGy;
@@ -932,7 +933,6 @@ static void processIMU(void *pvParameters)
 	int16_t AttitudeInit = 0;
 	
 	float GyrxzAmp	= 0.0;
-	float DynPeriodVelbi = 3.0;	
 	
 	// initialize prevgyrotime
 	prevgyroTime = esp_timer_get_time()/1000.0;
@@ -2117,10 +2117,10 @@ void readSensors(void *pvParameters){
 			Wind speed x in cm/s,
 			Wind speed y in cm/s,
 			Vh heading in tenth of °,
-			Kgain in thousands of unit ( >0 to get 100% Kp/Ki),
+			dynKp in thousands of unit,
 			MPU.mpu_heat_pwn integer pwm unit,
 			ProcessTimeSensors in milli second,
-			GravityModuleErr in thousans of unit
+			DynPeriodVelbi in thousands of second
 			<CR><LF>		
 		*/
 		/* 
@@ -2172,10 +2172,10 @@ void readSensors(void *pvParameters){
 					(int32_t)(TotalEnergy*100),
 					(int32_t)(FilteredWindx*100), (int32_t)(FilteredWindy*100),
 					(int32_t)(VhHeading*10),
-					(int32_t)(Kgain*1000), 
+					(int32_t)(dynKp*1000), 
 					(int32_t)rint(MPU.mpu_heat_pwm),
 					(int32_t) ProcessTimeSensors,
-					(int32_t) (GravityModuleErr*1000),
+					(int32_t) (DynPeriodVelbi*1000),
 					// $S3 stream
 					(int32_t)(UiPrim*100),(int32_t)(ViPrim*100),(int32_t)(WiPrim*100),
 					(int32_t)(UbPrimS*100), (int32_t)(VbPrimS*100),(int32_t)(WbPrimS*100),
@@ -2201,10 +2201,10 @@ void readSensors(void *pvParameters){
 					(int32_t)(TotalEnergy*100),
 					(int32_t)(FilteredWindx*100), (int32_t)(FilteredWindy*100),
 					(int32_t)(VhHeading*10),
-					(int32_t)(Kgain*1000), 
+					(int32_t)(dynKp*1000), 
 					(int32_t)rint(MPU.mpu_heat_pwm),
 					(int32_t) ProcessTimeSensors,
-					(int32_t) (GravityModuleErr*1000),
+					(int32_t) (DynPeriodVelbi*1000),
 					// $S3 stream
 					(int32_t)(UiPrim*100),(int32_t)(ViPrim*100),(int32_t)(WiPrim*100),
 					(int32_t)(UbPrimS*100), (int32_t)(VbPrimS*100),(int32_t)(WbPrimS*100),
