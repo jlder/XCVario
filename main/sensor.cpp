@@ -1124,7 +1124,7 @@ static void processIMU(void *pvParameters)
 
 			// Compute baro interial acceleration in body frame
 			// adjust bi filter in function of gyro x and z amplitude
-			GyrxzAmp = abs(gyroCorr.x) + abs(gyroCorr.z / 2.0);
+			GyrxzAmp = abs(gyroCorr.x) + abs(gyroCorr.z / 3.0);
 			if ( GyrxzAmp < 0.4 ) {
 				DynPeriodVelbi = 0.99 * DynPeriodVelbi + 0.01 * ( PeriodVelbi / ( 1 + GyrxzAmp / 0.04 ) );
 			} else {
