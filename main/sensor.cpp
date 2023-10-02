@@ -194,6 +194,7 @@ float deltaAccelModule = 0.0;	// accel module alfa/beta filter for gyro stabilit
 float AccelModulePrimFilt = 0.0;
 float AccelModuleFilt = 0.0;
 float AccelModulePrimLevel = 0.0;
+float GyrxzAmplitude = 0.0;
 float dynKp = 0.1;
 float DynPeriodVelbi = 4.0;
 
@@ -681,7 +682,6 @@ void MahonyUpdateIMU(float dt, float gxraw, float gyraw, float gzraw,
 
 #define Nlimit 0.15 // stability criteria for gravity estimation from accels in m/s²
 #define Kp 0.1 // proportional feedback to sync quaternion
-#define gzlimit 0.2 // gravity estimation is used with higher PI feedback when reaching limit.
 
 #define Gyroprimlimit 0.3
 
@@ -767,12 +767,12 @@ float deltaGz;
 	if ( AccelGravModule != 0.0) {
 		// gyro should be corrected using error between vertical from IMU quaternion and observered vertical from accels.
 		// gyro correction is performed with PI feedback using Kp and Ki (proportional & integral) coefficients.
-		// these coefficients are adjusted dynamicaly (dynKp and dynKi) in function of gz which is used as a proxy for turn rate 
-		
-		if  ( abs(gz) < gzlimit ) {
-			dynKp = 0.75 * dynKp + 0.25 * Kp * pow(10, abs(gz) / gzlimit);
+		// these coefficients are adjusted dynamicaly (dynKp and dynKi) in function of gx and gz 
+		#define GyrLimit 0.3		
+		if  ( GyrxzAmplitude < GyrLimit ) {
+			dynKp = 0.5 * dynKp + 0.5 * Kp * pow(10, GyrxzAmplitude / GyrLimit);
 		} else {
-			dynKp = 0.75 * dynKp + 0.25 * 10 * Kp;
+			dynKp = 0.5 * dynKp + 0.5 * 10 * Kp;
 		}
 		dynKi = dynKp * 0.1;
 		
@@ -932,8 +932,6 @@ static void processIMU(void *pvParameters)
 	float YawInit = 0.0;
 	int16_t AttitudeInit = 0;
 	
-	float GyrxzAmp	= 0.0;
-	
 	// initialize prevgyrotime
 	prevgyroTime = esp_timer_get_time()/1000.0;
 	PrevgyroRPS.x = 0.0;
@@ -1069,6 +1067,8 @@ static void processIMU(void *pvParameters)
 				gravISUNEDBODY.y = accelISUNEDBODY.y;
 				gravISUNEDBODY.z = accelISUNEDBODY.z;
 			}
+			// Gyro x and z amplitude used to adjust IMU dynamic Kp/Ki and Baro Inertial filter
+			GyrxzAmplitude = abs(gyroCorr.x) + abs(gyroCorr.z / 3.0);			
 
 			// Update quaternions
 			// gyroISUNEDBODY corresponds to raw gyro and BiasQuatGx,y,z to the gyros bias
@@ -1123,12 +1123,13 @@ static void processIMU(void *pvParameters)
 			WiPrimSF = WiPrimSF + alphaKinAccS * deltaWiPrimS + WiPrimPrimS * dtGyr;
 
 			// Compute baro interial acceleration in body frame
-			// adjust bi filter in function of gyro x and z amplitude
-			GyrxzAmp = abs(gyroCorr.x) + abs(gyroCorr.z / 3.0);
-			if ( GyrxzAmp < 0.4 ) {
-				DynPeriodVelbi = 0.99 * DynPeriodVelbi + 0.01 * ( PeriodVelbi / ( 1 + GyrxzAmp / 0.04 ) );
+			// Compute dynamic period for baro inertiel filter
+			#define PeriodVelbiGain 5
+			#define GyrAmplitudeLimit 0.4
+			if ( GyrxzAmplitude < GyrAmplitudeLimit ) {
+				DynPeriodVelbi = 0.9 * DynPeriodVelbi + 0.1 * PeriodVelbi / ( 1 + GyrxzAmplitude / (GyrAmplitudeLimit/PeriodVelbiGain) );
 			} else {
-				DynPeriodVelbi = 0.99 * DynPeriodVelbi + 0.001 * PeriodVelbi;
+				DynPeriodVelbi = 0.9 * DynPeriodVelbi + 0.1 * PeriodVelbi / PeriodVelbiGain;
 			}
 			fcVelbi1 = ( DynPeriodVelbi / ( DynPeriodVelbi + dtGyr ));
 			fcVelbi2 = ( 1.0 - fcVelbi1 );
