@@ -194,7 +194,6 @@ float deltaAccelModule = 0.0;	// accel module alfa/beta filter for gyro stabilit
 float AccelModulePrimFilt = 0.0;
 float AccelModuleFilt = 0.0;
 float AccelModulePrimLevel = 0.0;
-float GyrxzAmplitude = 0.0;
 float dynKp = 0.1;
 float DynPeriodVelbi = 4.0;
 
@@ -698,6 +697,7 @@ float dynKi = Kp/10;
 float deltaGx;
 float deltaGy;
 float deltaGz;
+float GyrxzAmplitudeKdyn = 0.0;
 
 	// Estimate direction of gravity from IMU quaternion
 	halfvx = q1 * q3 - q0 * q2;
@@ -768,9 +768,11 @@ float deltaGz;
 		// gyro should be corrected using error between vertical from IMU quaternion and observered vertical from accels.
 		// gyro correction is performed with PI feedback using Kp and Ki (proportional & integral) coefficients.
 		// these coefficients are adjusted dynamicaly (dynKp and dynKi) in function of gx and gz 
-		#define GyrLimit 0.3		
-		if  ( GyrxzAmplitude < GyrLimit ) {
-			dynKp = 0.5 * dynKp + 0.5 * Kp * pow(10, GyrxzAmplitude / GyrLimit);
+
+		#define gxzlimit 0.3 // 0.3 rad/s threshold
+		GyrxzAmplitudeKdyn = abs(gyroCorr.x / 3.0) + abs(gyroCorr.z);
+		if  ( GyrxzAmplitudeKdyn < gxzlimit ) {
+			dynKp = 0.5 * dynKp + 0.5 * Kp * pow(10, GyrxzAmplitudeKdyn / gxzlimit);
 		} else {
 			dynKp = 0.5 * dynKp + 0.5 * 10 * Kp;
 		}
@@ -911,6 +913,7 @@ static void processIMU(void *pvParameters)
 	float accelAvgy = 0.0;	
 	float accelAvgz = 0.0;	
 	int16_t gyromodulestable = 0;
+	float GyrxzAmplitudeBIdyn = 0.0;	
 
 	GravIMU.x = 0.0;
 	GravIMU.y = 0.0;
@@ -1067,8 +1070,6 @@ static void processIMU(void *pvParameters)
 				gravISUNEDBODY.y = accelISUNEDBODY.y;
 				gravISUNEDBODY.z = accelISUNEDBODY.z;
 			}
-			// Gyro x and z amplitude used to adjust IMU dynamic Kp/Ki and Baro Inertial filter
-			GyrxzAmplitude = abs(gyroCorr.x) + abs(gyroCorr.z / 3.0);			
 
 			// Update quaternions
 			// gyroISUNEDBODY corresponds to raw gyro and BiasQuatGx,y,z to the gyros bias
@@ -1126,8 +1127,10 @@ static void processIMU(void *pvParameters)
 			// Compute dynamic period for baro inertiel filter
 			#define PeriodVelbiGain 5
 			#define GyrAmplitudeLimit 0.4
-			if ( GyrxzAmplitude < GyrAmplitudeLimit ) {
-				DynPeriodVelbi = 0.9 * DynPeriodVelbi + 0.1 * PeriodVelbi / ( 1 + GyrxzAmplitude / (GyrAmplitudeLimit/PeriodVelbiGain) );
+			// Gyro x and z amplitude used to adjust Baro Inertial filter
+			GyrxzAmplitudeBIdyn = abs(gyroCorr.x) + abs(gyroCorr.z / 3.0);			
+			if ( GyrxzAmplitudeBIdyn < GyrAmplitudeLimit ) {
+				DynPeriodVelbi = 0.9 * DynPeriodVelbi + 0.1 * PeriodVelbi / ( 1 + GyrxzAmplitudeBIdyn / (GyrAmplitudeLimit/PeriodVelbiGain) );
 			} else {
 				DynPeriodVelbi = 0.9 * DynPeriodVelbi + 0.1 * PeriodVelbi / PeriodVelbiGain;
 			}
