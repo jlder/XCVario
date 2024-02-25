@@ -335,6 +335,19 @@ bool IMUstream = false; // IMU FT stream
 bool SENstream = false; // Sensors FT stream
 bool CALstream = false; // accel calibration stream
 bool TSTstream = false; // Test stream
+
+float RTKtime;
+float RTKEvel;
+float RTKNvel;
+float RTKUvel;
+char RTKmode;
+float RTKage;
+float RTKratio;
+float RTKEproj;
+float RTKNproj;
+float RTKUproj;
+
+
 bool LABtest = false; // LAB switch to limit to one ground bias evaluation
 float localGravity = 9.807; // local gravity used during accel calibration. Value is entered using BT $CAL command
 uint16_t BIAS_Init = 0; // Bias initialization status (0= no init, n = nth bias calculation

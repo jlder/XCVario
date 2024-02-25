@@ -127,5 +127,17 @@ extern float alphaEnergy;
 extern float betaEnergy;
 extern float PeriodVelbi;
 
+extern float RTKtime;
+extern float RTKEvel;
+extern float RTKNvel;
+extern float RTKUvel;
+extern char RTKmode;
+extern float RTKage;
+extern float RTKratio;
+extern float RTKEproj;
+extern float RTKNproj;
+extern float RTKUproj;
+extern float RTKheading;
+
 
 #endif

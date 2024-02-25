@@ -35,6 +35,12 @@ bool    Protocols::_can_send_error = false;
 
 char strx[200];
 
+// dummy variables for PSTI decoding
+float RTKdummyf;
+char RTKdummyc;
+int RTKdummyd;
+int RTKcs;
+
 Protocols::Protocols(S2F * s2f) {
 	_s2f = s2f;
 }
@@ -550,7 +556,23 @@ void Protocols::parseNMEA( const char *str ){
 	else if( !strncmp( str+3, "RMZ,", 3 )) {
 		Flarm::parsePGRMZ( str );
 		ageBincom();
+	}else if( !strncmp( str, "$PSTI,030", 9 ) ) {
+		// $PSTI,030– Recommended Minimum 3D GNSS Data
+		// Time, date, position, course and speed data provided by a GNSS navigation receiver.
+		//Structure:
+		//$PSTI,030,hhmmss.sss,A,dddmm.mmmmmmm,a,dddmm.mmmmmmm,a,x.x,x.x,x.x,x.x,ddmmyy,a.x.x,x.x*hh<CR><LF>
+		//ex: $PSTI,030,033010.000,A,2447.0895508,N,12100.5234656,E,94.615,0.00,-0.01,0.04,111219,R,0.999,3.724*1A<CR><LF>
+		sscanf( str,"$PSTI,030,%f,%c,%f,%c,%f,%c,%f,%f,%f,%f,%d,%c,%f,%f*%x",&RTKtime,&RTKdummyc,&RTKdummyf,&RTKdummyc,&RTKdummyf,&RTKdummyc,&RTKdummyf,&RTKEvel,&RTKNvel,&RTKUvel,
+				&RTKdummyd,&RTKmode,&RTKage,&RTKratio,&RTKcs);
+	}else if( !strncmp( str, "$PSTI,032", 9 ) ) {
+		// STI,032– RTK Baseline Data
+		// Time, date, status and baseline related data provided by a GNSS navigation receiver.
+		// Structure:
+		// $PSTI,032,hhmmss.sss,ddmmyy,A,R,x.xxx,x.xxx,x.xxx,x.xxx,x.xx,,,,,*hh<CR><L
+		//ex: $PSTI,032,033010.000,111219,A,R,-4.968,-10.817,-1.849,12.046,204.67,,,,,*39
+		sscanf( str,"$PSTI,032,%f,%f,%c,%c,%f,%f,%f,%f,%f,,,,*%x",&RTKdummyf,&RTKdummyf,&RTKdummyc,&RTKdummyc,&RTKEproj,&RTKNproj,&RTKUproj,&RTKheading,&RTKdummyf,&RTKcs);
 	}
+	
 	else if( !strncmp( str, "$FT", 3 ) ) {
 		if (str[3] == '0') {
 			IMUstream = false; // no FT stream
