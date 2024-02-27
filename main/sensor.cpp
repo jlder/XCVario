@@ -337,16 +337,17 @@ bool CALstream = false; // accel calibration stream
 bool TSTstream = false; // Test stream
 
 float RTKtime;
-float RTKEvel;
-float RTKNvel;
-float RTKUvel;
-char RTKmode;
-float RTKage;
-float RTKratio;
-float RTKEproj;
-float RTKNproj;
-float RTKUproj;
-float RTKheading;
+
+float RTKEvel = 0.0;
+float RTKNvel = 0.0;
+float RTKUvel = 0.0;
+char RTKmode ='N';
+float RTKage = 9.999;
+float RTKratio = 0.0;
+float RTKEproj = 0.0;
+float RTKNproj= 0.0;
+float RTKUproj = 0.0;
+float RTKheading = 0.0;
 
 
 bool LABtest = false; // LAB switch to limit to one ground bias evaluation
@@ -2180,7 +2181,6 @@ void readSensors(void *pvParameters){
 			RTKEvel in hundredth of m/s;
 			RTKDvel in hundredth of m/s;	
 			RTKmode 1 char;
-			char RTKmode;
 			RTKage in ms;
 			RTKratio in tenth of unit;
 			RTKNproj in thousandths of meter;
@@ -2191,7 +2191,7 @@ void readSensors(void *pvParameters){
 			xSemaphoreTake( BTMutex, 3/portTICK_PERIOD_MS );
 			if ( !(count % 50) ) { 
 				// send $S1 and $S2 every 50 cycles = 5 seconds
-				sprintf(str,"$S1,%lld,%i,%i,%i,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$S3,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%c,%i,%i,%i,%i,%i\r\n$S2,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",
+				sprintf(str,"$S1,%lld,%i,%i,%i,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$S3,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%c,%i,%i,%i,%i,%i,%i\r\n$S2,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",
 				// $S1 stream
 					statTime, (int32_t)(statP*100.0),(int32_t)(teP*100.0), (int16_t)(dynP*10), 
 					(int64_t)(chosenGnss->time*1000.0), (int16_t)(chosenGnss->speed.x*100), (int16_t)(chosenGnss->speed.y*100), (int16_t)(chosenGnss->speed.z*100), (int16_t)(GNSSRouteraw*10),
@@ -2212,8 +2212,8 @@ void readSensors(void *pvParameters){
 					(int32_t)(UiPrimPrimS*100), (int32_t)(ViPrimPrimS*100),(int32_t)(WiPrimPrimS*100),	
 					(int32_t)(UbiPrim*100), (int32_t)(VbiPrim*100),(int32_t)(WbiPrim*100),
 					(int32_t)(BiasAoB*1000),
-					(int32_t)(RTKtime*1000),(int32_t)(RTKNvel*100),(int32_t)(RTKEvel*100),(int32_t)(-RTKUvel*100),RTKmode,(int32_t)(RTKage*1000), (int32_t)(RTKratio*10),
-					(int32_t)(RTKNproj*1000),(int32_t)(RTKEproj*1000),(int32_t)(-RTKUproj*1000),
+					(int32_t)(RTKtime*1000),(int32_t)(RTKNvel*100),(int32_t)(RTKEvel*100),(int32_t)(-RTKUvel*100),(char)RTKmode,(int32_t)(RTKage*1000), (int32_t)(RTKratio*10),
+					(int32_t)(RTKNproj*1000),(int32_t)(RTKEproj*1000),(int32_t)(-RTKUproj*1000),(int32_t)(RTKheading*10),
 					// $S2 stream
 					(int16_t)(OATemp*10.0), (int16_t)(OAT.get()*10.0), (int16_t)(MPUtempcel*10.0), chosenGnss->fix, chosenGnss->numSV,
 					(int32_t)(GroundGyroBias.x*100000.0), (int32_t)(GroundGyroBias.y*100000.0), (int32_t)(GroundGyroBias.z*100000.0),				
@@ -2223,7 +2223,7 @@ void readSensors(void *pvParameters){
 				Router::sendXCV(str);		
 			} else {
 				// send $S1 only every 100ms
-				sprintf(str,"$S1,%lld,%i,%i,%i,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$S3,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%c,%i,%i,%i,%i,%i\r\n",
+				sprintf(str,"$S1,%lld,%i,%i,%i,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$S3,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%c,%i,%i,%i,%i,%i,%i\r\n",
 					statTime, (int32_t)(statP*100.0),(int32_t)(teP*100.0), (int16_t)(dynP*10), 
 					(int64_t)(chosenGnss->time*1000.0), (int16_t)(chosenGnss->speed.x*100), (int16_t)(chosenGnss->speed.y*100), (int16_t)(chosenGnss->speed.z*100), (int16_t)(GNSSRouteraw*10),
 					(int32_t)(Pitch*1000.0), (int32_t)(Roll*1000.0), (int32_t)(Yaw*1000.0),
@@ -2243,8 +2243,8 @@ void readSensors(void *pvParameters){
 					(int32_t)(UiPrimPrimS*100), (int32_t)(ViPrimPrimS*100),(int32_t)(WiPrimPrimS*100),	
 					(int32_t)(UbiPrim*100), (int32_t)(VbiPrim*100),(int32_t)(WbiPrim*100),
 					(int32_t)(BiasAoB*1000),
-					(int32_t)(RTKtime*1000),(int32_t)(RTKNvel*100),(int32_t)(RTKEvel*100),(int32_t)(-RTKUvel*100),RTKmode,(int32_t)(RTKage*1000), (int32_t)(RTKratio*10),
-					(int32_t)(RTKNproj*1000),(int32_t)(RTKEproj*1000),(int32_t)(-RTKUproj*1000)					
+					(int32_t)(RTKtime*1000),(int32_t)(RTKNvel*100),(int32_t)(RTKEvel*100),(int32_t)(-RTKUvel*100),(char)RTKmode,(int32_t)(RTKage*1000), (int32_t)(RTKratio*10),
+					(int32_t)(RTKNproj*1000),(int32_t)(RTKEproj*1000),(int32_t)(-RTKUproj*1000),(int32_t)(RTKheading*10)				
 				);				
 				Router::sendXCV(str);
 			}

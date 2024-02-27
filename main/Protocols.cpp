@@ -570,7 +570,7 @@ void Protocols::parseNMEA( const char *str ){
 		// Structure:
 		// $PSTI,032,hhmmss.sss,ddmmyy,A,R,x.xxx,x.xxx,x.xxx,x.xxx,x.xx,,,,,*hh<CR><L
 		//ex: $PSTI,032,033010.000,111219,A,R,-4.968,-10.817,-1.849,12.046,204.67,,,,,*39
-		sscanf( str,"$PSTI,032,%f,%f,%c,%c,%f,%f,%f,%f,%f,,,,*%x",&RTKdummyf,&RTKdummyf,&RTKdummyc,&RTKdummyc,&RTKEproj,&RTKNproj,&RTKUproj,&RTKheading,&RTKdummyf,&RTKcs);
+		sscanf( str,"$PSTI,032,%f,%f,%c,%c,%f,%f,%f,%f,%f,%f,,,,*%x",&RTKdummyf,&RTKdummyf,&RTKdummyc,&RTKdummyc,&RTKEproj,&RTKNproj,&RTKUproj,&RTKdummyf,&RTKheading,&RTKdummyf,&RTKcs);
 	}
 	
 	else if( !strncmp( str, "$FT", 3 ) ) {
