@@ -73,7 +73,8 @@ typedef struct _nav_pvt_payload { // offset in UBX frame:
 class UbloxGnssDecoder {
 public:
 	static void processNavPvtFrame( char *ubx_frame, int port );
-	static const gnss_data_t *getGNSSData( int port ) { return &GNSS_DATA[port]; };
+	// static const gnss_data_t *getGNSSData( int port ) { return &GNSS_DATA[port]; }
+	static gnss_data_t *getGNSSData( int port ) { return &GNSS_DATA[port]; };
 
 private:
 	static gnss_data_t GNSS_DATA[3];   // port maybe 0,1,2  S1 = 1, S2 = 2,  USB = 0

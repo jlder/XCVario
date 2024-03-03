@@ -168,17 +168,17 @@ mpud::float_axes_t gyroDPS_Prev;
 //!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 #ifdef LS6
 	float CLA = 5.75;
-	float KAoB = 3.5;
+	float KAoB = -3.5; // MOD#1 Latest signs
 	float KGx = 4.1;
 #endif
 #ifdef TAURUS
 	float CLA = 5.67;
-	float KAoB = 3.0;
+	float KAoB = -3.0; // MOD#1 Latest signs
 	float KGx = 4.0;
 #endif
 #ifdef VENTUS3
 	float CLA = 5.98;
-	float KAoB = 2.97;
+	float KAoB = -2.97; // MOD#1 Latest signs
 	float KGx = 12.0;
 #endif
 
@@ -336,8 +336,8 @@ bool SENstream = false; // Sensors FT stream
 bool CALstream = false; // accel calibration stream
 bool TSTstream = false; // Test stream
 
+// MOD#2 add RTK
 float RTKtime;
-
 float RTKEvel = 0.0;
 float RTKNvel = 0.0;
 float RTKUvel = 0.0;
@@ -452,6 +452,50 @@ AdaptUGC *egl = 0;
 extern UbloxGnssDecoder s1UbloxGnssDecoder;
 extern UbloxGnssDecoder s2UbloxGnssDecoder;
 
+// MOD#3 alpha beta class
+// alpha beta filter class
+class AlphaBeta {
+	public:
+		void Update(int N, float dt, float RawData);
+		float Prim(void);
+		float Filt(void);
+
+	private:
+		float delta;
+		float prim;
+		float filt;
+		float alpha;
+		float beta;
+		bool firstpass = true;
+		int previousN = 0;
+};
+
+float AlphaBeta::Prim(void) {
+	return prim;
+}
+float AlphaBeta::Filt(void) {
+	return filt;
+}		
+void AlphaBeta::Update(int N, float dt, float RawData) {
+	if (firstpass || (N == 0) ) {
+		delta = 0.0;
+		prim = 0.0;
+		filt = RawData;
+		firstpass = false;
+	} else {
+		if ( N != previousN ) {
+			alpha =  (2.0 * (2.0 * N - 1.0) / N / (N + 1.0));
+			beta = (6.0 / N / (N + 1.0));
+		}
+		delta = RawData - filt;
+		prim = prim + beta * delta / dt;
+		filt = filt + alpha * delta + prim * dt;
+	}
+}
+// declare alpha beta filters classes for AHRS roll and pitch
+AlphaBeta RollAHRS, PitchAHRS;
+// declare alpha beta filters classes for GNSS vector coordinates
+AlphaBeta GnssVx, GnssVy, GnssVz;
 
 #define GYRO_FS (mpud::GYRO_FS_250DPS)
 
@@ -713,6 +757,9 @@ float deltaGx;
 float deltaGy;
 float deltaGz;
 float GyrxzAmplitudeKdyn = 0.0;
+AlphaBeta GyroBiasx, GyroBiasy, GyroBiasz; // MOD#4 gyro bias
+float GnssTrack;// MOD#4 gyro bias
+float PseudoHeadingPrim;// MOD#4 gyro bias
 
 	// Estimate direction of gravity from IMU quaternion
 	halfvx = q1 * q3 - q0 * q2;
@@ -720,51 +767,27 @@ float GyrxzAmplitudeKdyn = 0.0;
 	halfvz = q0 * q0 - 0.5 + q3 * q3;
 
 	#ifdef COMPUTEBIAS
-	// When wing are ~ leveled and GNSS route variation ~0, Gx, Gy and Gz biases should be the long term variation of Gx, Gy and Gz
-	// test for wing leveled is using asymetrical filter with fast rise and slow decay
-	#define fcBankDecay 1.0 // 1Hz low pass to filter
-	#define fcBankDecay1 ( fcBankDecay /( fcBankDecay + PERIOD40HZ ))
-	#define fcBankDecay2 ( 1.0 - fcBankDecay1 )
-	#define fcBankRise 0.25 // 4Hz low pass to filter
-	#define fcBankRise1 ( fcBankRise /( fcBankRise + PERIOD40HZ ))
-	#define fcBankRise2 ( 1.0 - fcBankRise1 )
-	#define WingLevel 0.04 // max lateral gravity acceleration (normalized acceleration) to consider wings leveled
-	#define RoutePrimLevel 0.02 // 0.02 rad/s ~ 1°/s
-	#define GMaxBias 0.010 // 10 mrad/s
-	if ( BankFilt < abs(halfvy) ) {
-		BankFilt = fcBankRise1 * BankFilt + fcBankRise2 * abs(halfvy);	// low pass filter on rise to reduce noise		
-	} else {
-		BankFilt = fcBankDecay1 * BankFilt + fcBankDecay2 * abs(halfvy);	// low pass filter on decay to reduce noise
-	}
-	if (  (TAS > 15.0) && (BankFilt < WingLevel) && (abs(GNSSRoutePrim) < RoutePrimLevel) ) {
-		#define NGBias 10000
-		#define alphaBiasG (2.0 * (2.0 * NGBias - 1.0) / NGBias / (NGBias + 1.0))
-		#define betaBiasG (6.0 / NGBias / (NGBias + 1.0) )
-		deltaGx = gxraw - GxF;
-		GxPrim = GxPrim + betaBiasG * deltaGx / dt ;
-		GxF = GxF + alphaBiasG  * deltaGx + GxPrim * dt;
-		BiasGx = BiasGx +  alphaBiasG  * deltaGx + GxPrim * dt;
-		Bias_Gx = -BiasGx ;
-		deltaGy= gyraw - GyF;
-		GyPrim = GyPrim + betaBiasG * deltaGy / dt ;
-		GyF = GyF + alphaBiasG  * deltaGy + GyPrim * dt;
-		BiasGy = BiasGy +  alphaBiasG  * deltaGy + GyPrim * dt;
-		Bias_Gy = -BiasGy ;
-		deltaGz = gzraw - GzF;
-		GzPrim = GzPrim + betaBiasG * deltaGz / dt ;
-		GzF = GzF + alphaBiasG  * deltaGz + GzPrim * dt;
-		BiasGz = BiasGz +  alphaBiasG * deltaGz + GzPrim * dt;
-		Bias_Gz = -BiasGz ;		
-		if ( Bias_Gz > GMaxBias ) Bias_Gz = GMaxBias ;
-		if ( Bias_Gz < -GMaxBias ) Bias_Gz = -GMaxBias;
-		if ( Bias_Gx > GMaxBias ) Bias_Gx = GMaxBias ;
-		if ( Bias_Gx < -GMaxBias ) Bias_Gx = -GMaxBias;	
-		if ( Bias_Gy > GMaxBias ) Bias_Gy = GMaxBias ;
-		if ( Bias_Gy < -GMaxBias ) Bias_Gy = -GMaxBias;		
-	} else {
-		GxF = gxraw;
-		GyF = gyraw;
-		GzF = gzraw;
+	// MOD#4 gyro bias
+	// When TAS below 15 m/s and roll and pitch are below respective thresholds, 
+	// x and y gyros biases are computed by long term average of the gyro values minus corresponding axis attitude variation
+	// z gyro bias is computed by long term average of gyro value minus heading variation estimation
+	#define RollLimit 0.175 // max lateral gravity acceleration (normalized acceleration) for 10° roll
+	#define PitchLimit 0.175 // max longitudinal gravity acceleration (normalized acceleration) for 10° pitch
+	#define GMaxBias 0.005 // limit biais correction to 5 mrad/s
+	#define NGyrBias 3000 //  very long term average ~ 300 seconds
+	if ( TAS > 15.0 && RollLimit < abs(halfvy) && PitchLimit < abs(halfvx) ) {
+		// compute Gx - d(roll)/dt and Gy - d(pitch)/dt long term average.
+		GyroBiasx.Update( NGyrBias, dt, gxraw - RollAHRS.Prim() );
+		GyroBiasy.Update( NGyrBias, dt, gyraw - PitchAHRS.Prim() );		
+		// compute pseudo heading from GNSS
+		GnssTrack = atan2( GnssVx.Filt(), GnssVy.Filt() );
+		PseudoHeadingPrim = ( GnssVy.Prim() * cos(GnssTrack) - GnssVx.Prim() * sin(GnssTrack) ) / TAS;
+		// compute Gz - pseudo heading variation long term average.		
+		GyroBiasz.Update( NGyrBias, dt, gzraw - PseudoHeadingPrim );		
+		// limit bias estimation	
+		if ( abs(GyroBiasx.Filt()) > GMaxBias ) Bias_Gx = copysign( GMaxBias, GyroBiasx.Filt()) ;
+		if ( abs(GyroBiasy.Filt()) > GMaxBias ) Bias_Gy = copysign( GMaxBias, GyroBiasy.Filt()) ;		
+		if ( abs(GyroBiasz.Filt()) > GMaxBias ) Bias_Gz = copysign( GMaxBias, GyroBiasz.Filt()) ;		
 	}
 	#endif
 
@@ -968,14 +991,16 @@ static void processIMU(void *pvParameters)
 
 		TickType_t xLastWakeTime_mpu =xTaskGetTickCount();
 		
-		// get gyro data
+		// get raw gyro data
 		if( MPU.rotation(&gyroRaw) == ESP_OK ){ // read raw gyro data
+			// compute precise dt between current and previous samples
 			prevgyroTime = gyroTime;
 			gyroTime = esp_timer_get_time()/1000.0; // record time of gyro measurement in milli second
 			dtGyr = (gyroTime - prevgyroTime) / 1000.0; // period between last two valid samples in second
+			// use theoritical dt @ 40Hz in case computed dt is zeroBias
 			if (dtGyr == 0) dtGyr = PERIOD40HZ;
 			gyroDPS = mpud::gyroDegPerSec(gyroRaw, GYRO_FS); // For compatibility with Eckhard code only. Convert raw gyro to Gyro_FS full scale in degre per second 
-			gyroRPS = mpud::gyroRadPerSec(gyroRaw, GYRO_FS); // convert raw gyro to Gyro_FS full scale
+			gyroRPS = mpud::gyroRadPerSec(gyroRaw, GYRO_FS); // convert raw gyro to Gyro_FS full scale in radians per second
 			// eliminate gyro variations above PI rd/s
 			//if ( abs(gyroRPS.x-PrevgyroRPS.x) < M_PI && abs(gyroRPS.y-PrevgyroRPS.y) < M_PI && abs(gyroRPS.z-PrevgyroRPS.z) < M_PI ) { // discard zickets
 			if ( abs(gyroRPS.x-PrevgyroRPS.x) < MaxGyroVariation && abs(gyroRPS.y-PrevgyroRPS.y) < MaxGyroVariation && abs(gyroRPS.z-PrevgyroRPS.z) < MaxGyroVariation ) { // discard zickets
@@ -1050,35 +1075,34 @@ static void processIMU(void *pvParameters)
 			}
 		}
 		
+		// attitude initialization when XCVario starts during first 10 iterations 
 		if ( AttitudeInit < 10 ) { // initialize quaternions at xcvario start
-			if ( AttitudeInit == 0 ) { // initialize roll, pitch and yaw 
+			if ( AttitudeInit == 0 ) { // initialize roll, pitch and yaw
+				// first iteration initialize attitude from accels
 				RollInit = atan2(-accelISUNEDBODY.y , -accelISUNEDBODY.z);
 				PitchInit = asin( accelISUNEDBODY.x / sqrt(accelISUNEDBODY.x*accelISUNEDBODY.x+accelISUNEDBODY.y * accelISUNEDBODY.y + accelISUNEDBODY.z * accelISUNEDBODY.z));
 				YawInit   = 0.0;
 			} else { // filter roll, pitch and yaw over 10 samples
+				// following iterations average attitude from accels
 				RollInit = 0.75 * RollInit + 0.25 * atan2(-accelISUNEDBODY.y , -accelISUNEDBODY.z);
 				PitchInit = 0.75 * PitchInit + 0.25 * asin( accelISUNEDBODY.x / sqrt(accelISUNEDBODY.x*accelISUNEDBODY.x+accelISUNEDBODY.y * accelISUNEDBODY.y + accelISUNEDBODY.z * accelISUNEDBODY.z));
 			}
-			// compute quaternion corresponding to initial attitude
+			// compute quaternion corresponding to initial averaged accels attitude
 			q0=((cos(RollInit/2.0)*cos(PitchInit/2.0)*cos(YawInit/2.0)+sin(RollInit/2.0)*sin(PitchInit/2.0)*sin(YawInit/2.0)));
 			q1=((sin(RollInit/2.0)*cos(PitchInit/2.0)*cos(YawInit/2.0)-cos(RollInit/2.0)*sin(PitchInit/2.0)*sin(YawInit/2.0)));
 			q2=((cos(RollInit/2.0)*sin(PitchInit/2.0)*cos(YawInit/2.0)+sin(RollInit/2.0)*cos(PitchInit/2.0)*sin(YawInit/2.0)));
 			q3=((cos(RollInit/2.0)*cos(PitchInit/2.0)*sin(YawInit/2.0)-sin(RollInit/2.0)*sin(PitchInit/2.0)*cos(YawInit/2.0)));
 			AttitudeInit++;
-		} else { // after xcvario is started and attitude initialized
+		} else { // after xcvario is started and attitude initialized perform normal calculations
 			// Update IMU
 			// only consider centrifugal forces if TAS > 15 m/s
 			if ( TAS > 15.0 ) {
 				// estimate gravity in body frame taking into account centrifugal corrections
 				xSemaphoreTake( dataMutex, 2/portTICK_PERIOD_MS ); // prevent data conflicts for 2ms max.
-				gravISUNEDBODY.x = accelISUNEDBODY.x - gyroCorr.y * TASbi * AoA + gyroCorr.z * TASbi * (-AoB) - UbiPrim;
+				gravISUNEDBODY.x = accelISUNEDBODY.x - gyroCorr.y * TASbi * AoA + gyroCorr.z * TASbi * (+AoB) - UbiPrim; // MOD#1 Latest signs 
 				gravISUNEDBODY.y = accelISUNEDBODY.y - gyroCorr.z * TASbi + gyroCorr.x * TASbi * AoA;
-				gravISUNEDBODY.z = accelISUNEDBODY.z + gyroCorr.y * TASbi - gyroCorr.x * TASbi * (-AoB);
+				gravISUNEDBODY.z = accelISUNEDBODY.z + gyroCorr.y * TASbi - gyroCorr.x * TASbi * (+AoB); // MOD#1 Latest signs 
 				xSemaphoreGive( dataMutex );
-				// gravISUNEDBODY.x = accelISUNEDBODY.x - gyroCorr.y * Wbi + gyroCorr.z * Vbi;
-				// gravISUNEDBODY.y = accelISUNEDBODY.y - gyroCorr.z * Ubi + gyroCorr.x * Wbi;
-				// gravISUNEDBODY.z = accelISUNEDBODY.z + gyroCorr.y * Ubi - gyroCorr.x * Wbi;
-				
 			} else {
 				// estimate gravity in body frame using accels only
 				gravISUNEDBODY.x = accelISUNEDBODY.x;
@@ -1103,6 +1127,11 @@ static void processIMU(void *pvParameters)
 			if (Yaw < 0.0 ) Yaw = Yaw + 2.0 * M_PI;
 			if (Yaw > 2.0 * M_PI) Yaw = Yaw - 2.0 * M_PI;
 			
+			// MOD#4 gyro bias
+			// compute roll and pitch alpha beta filter
+			RollAHRS.Update( 6, dtGyr, Roll );
+			PitchAHRS.Update( 6, dtGyr, Pitch );
+			
 			// compute sin and cos for Roll and Pitch from IMU quaternion since they are used in multiple calculations
 			cosRoll = cos( Roll );
 			sinRoll = sin( Roll );
@@ -1116,9 +1145,10 @@ static void processIMU(void *pvParameters)
 			GravIMU.z = -GRAVITY * (q0 * q0 - q1 * q1 - q2 * q2 + q3 * q3);
 			// compute kinetic accelerations using accelerations, corrected with gravity and centrifugal accels
 			xSemaphoreTake( dataMutex, 2/portTICK_PERIOD_MS ); // prevent data conflicts for 2ms max.
-			UiPrim = accelISUNEDBODY.x - GravIMU.x - gyroCorr.y * TASbi * AoA + gyroCorr.z * TASbi * (-AoB);
+			
+			UiPrim = accelISUNEDBODY.x - GravIMU.x - gyroCorr.y * TASbi * AoA + gyroCorr.z * TASbi * (+AoB); // MOD#1 Latest signs 
 			ViPrim = accelISUNEDBODY.y - GravIMU.y - gyroCorr.z * TASbi + gyroCorr.x * TASbi * AoA;			
-			WiPrim = accelISUNEDBODY.z - GravIMU.z + gyroCorr.y * TASbi - gyroCorr.x * TASbi * (-AoB);
+			WiPrim = accelISUNEDBODY.z - GravIMU.z + gyroCorr.y * TASbi - gyroCorr.x * TASbi * (+AoB); // MOD#1 Latest signs
 			xSemaphoreGive( dataMutex );			
 			// UiPrim = accelISUNEDBODY.x - GravIMU.x - gyroCorr.y * Wbi + gyroCorr.z * Vbi;
 			// ViPrim = accelISUNEDBODY.y - GravIMU.y - gyroCorr.z * Ubi + gyroCorr.x * Wbi;			
@@ -1140,7 +1170,7 @@ static void processIMU(void *pvParameters)
 
 			// Compute baro interial acceleration in body frame
 			// Compute dynamic period for baro inertiel filter
-			#define PeriodVelbiGain 5
+			#define PeriodVelbiGain 2
 			#define GyrAmplitudeLimit 0.4
 			// Gyro x and z amplitude used to adjust Baro Inertial filter
 			GyrxzAmplitudeBIdyn = abs(gyroCorr.x) + abs(gyroCorr.z / 3.0);			
@@ -1592,6 +1622,9 @@ void readSensors(void *pvParameters){
 		}
 		
 		// Estimate OAT using standard temperature and difference between standard temperature and temperature of the day
+		// Because of EMI risks on the OAT sensor, which can create large OAT variations and therefore altitude and TAS variations, the idea is to
+		// track OAT using standard temperature and a bias which is the difference between standard temperature and OAT
+		// This bias is filtered to reduce effect of short term OAT spikes and is added to standard temperature to obtain a filtered temperature of teh day.
 
 		if ( !HasISATempBias ) { // initialize  temp bias first time
 			ISATemp = 15.0 - ( (altitude.get()/100) * 0.65 );
@@ -1616,12 +1649,33 @@ void readSensors(void *pvParameters){
 		
 		// get Ublox GNSS data
 		// when GNSS receiver is connected to S1 interface
-		const gnss_data_t *gnss1 = s1UbloxGnssDecoder.getGNSSData(1);
+		gnss_data_t *gnss1 = s1UbloxGnssDecoder.getGNSSData(1);
 		// when GNSS receiver is connected to S2 interface
-		const gnss_data_t *gnss2 = s2UbloxGnssDecoder.getGNSSData(2);
+		gnss_data_t *gnss2 = s2UbloxGnssDecoder.getGNSSData(2);
 		// select gnss with better fix
-		const gnss_data_t *chosenGnss = (gnss2->fix >= gnss1->fix) ? gnss2 : gnss1;
+		gnss_data_t *chosenGnss = (gnss2->fix >= gnss1->fix) ? gnss2 : gnss1;
 		GNSSRouteraw = chosenGnss->route;
+		
+		// MOD#2 add RTK
+		if ( RTKmode != 'N' ) {
+			if (RTKmode == 'A' ) chosenGnss->fix = 3; // GNSS 3D
+			if (RTKmode == 'D' ) chosenGnss->fix = 4; // GNSS 3D diff
+			if (RTKmode == 'F' ) chosenGnss->fix = 5; // GNSS RTK float
+			if (RTKmode == 'R' ) chosenGnss->fix = 6; // GNSS RTK Real Time Kinematic
+			chosenGnss->numSV = RTKratio * 10;
+			chosenGnss->time = RTKtime;
+			chosenGnss->speed.x = RTKNvel;
+			chosenGnss->speed.y = RTKEvel;
+			chosenGnss->speed.z = -RTKUvel;
+			GNSSRouteraw = atan2(RTKNvel,RTKEvel);
+		} else {
+			chosenGnss->fix = 0;
+		}
+		// MOD#4 gyro bias
+		// update filters with filter coefficients = 5 and dt = 0.1 second
+		GnssVx.Update( 5, 0.1, chosenGnss->speed.x);
+		GnssVy.Update( 5, 0.1, chosenGnss->speed.y);		
+		GnssVx.Update( 5, 0.1, chosenGnss->speed.y);
 		
 		#ifdef COMPUTEBIAS
 		// alpha/beta filter on GNSS route to reduce noise and get route variation
@@ -1722,9 +1776,9 @@ void readSensors(void *pvParameters){
 		}			
 		// Compute trajectory pneumatic speeds components in body frame NEDBODY
 		// Vh corresponds to the trajectory horizontal speed and Vzbaro corresponds to the vertical speed in earth frame
-		Vh = TAS * cos( Pitch + cosRoll * AoA + sinRoll * AoB );
+		Vh = TAS * cos( Pitch - cosRoll * AoA - sinRoll * AoB ); // // MOD#1 Latest signs
 		// Pitch and Roll correspond to the attitude of the glider and DHeading corresponds to the heading deviation due to the Beta and Alpha.
-		DHeading =(AoB * cosRoll - AoA * sinRoll ) / ( cosPitch + AoB * sinPitch * sinRoll + AoA * sinPitch * cosRoll );
+		DHeading = -(AoB * cosRoll - AoA * sinRoll ) / ( cosPitch + AoB * sinPitch * sinRoll + AoA * sinPitch * cosRoll ); // MOD#1 Latest signs
 		cosDHeading = cos( DHeading );
 		sinDHeading = sin( DHeading );
 		// applying DCM from earth to body frame (using Pitch, Roll and DHeading Yaw angles) to Vh and Vzbaro trajectory components in earth frame to reproject speed in TE referential onto body axis. 
@@ -2147,8 +2201,8 @@ void readSensors(void *pvParameters){
 			Outside Air Temperature in tenth of °C,
 			OAT sensor temp in tenth of °C,
 			MPU temperature in tenth °C,
-			GNSS fix 0 to 5   3=3D   4= 3D diff,
-			GNSS number of satelites used,
+			GNSS fix 0 to 6   3=3D   4= 3D diff  5= RTK Float  6 = RTK integer
+			GNSS number of satelites used  or  RTK ratio * 10 
 			Ground Gyro bias x in hundredth of milli rad/s,
 			Ground Gyro bias y in hundredth of milli rad/s,
 			Ground Gyro bias z in hundredth of milli rad/s,			
@@ -2176,13 +2230,6 @@ void readSensors(void *pvParameters){
 			VbiPrim,
 			WbiPrim,
 			BiasAoB in mrad
-			RTKtime in ms;
-			RTKNvel in hundredth of m/s;
-			RTKEvel in hundredth of m/s;
-			RTKDvel in hundredth of m/s;	
-			RTKmode 1 char;
-			RTKage in ms;
-			RTKratio in tenth of unit;
 			RTKNproj in thousandths of meter;
 			RTKEproj in thousandths of meter;
 			RTKDproj in thousandths of meter;
@@ -2191,7 +2238,7 @@ void readSensors(void *pvParameters){
 			xSemaphoreTake( BTMutex, 3/portTICK_PERIOD_MS );
 			if ( !(count % 50) ) { 
 				// send $S1 and $S2 every 50 cycles = 5 seconds
-				sprintf(str,"$S1,%lld,%i,%i,%i,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$S3,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%c,%i,%i,%i,%i,%i,%i\r\n$S2,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",
+				sprintf(str,"$S1,%lld,%i,%i,%i,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$S3,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$S2,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",
 				// $S1 stream
 					statTime, (int32_t)(statP*100.0),(int32_t)(teP*100.0), (int16_t)(dynP*10), 
 					(int64_t)(chosenGnss->time*1000.0), (int16_t)(chosenGnss->speed.x*100), (int16_t)(chosenGnss->speed.y*100), (int16_t)(chosenGnss->speed.z*100), (int16_t)(GNSSRouteraw*10),
@@ -2212,7 +2259,6 @@ void readSensors(void *pvParameters){
 					(int32_t)(UiPrimPrimS*100), (int32_t)(ViPrimPrimS*100),(int32_t)(WiPrimPrimS*100),	
 					(int32_t)(UbiPrim*100), (int32_t)(VbiPrim*100),(int32_t)(WbiPrim*100),
 					(int32_t)(BiasAoB*1000),
-					(int32_t)(RTKtime*1000),(int32_t)(RTKNvel*100),(int32_t)(RTKEvel*100),(int32_t)(-RTKUvel*100),(char)RTKmode,(int32_t)(RTKage*1000), (int32_t)(RTKratio*10),
 					(int32_t)(RTKNproj*1000),(int32_t)(RTKEproj*1000),(int32_t)(-RTKUproj*1000),(int32_t)(RTKheading*10),
 					// $S2 stream
 					(int16_t)(OATemp*10.0), (int16_t)(OAT.get()*10.0), (int16_t)(MPUtempcel*10.0), chosenGnss->fix, chosenGnss->numSV,
@@ -2223,7 +2269,7 @@ void readSensors(void *pvParameters){
 				Router::sendXCV(str);		
 			} else {
 				// send $S1 only every 100ms
-				sprintf(str,"$S1,%lld,%i,%i,%i,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$S3,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%c,%i,%i,%i,%i,%i,%i\r\n",
+				sprintf(str,"$S1,%lld,%i,%i,%i,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$S3,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",
 					statTime, (int32_t)(statP*100.0),(int32_t)(teP*100.0), (int16_t)(dynP*10), 
 					(int64_t)(chosenGnss->time*1000.0), (int16_t)(chosenGnss->speed.x*100), (int16_t)(chosenGnss->speed.y*100), (int16_t)(chosenGnss->speed.z*100), (int16_t)(GNSSRouteraw*10),
 					(int32_t)(Pitch*1000.0), (int32_t)(Roll*1000.0), (int32_t)(Yaw*1000.0),
@@ -2243,7 +2289,6 @@ void readSensors(void *pvParameters){
 					(int32_t)(UiPrimPrimS*100), (int32_t)(ViPrimPrimS*100),(int32_t)(WiPrimPrimS*100),	
 					(int32_t)(UbiPrim*100), (int32_t)(VbiPrim*100),(int32_t)(WbiPrim*100),
 					(int32_t)(BiasAoB*1000),
-					(int32_t)(RTKtime*1000),(int32_t)(RTKNvel*100),(int32_t)(RTKEvel*100),(int32_t)(-RTKUvel*100),(char)RTKmode,(int32_t)(RTKage*1000), (int32_t)(RTKratio*10),
 					(int32_t)(RTKNproj*1000),(int32_t)(RTKEproj*1000),(int32_t)(-RTKUproj*1000),(int32_t)(RTKheading*10)				
 				);				
 				Router::sendXCV(str);
