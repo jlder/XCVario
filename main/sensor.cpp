@@ -336,7 +336,7 @@ bool SENstream = false; // Sensors FT stream
 bool CALstream = false; // accel calibration stream
 bool TSTstream = false; // Test stream
 
-// MOD#2 add RTK
+// MOD#2 add RTK begin
 float RTKtime;
 float RTKEvel = 0.0;
 float RTKNvel = 0.0;
@@ -348,7 +348,7 @@ float RTKEproj = 0.0;
 float RTKNproj= 0.0;
 float RTKUproj = 0.0;
 float RTKheading = 0.0;
-
+// MOD#2 add RTK end
 
 bool LABtest = false; // LAB switch to limit to one ground bias evaluation
 float localGravity = 9.807; // local gravity used during accel calibration. Value is entered using BT $CAL command
@@ -452,7 +452,7 @@ AdaptUGC *egl = 0;
 extern UbloxGnssDecoder s1UbloxGnssDecoder;
 extern UbloxGnssDecoder s2UbloxGnssDecoder;
 
-// MOD#3 alpha beta class
+// MOD#3 alpha beta class begin
 // alpha beta filter class
 class AlphaBeta {
 	public:
@@ -492,6 +492,8 @@ void AlphaBeta::Update(int N, float dt, float RawData) {
 		filt = filt + alpha * delta + prim * dt;
 	}
 }
+// MOD#3 alpha beta class end
+
 // declare alpha beta filters classes for AHRS roll and pitch
 AlphaBeta RollAHRS, PitchAHRS;
 // declare alpha beta filters classes for GNSS vector coordinates
@@ -767,7 +769,7 @@ float PseudoHeadingPrim;// MOD#4 gyro bias
 	halfvz = q0 * q0 - 0.5 + q3 * q3;
 
 	#ifdef COMPUTEBIAS
-	// MOD#4 gyro bias
+	// MOD#4 gyro bias begin
 	// When TAS below 15 m/s and roll and pitch are below respective thresholds, 
 	// x and y gyros biases are computed by long term average of the gyro values minus corresponding axis attitude variation
 	// z gyro bias is computed by long term average of gyro value minus heading variation estimation
@@ -789,6 +791,7 @@ float PseudoHeadingPrim;// MOD#4 gyro bias
 		if ( abs(GyroBiasy.Filt()) > GMaxBias ) Bias_Gy = copysign( GMaxBias, GyroBiasy.Filt()) ;		
 		if ( abs(GyroBiasz.Filt()) > GMaxBias ) Bias_Gz = copysign( GMaxBias, GyroBiasz.Filt()) ;		
 	}
+	// MOD#4 gyro bias end
 	#endif
 
 	// Update IMU quaternion
@@ -1127,10 +1130,10 @@ static void processIMU(void *pvParameters)
 			if (Yaw < 0.0 ) Yaw = Yaw + 2.0 * M_PI;
 			if (Yaw > 2.0 * M_PI) Yaw = Yaw - 2.0 * M_PI;
 			
-			// MOD#4 gyro bias
+			
 			// compute roll and pitch alpha beta filter
-			RollAHRS.Update( 6, dtGyr, Roll );
-			PitchAHRS.Update( 6, dtGyr, Pitch );
+			RollAHRS.Update( 6, dtGyr, Roll );// MOD#4 gyro bias
+			PitchAHRS.Update( 6, dtGyr, Pitch );// MOD#4 gyro bias
 			
 			// compute sin and cos for Roll and Pitch from IMU quaternion since they are used in multiple calculations
 			cosRoll = cos( Roll );
@@ -1656,7 +1659,7 @@ void readSensors(void *pvParameters){
 		gnss_data_t *chosenGnss = (gnss2->fix >= gnss1->fix) ? gnss2 : gnss1;
 		GNSSRouteraw = chosenGnss->route;
 		
-		// MOD#2 add RTK
+		// MOD#2 add RTK begin
 		if ( RTKmode != 'N' ) {
 			if (RTKmode == 'A' ) chosenGnss->fix = 3; // GNSS 3D
 			if (RTKmode == 'D' ) chosenGnss->fix = 4; // GNSS 3D diff
@@ -1671,6 +1674,8 @@ void readSensors(void *pvParameters){
 		} else {
 			chosenGnss->fix = 0;
 		}
+		// MOD#2 add RTK end
+		
 		// MOD#4 gyro bias
 		// update filters with filter coefficients = 5 and dt = 0.1 second
 		GnssVx.Update( 5, 0.1, chosenGnss->speed.x);
@@ -1776,7 +1781,7 @@ void readSensors(void *pvParameters){
 		}			
 		// Compute trajectory pneumatic speeds components in body frame NEDBODY
 		// Vh corresponds to the trajectory horizontal speed and Vzbaro corresponds to the vertical speed in earth frame
-		Vh = TAS * cos( Pitch - cosRoll * AoA - sinRoll * AoB ); // // MOD#1 Latest signs
+		Vh = TAS * cos( Pitch - cosRoll * AoA - sinRoll * AoB ); // MOD#1 Latest signs
 		// Pitch and Roll correspond to the attitude of the glider and DHeading corresponds to the heading deviation due to the Beta and Alpha.
 		DHeading = -(AoB * cosRoll - AoA * sinRoll ) / ( cosPitch + AoB * sinPitch * sinRoll + AoA * sinPitch * cosRoll ); // MOD#1 Latest signs
 		cosDHeading = cos( DHeading );
