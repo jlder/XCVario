@@ -139,5 +139,15 @@ extern float RTKNproj;
 extern float RTKUproj;
 extern float RTKheading;
 
+// MOD#5 add Allystar TAU1201 velocity
+extern float Allytime;
+extern float AllyvelN;
+extern float AllyvelE;
+extern float AllyvelU;
+extern float Allyvel3D;
+extern float Allyvel2D;
+extern int Allycs;
+// MOD#5 add Allystar TAU1201 velocity
+
 
 #endif

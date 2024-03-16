@@ -350,6 +350,16 @@ float RTKUproj = 0.0;
 float RTKheading = 0.0;
 // MOD#2 add RTK end
 
+// MOD#5 add Allystar TAU1201 velocity
+float Allytime = 0.0;
+float AllyvelN;
+float AllyvelE;
+float AllyvelU;
+float Allyvel3D = 0.0;
+float Allyvel2D;
+int Allycs;
+// MOD#5 add Allystar TAU1201 velocity
+
 bool LABtest = false; // LAB switch to limit to one ground bias evaluation
 float localGravity = 9.807; // local gravity used during accel calibration. Value is entered using BT $CAL command
 uint16_t BIAS_Init = 0; // Bias initialization status (0= no init, n = nth bias calculation
@@ -953,7 +963,7 @@ static void processIMU(void *pvParameters)
 	float accelAvgx = 0.0;	
 	float accelAvgy = 0.0;	
 	float accelAvgz = 0.0;	
-	int16_t gyromodulestable = 0;
+	int16_t gyromodulestable = 8; // MOD#6 improve accel calibration
 	float GyrxzAmplitudeBIdyn = 0.0;	
 
 	GravIMU.x = 0.0;
@@ -1226,7 +1236,7 @@ static void processIMU(void *pvParameters)
 			#define NGyro 6.0 // gyro alpha/beta coeff
 			#define alfaGyroModule (2.0 * (2.0 * NGyro - 1.0) / NGyro / (NGyro + 1.0))
 			#define betaGyroModule (6.0 / NGyro / (NGyro + 1.0) )		
-			deltaGyroModule =  sqrt( gyroCorr.x * gyroCorr.x + gyroCorr.y * gyroCorr.y + gyroCorr.z * gyroCorr.z ) - GyroModuleFilt;
+			deltaGyroModule =  sqrt( gyroRPS.x * gyroRPS.x + gyroRPS.y * gyroRPS.y + gyroRPS.z * gyroRPS.z ) - GyroModuleFilt;
 			// filter gyro with alfa/beta
 			GyroModulePrimFilt = GyroModulePrimFilt + betaGyroModule * deltaGyroModule / dtGyr;
 			GyroModuleFilt = GyroModuleFilt + alfaGyroModule * deltaGyroModule + GyroModulePrimFilt * dtGyr;
@@ -1304,30 +1314,41 @@ static void processIMU(void *pvParameters)
 			// stream accel data and compute offsts/gains
 			if ( CALstream ) {
 				// If gyro are stable
-				if ( GyroModulePrimLevel < GroundGyroprimlimit ) {
-					if ( gyromodulestable == 0 ) {
+				if ( GyroModulePrimLevel < GroundGyroprimlimit  &&  AccelModulePrimLevel < GroundAccelprimlimit) { //MOD#6 improve calibration process
+					if ( gyromodulestable > 5 ) gyromodulestable--;  
+					if ( gyromodulestable == 5 ) {
 						accelAvgx = -accelG.z*9.807;
 						accelAvgy = -accelG.y*9.807;
 						accelAvgz = -accelG.x*9.807;
-						gyromodulestable = 1;
-					} else {
+						gyromodulestable = 4;
+					}
+					if ( gyromodulestable < 5 ) {
 						accelAvgx = 0.9 * accelAvgx + 0.1 * (-accelG.z*9.807);
 						accelAvgy = 0.9 * accelAvgy + 0.1 * (-accelG.y*9.807);
 						accelAvgz = 0.9 * accelAvgz + 0.1 * (-accelG.x*9.807);
+						if ( gyromodulestable > 1 ) gyromodulestable--;
 					}					
 					// store max and min
-					if ( accelAvgx > accelMaxx ) accelMaxx = accelAvgx;
-					if ( accelAvgy > accelMaxy ) accelMaxy = accelAvgy;
-					if ( accelAvgz > accelMaxz ) accelMaxz = accelAvgz;
-					if ( accelAvgx < accelMinx ) accelMinx = accelAvgx;
-					if ( accelAvgy < accelMiny ) accelMiny = accelAvgy;
-					if ( accelAvgz < accelMinz ) accelMinz = accelAvgz;
+					if ( gyromodulestable == 1 ) {
+						if ( accelAvgx > accelMaxx ) accelMaxx = accelAvgx;
+						if ( accelAvgy > accelMaxy ) accelMaxy = accelAvgy;
+						if ( accelAvgz > accelMaxz ) accelMaxz = accelAvgz;
+						if ( accelAvgx < accelMinx ) accelMinx = accelAvgx;
+						if ( accelAvgy < accelMiny ) accelMiny = accelAvgy;
+						if ( accelAvgz < accelMinz ) accelMinz = accelAvgz;
+					}
 				} else {
-					gyromodulestable = 0;
+					gyromodulestable = 8;
 				}
 				/*
 				CAL data
 				$CAL,
+				time in ms,
+				Gyro x in rad/s,
+				Gyro y in rad/s,
+				Gyro z in rad/s,
+				Gyromodule prim in unit,
+				Gyro module prim limit in unit,
 				Acceleration in X-Axis in m/s²,
 				Acceleration max in X-Axis in m/s²,
 				Acceleration min in X-Axis in m/s²,				
@@ -1345,13 +1366,25 @@ static void processIMU(void *pvParameters)
 				Acceleration gain z in m/s²				
 				<CR><LF>	
 				*/
-				if ( gyromodulestable > 0 ) {			
-					sprintf(str,"$CAL,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f\r\n",
+				if ( gyromodulestable == 1 ) {
+					if( gflags.gload_alarm ) {
+						Audio::alarm( false );
+						gflags.gload_alarm = false;
+					}					
+					sprintf(str,"$CAL,%lld,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f\r\n",
+						gyroTime, gyroCorr.x, gyroCorr.y, gyroCorr.z, GyroModulePrimLevel, GroundGyroprimlimit,
 						accelAvgx, accelMaxx, accelMinx, accelAvgy, accelMaxy, accelMiny, accelAvgz, accelMaxz, accelMinz,
 						(accelMaxx+accelMinx)/2, (accelMaxy+accelMiny)/2, (accelMaxz+accelMinz)/2,
 						localGravity /((accelMaxx-accelMinx)/2), localGravity /((accelMaxy-accelMiny)/2), localGravity/((accelMaxz-accelMinz)/2) );
 				} else {
-					sprintf(str,"$CAL, ----------\r\n");
+					if( !gflags.gload_alarm ) {
+						Audio::alarm( true );
+						gflags.gload_alarm = true;
+					}
+					sprintf(str,"$CAL,%lld,%.4f,%.4f,%.4f,%.4f,%.4f, - , - , - , - , - , - , - , - , - ,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f\r\n",
+						gyroTime, gyroCorr.x, gyroCorr.y, gyroCorr.z, GyroModulePrimLevel, GroundGyroprimlimit,
+						(accelMaxx+accelMinx)/2, (accelMaxy+accelMiny)/2, (accelMaxz+accelMinz)/2,
+						localGravity /((accelMaxx-accelMinx)/2), localGravity /((accelMaxy-accelMiny)/2), localGravity/((accelMaxz-accelMinz)/2) );					
 				}
 				Router::sendXCV(str);
 			}	
@@ -1606,23 +1639,23 @@ void readSensors(void *pvParameters){
 		// xSemaphoreGive(xMutex);
 		
 		// get raw dynamic pressure
-		if( asSensor )
+		if( asSensor ) {
+			PrevdynP = dynP;
 			dynP = asSensor->readPascal(0, ok);
-		if( ok && ((abs(dynP-PrevdynP) < 100 ) || PrevdynP == 0.0) ) {
+		}
+		// if( ok && ((abs(dynP-PrevdynP) < 100 ) || PrevdynP == 0.0) ) {
+		if( ok ) {			
 			prevdynPTime = dynPTime;
 			dynPTime = esp_timer_get_time()/1000.0; // record dynPTimeTE time in milli second		
 			dtdynP = (dynPTime - prevdynPTime) / 1000.0; // period between last two valid dynamic pressure samples in second
 			if (dtdynP == 0) dtdynP = PERIOD10HZ;
-			// allow long delays between two samples // if (dtdynP > 3*PERIOD10HZ) dtdynP = 3*PERIOD10HZ;			
-			if ( dynP < 60.0 ) dynP = 0.0; // TODO decide if a dynP should be aboce certain value to be valid
-			// for compatibility with Eckhard code
-			dynamicP = dynP;
-			PrevdynP = dynP;
 		}
 		else {
 			dynamicP = PrevdynP;
 			dynP = PrevdynP;
 		}
+		if ( dynP < 60.0 ) dynP = 0.0; // TODO decide if a dynP should be aboce certain value to be valid
+		dynamicP = dynP; // for compatibility with Eckhard code
 		
 		// Estimate OAT using standard temperature and difference between standard temperature and temperature of the day
 		// Because of EMI risks on the OAT sensor, which can create large OAT variations and therefore altitude and TAS variations, the idea is to
@@ -1676,6 +1709,17 @@ void readSensors(void *pvParameters){
 		}
 		// MOD#2 add RTK end
 		
+		// MOD#5 add Allystar TAU1201 begin
+		if ( Allytime != 0.0 && Allyvel3D != 0.0 ) {
+			chosenGnss->fix = 7; // GNSS Allystar TAU1301 fix			
+			chosenGnss->time = Allytime;
+			chosenGnss->speed.x = AllyvelN;
+			chosenGnss->speed.y = AllyvelE;
+			chosenGnss->speed.z = -AllyvelU;
+			GNSSRouteraw = atan2(AllyvelN,AllyvelE);
+		}
+		// MOD#5 add Allystar TAU1201 end	
+		
 		// MOD#4 gyro bias
 		// update filters with filter coefficients = 5 and dt = 0.1 second
 		GnssVx.Update( 5, 0.1, chosenGnss->speed.x);
@@ -1685,6 +1729,7 @@ void readSensors(void *pvParameters){
 		#ifdef COMPUTEBIAS
 		// alpha/beta filter on GNSS route to reduce noise and get route variation
 		// GNSSRoute and GNSSRoutePrim are only computed if TAS > 15 m/s
+		/*
 		#define NGNSS 7.0 // GNSS alpha/beta. Sample rate is 0 Hz = 0.1 second
 		#define alphaGNSSRoute (2.0 * (2.0 * NGNSS - 1.0) / NGNSS / (NGNSS + 1.0))
 		#define betaGNSSRoute (6.0 / NGNSS / (NGNSS + 1.0))		
@@ -1698,6 +1743,7 @@ void readSensors(void *pvParameters){
 			GNSSRoutePrim = 0.0;
 			GNSSRoute = 0.0;
 		}
+		*/
 		#endif
 
 		// compute CAS, ALT and Vzbaro using alpha/beta filters.  TODO consider using atmospher.h functions
@@ -1713,6 +1759,7 @@ void readSensors(void *pvParameters){
 		deltaCAS = CASraw - CAS;
 		CASprim = CASprim + betaCAS * deltaCAS / dtdynP;
 		CAS = CAS + alphaCAS * deltaCAS + CASprim * dtdynP;
+		if (CAS < 0.0) CAS = 0.0;
 		Rhocorr = sqrt(RhoSLISA/Rho);
 		TAS = Rhocorr * CAS;
 		TASprim = Rhocorr * CASprim;
