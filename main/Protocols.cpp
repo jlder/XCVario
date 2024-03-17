@@ -648,7 +648,7 @@ void Protocols::parseNMEA( const char *str ){
 		SENstream = false;
 		CALstream = false;		
 		sscanf( str,"$SETACC,%f,%f,%f,%f,%f,%f",&AccBias.x,&AccBias.y,&AccBias.z,&AccGain.x,&AccGain.y,&AccGain.z);
-		if ( (abs(AccBias.x) < 1) && (abs(AccBias.y) < 1) && (abs(AccBias.z) < 1) && (abs(AccGain.x-1) < 0.2) && (abs(AccGain.y-1) < 0.2) && (abs(AccGain.z-1) < 0.2) ) {
+		if ( (abs(AccBias.x) < 2.0) && (abs(AccBias.y) < 2.0) && (abs(AccBias.z) < 2.0) && (abs(AccGain.x-1) < 0.2) && (abs(AccGain.y-1) < 0.2) && (abs(AccGain.z-1) < 0.2) ) {
 			accl_bias.set(AccBias);
 			delay(200);
 			accl_gain.set(AccGain);
