@@ -1107,108 +1107,108 @@ static void processIMU(void *pvParameters)
 			q3=((cos(RollInit/2.0)*cos(PitchInit/2.0)*sin(YawInit/2.0)-sin(RollInit/2.0)*sin(PitchInit/2.0)*cos(YawInit/2.0)));
 			AttitudeInit++;
 		} else { // after xcvario is started and attitude initialized perform normal calculations
-			// Update IMU
-			// only consider centrifugal forces if TAS > 15 m/s
-			if ( TAS > 15.0 ) {
-				// estimate gravity in body frame taking into account centrifugal corrections
+			if (!CALstream) { // if not in calibration mode MOD#8
+				if ( TAS > 15.0 ) {	// Update IMU, only consider centrifugal forces if TAS > 15 m/s
+					// estimate gravity in body frame taking into account centrifugal corrections
+					xSemaphoreTake( dataMutex, 2/portTICK_PERIOD_MS ); // prevent data conflicts for 2ms max.
+					gravISUNEDBODY.x = accelISUNEDBODY.x - gyroCorr.y * TASbi * AoA + gyroCorr.z * TASbi * (+AoB) - UbiPrim; // MOD#1 Latest signs 
+					gravISUNEDBODY.y = accelISUNEDBODY.y - gyroCorr.z * TASbi + gyroCorr.x * TASbi * AoA;
+					gravISUNEDBODY.z = accelISUNEDBODY.z + gyroCorr.y * TASbi - gyroCorr.x * TASbi * (+AoB); // MOD#1 Latest signs 
+					xSemaphoreGive( dataMutex );
+				} else {
+					// estimate gravity in body frame using accels only
+					gravISUNEDBODY.x = accelISUNEDBODY.x;
+					gravISUNEDBODY.y = accelISUNEDBODY.y;
+					gravISUNEDBODY.z = accelISUNEDBODY.z;
+				}
+
+				// Update quaternions
+				// gyroISUNEDBODY corresponds to raw gyro and BiasQuatGx,y,z to the gyros bias
+				MahonyUpdateIMU( dtGyr, gyroISUNEDBODY.x, gyroISUNEDBODY.y, gyroISUNEDBODY.z,
+								-gravISUNEDBODY.x, -gravISUNEDBODY.y, -gravISUNEDBODY.z,
+								BiasQuatGx, BiasQuatGy, BiasQuatGz );
+								
+				// Compute Euler angles from IMU quaternion
+				if ( abs(q1 * q3 - q0 * q2) < 0.5 ) {
+					Pitch = asin(-2.0 * (q1 * q3 - q0 * q2));
+				} else {
+					Pitch = M_PI / 2.0 * signbit((q0 * q2 - q1 * q3 ));
+				}
+				Roll = atan2((q0 * q1 + q2 * q3), (0.5 - q1 * q1 - q2 * q2));
+				Yaw = atan2(2.0 * (q1 * q2 + q0 * q3), (q0 * q0 + q1 * q1 - q2 * q2 - q3 * q3));
+				if (Yaw < 0.0 ) Yaw = Yaw + 2.0 * M_PI;
+				if (Yaw > 2.0 * M_PI) Yaw = Yaw - 2.0 * M_PI;
+				
+				
+				// compute roll and pitch alpha beta filter
+				RollAHRS.Update( 6, dtGyr, Roll );// MOD#4 gyro bias
+				PitchAHRS.Update( 6, dtGyr, Pitch );// MOD#4 gyro bias
+				
+				// compute sin and cos for Roll and Pitch from IMU quaternion since they are used in multiple calculations
+				cosRoll = cos( Roll );
+				sinRoll = sin( Roll );
+				cosPitch = cos( Pitch );
+				sinPitch = sin( Pitch );
+
+				// compute kinetic acceleration from accels, gravity from IMU and centrifugal forces from accels and baro inertial speeds
+				// compute gravity estimation using IMU quaternion
+				GravIMU.x = -GRAVITY * 2.0 * (q1 * q3 - q0 * q2);
+				GravIMU.y = -GRAVITY * 2.0 * (q2 * q3 + q0 * q1);
+				GravIMU.z = -GRAVITY * (q0 * q0 - q1 * q1 - q2 * q2 + q3 * q3);
+				// compute kinetic accelerations using accelerations, corrected with gravity and centrifugal accels
 				xSemaphoreTake( dataMutex, 2/portTICK_PERIOD_MS ); // prevent data conflicts for 2ms max.
-				gravISUNEDBODY.x = accelISUNEDBODY.x - gyroCorr.y * TASbi * AoA + gyroCorr.z * TASbi * (+AoB) - UbiPrim; // MOD#1 Latest signs 
-				gravISUNEDBODY.y = accelISUNEDBODY.y - gyroCorr.z * TASbi + gyroCorr.x * TASbi * AoA;
-				gravISUNEDBODY.z = accelISUNEDBODY.z + gyroCorr.y * TASbi - gyroCorr.x * TASbi * (+AoB); // MOD#1 Latest signs 
+				
+				UiPrim = accelISUNEDBODY.x - GravIMU.x - gyroCorr.y * TASbi * AoA + gyroCorr.z * TASbi * (+AoB); // MOD#1 Latest signs 
+				ViPrim = accelISUNEDBODY.y - GravIMU.y - gyroCorr.z * TASbi + gyroCorr.x * TASbi * AoA;			
+				WiPrim = accelISUNEDBODY.z - GravIMU.z + gyroCorr.y * TASbi - gyroCorr.x * TASbi * (+AoB); // MOD#1 Latest signs
+				xSemaphoreGive( dataMutex );			
+				// UiPrim = accelISUNEDBODY.x - GravIMU.x - gyroCorr.y * Wbi + gyroCorr.z * Vbi;
+				// ViPrim = accelISUNEDBODY.y - GravIMU.y - gyroCorr.z * Ubi + gyroCorr.x * Wbi;			
+				// WiPrim = accelISUNEDBODY.z - GravIMU.z + gyroCorr.y * Ubi - gyroCorr.x * Vbi;			
+
+				// Kinectic accels alpha/beta short filter
+				#define NKinAccS 24.0 // accel kinetic alpha/beta filter coeff
+				#define alphaKinAccS (2.0 * (2.0 * NKinAccS - 1.0) / NKinAccS / (NKinAccS + 1.0))
+				#define betaKinAccS (6.0 / NKinAccS / (NKinAccS + 1.0) )			
+				deltaUiPrimS = UiPrim - UiPrimSF;
+				UiPrimPrimS = UiPrimPrimS + betaKinAccS * deltaUiPrimS / dtGyr;
+				UiPrimSF = UiPrimSF + alphaKinAccS * deltaUiPrimS + UiPrimPrimS * dtGyr;
+				deltaViPrimS = ViPrim - ViPrimSF;
+				ViPrimPrimS = ViPrimPrimS + betaKinAccS * deltaViPrimS / dtGyr;
+				ViPrimSF = ViPrimSF + alphaKinAccS * deltaViPrimS + ViPrimPrimS * dtGyr;
+				deltaWiPrimS = WiPrim - WiPrimSF;
+				WiPrimPrimS = WiPrimPrimS + betaKinAccS * deltaWiPrimS / dtGyr;
+				WiPrimSF = WiPrimSF + alphaKinAccS * deltaWiPrimS + WiPrimPrimS * dtGyr;
+
+				// Compute baro interial acceleration in body frame
+				// Compute dynamic period for baro inertiel filter
+				#define PeriodVelbiGain 2
+				#define GyrAmplitudeLimit 0.4
+				// Gyro x and z amplitude used to adjust Baro Inertial filter
+				GyrxzAmplitudeBIdyn = abs(gyroCorr.x) + abs(gyroCorr.z / 3.0);			
+				if ( GyrxzAmplitudeBIdyn < GyrAmplitudeLimit ) {
+					DynPeriodVelbi = 0.9 * DynPeriodVelbi + 0.1 * PeriodVelbi / ( 1 + GyrxzAmplitudeBIdyn / (GyrAmplitudeLimit/PeriodVelbiGain) );
+				} else {
+					DynPeriodVelbi = 0.9 * DynPeriodVelbi + 0.1 * PeriodVelbi / PeriodVelbiGain;
+				}
+				fcVelbi1 = ( DynPeriodVelbi / ( DynPeriodVelbi + dtGyr ));
+				fcVelbi2 = ( 1.0 - fcVelbi1 );
+				xSemaphoreTake( dataMutex, 2/portTICK_PERIOD_MS ); // prevent data conflicts for 2ms max.			
+				UbiPrim = fcVelbi1 * ( UbiPrim + UiPrimPrimS * dtGyr ) + fcVelbi2 * UbPrimS;
+				VbiPrim = fcVelbi1 * ( VbiPrim + ViPrimPrimS * dtGyr ) + fcVelbi2 * VbPrimS;			
+				WbiPrim = fcVelbi1 * ( WbiPrim + WiPrimPrimS * dtGyr ) + fcVelbi2 * WbPrimS;
+				
+				// Compute baro interial velocity in body frame
+				Ubi = fcVelbi1 * ( Ubi + UbiPrim * dtGyr ) + fcVelbi2 * Ub;
+				Vbi = fcVelbi1 * ( Vbi + VbiPrim * dtGyr ) + fcVelbi2 * Vb;
+				Wbi = fcVelbi1 * ( Wbi + WbiPrim * dtGyr ) + fcVelbi2 * Wb;
+
+				// baro inertial TAS & TAS square in any frame
+				TASbiSquare = Ubi * Ubi + Vbi * Vbi + Wbi * Wbi;
+				TASbi = sqrt( TASbiSquare );
+				
 				xSemaphoreGive( dataMutex );
-			} else {
-				// estimate gravity in body frame using accels only
-				gravISUNEDBODY.x = accelISUNEDBODY.x;
-				gravISUNEDBODY.y = accelISUNEDBODY.y;
-				gravISUNEDBODY.z = accelISUNEDBODY.z;
 			}
-
-			// Update quaternions
-			// gyroISUNEDBODY corresponds to raw gyro and BiasQuatGx,y,z to the gyros bias
-			MahonyUpdateIMU( dtGyr, gyroISUNEDBODY.x, gyroISUNEDBODY.y, gyroISUNEDBODY.z,
-							-gravISUNEDBODY.x, -gravISUNEDBODY.y, -gravISUNEDBODY.z,
-							BiasQuatGx, BiasQuatGy, BiasQuatGz );
-							
-			// Compute Euler angles from IMU quaternion
-			if ( abs(q1 * q3 - q0 * q2) < 0.5 ) {
-				Pitch = asin(-2.0 * (q1 * q3 - q0 * q2));
-			} else {
-				Pitch = M_PI / 2.0 * signbit((q0 * q2 - q1 * q3 ));
-			}
-			Roll = atan2((q0 * q1 + q2 * q3), (0.5 - q1 * q1 - q2 * q2));
-			Yaw = atan2(2.0 * (q1 * q2 + q0 * q3), (q0 * q0 + q1 * q1 - q2 * q2 - q3 * q3));
-			if (Yaw < 0.0 ) Yaw = Yaw + 2.0 * M_PI;
-			if (Yaw > 2.0 * M_PI) Yaw = Yaw - 2.0 * M_PI;
-			
-			
-			// compute roll and pitch alpha beta filter
-			RollAHRS.Update( 6, dtGyr, Roll );// MOD#4 gyro bias
-			PitchAHRS.Update( 6, dtGyr, Pitch );// MOD#4 gyro bias
-			
-			// compute sin and cos for Roll and Pitch from IMU quaternion since they are used in multiple calculations
-			cosRoll = cos( Roll );
-			sinRoll = sin( Roll );
-			cosPitch = cos( Pitch );
-			sinPitch = sin( Pitch );
-
-			// compute kinetic acceleration from accels, gravity from IMU and centrifugal forces from accels and baro inertial speeds
-			// compute gravity estimation using IMU quaternion
-			GravIMU.x = -GRAVITY * 2.0 * (q1 * q3 - q0 * q2);
-			GravIMU.y = -GRAVITY * 2.0 * (q2 * q3 + q0 * q1);
-			GravIMU.z = -GRAVITY * (q0 * q0 - q1 * q1 - q2 * q2 + q3 * q3);
-			// compute kinetic accelerations using accelerations, corrected with gravity and centrifugal accels
-			xSemaphoreTake( dataMutex, 2/portTICK_PERIOD_MS ); // prevent data conflicts for 2ms max.
-			
-			UiPrim = accelISUNEDBODY.x - GravIMU.x - gyroCorr.y * TASbi * AoA + gyroCorr.z * TASbi * (+AoB); // MOD#1 Latest signs 
-			ViPrim = accelISUNEDBODY.y - GravIMU.y - gyroCorr.z * TASbi + gyroCorr.x * TASbi * AoA;			
-			WiPrim = accelISUNEDBODY.z - GravIMU.z + gyroCorr.y * TASbi - gyroCorr.x * TASbi * (+AoB); // MOD#1 Latest signs
-			xSemaphoreGive( dataMutex );			
-			// UiPrim = accelISUNEDBODY.x - GravIMU.x - gyroCorr.y * Wbi + gyroCorr.z * Vbi;
-			// ViPrim = accelISUNEDBODY.y - GravIMU.y - gyroCorr.z * Ubi + gyroCorr.x * Wbi;			
-			// WiPrim = accelISUNEDBODY.z - GravIMU.z + gyroCorr.y * Ubi - gyroCorr.x * Vbi;			
-
-			// Kinectic accels alpha/beta short filter
-			#define NKinAccS 24.0 // accel kinetic alpha/beta filter coeff
-			#define alphaKinAccS (2.0 * (2.0 * NKinAccS - 1.0) / NKinAccS / (NKinAccS + 1.0))
-			#define betaKinAccS (6.0 / NKinAccS / (NKinAccS + 1.0) )			
-			deltaUiPrimS = UiPrim - UiPrimSF;
-			UiPrimPrimS = UiPrimPrimS + betaKinAccS * deltaUiPrimS / dtGyr;
-			UiPrimSF = UiPrimSF + alphaKinAccS * deltaUiPrimS + UiPrimPrimS * dtGyr;
-			deltaViPrimS = ViPrim - ViPrimSF;
-			ViPrimPrimS = ViPrimPrimS + betaKinAccS * deltaViPrimS / dtGyr;
-			ViPrimSF = ViPrimSF + alphaKinAccS * deltaViPrimS + ViPrimPrimS * dtGyr;
-			deltaWiPrimS = WiPrim - WiPrimSF;
-			WiPrimPrimS = WiPrimPrimS + betaKinAccS * deltaWiPrimS / dtGyr;
-			WiPrimSF = WiPrimSF + alphaKinAccS * deltaWiPrimS + WiPrimPrimS * dtGyr;
-
-			// Compute baro interial acceleration in body frame
-			// Compute dynamic period for baro inertiel filter
-			#define PeriodVelbiGain 2
-			#define GyrAmplitudeLimit 0.4
-			// Gyro x and z amplitude used to adjust Baro Inertial filter
-			GyrxzAmplitudeBIdyn = abs(gyroCorr.x) + abs(gyroCorr.z / 3.0);			
-			if ( GyrxzAmplitudeBIdyn < GyrAmplitudeLimit ) {
-				DynPeriodVelbi = 0.9 * DynPeriodVelbi + 0.1 * PeriodVelbi / ( 1 + GyrxzAmplitudeBIdyn / (GyrAmplitudeLimit/PeriodVelbiGain) );
-			} else {
-				DynPeriodVelbi = 0.9 * DynPeriodVelbi + 0.1 * PeriodVelbi / PeriodVelbiGain;
-			}
-			fcVelbi1 = ( DynPeriodVelbi / ( DynPeriodVelbi + dtGyr ));
-			fcVelbi2 = ( 1.0 - fcVelbi1 );
-			xSemaphoreTake( dataMutex, 2/portTICK_PERIOD_MS ); // prevent data conflicts for 2ms max.			
-			UbiPrim = fcVelbi1 * ( UbiPrim + UiPrimPrimS * dtGyr ) + fcVelbi2 * UbPrimS;
-			VbiPrim = fcVelbi1 * ( VbiPrim + ViPrimPrimS * dtGyr ) + fcVelbi2 * VbPrimS;			
-			WbiPrim = fcVelbi1 * ( WbiPrim + WiPrimPrimS * dtGyr ) + fcVelbi2 * WbPrimS;
-			
-			// Compute baro interial velocity in body frame
-			Ubi = fcVelbi1 * ( Ubi + UbiPrim * dtGyr ) + fcVelbi2 * Ub;
-			Vbi = fcVelbi1 * ( Vbi + VbiPrim * dtGyr ) + fcVelbi2 * Vb;
-			Wbi = fcVelbi1 * ( Wbi + WbiPrim * dtGyr ) + fcVelbi2 * Wb;
-
-			// baro inertial TAS & TAS square in any frame
-			TASbiSquare = Ubi * Ubi + Vbi * Vbi + Wbi * Wbi;
-			TASbi = sqrt( TASbiSquare );
-			
-			xSemaphoreGive( dataMutex );
 		}
 
 		// When TAS < 15 m/s the vario is considered potentially stable on ground
@@ -1323,19 +1323,19 @@ static void processIMU(void *pvParameters)
 						gyromodulestable = 4;
 					}
 					if ( gyromodulestable < 5 ) {
-						accelAvgx = 0.9 * accelAvgx + 0.1 * (-accelG.z*9.807);
-						accelAvgy = 0.9 * accelAvgy + 0.1 * (-accelG.y*9.807);
-						accelAvgz = 0.9 * accelAvgz + 0.1 * (-accelG.x*9.807);
+						accelAvgx = 0.8 * accelAvgx + 0.2 * (-accelG.z*9.807);
+						accelAvgy = 0.8 * accelAvgy + 0.2 * (-accelG.y*9.807);
+						accelAvgz = 0.8 * accelAvgz + 0.2 * (-accelG.x*9.807);
 						if ( gyromodulestable > 1 ) gyromodulestable--;
 					}					
-					// store max and min
+					// store max and min with a short ~10 Hz low pass // MOD#9
 					if ( gyromodulestable == 1 ) {
-						if ( accelAvgx > accelMaxx ) accelMaxx = accelAvgx;
-						if ( accelAvgy > accelMaxy ) accelMaxy = accelAvgy;
-						if ( accelAvgz > accelMaxz ) accelMaxz = accelAvgz;
-						if ( accelAvgx < accelMinx ) accelMinx = accelAvgx;
-						if ( accelAvgy < accelMiny ) accelMiny = accelAvgy;
-						if ( accelAvgz < accelMinz ) accelMinz = accelAvgz;
+						if ( accelAvgx > accelMaxx ) accelMaxx = accelMaxx*0.5 + accelAvgx*0.5;
+						if ( accelAvgy > accelMaxy ) accelMaxy = accelMaxy*0.5 + accelAvgy*0.5;
+						if ( accelAvgz > accelMaxz ) accelMaxz = accelMaxz*0.5 + accelAvgz*0.5;
+						if ( accelAvgx < accelMinx ) accelMinx = accelMinx*0.5 + accelAvgx*0.5;
+						if ( accelAvgy < accelMiny ) accelMiny = accelMiny*0.5 + accelAvgy*0.5;
+						if ( accelAvgz < accelMinz ) accelMinz = accelMinz*0.5 + accelAvgz*0.5;
 					}
 				} else {
 					gyromodulestable = 8;
