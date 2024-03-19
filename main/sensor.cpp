@@ -1048,8 +1048,8 @@ static void processIMU(void *pvParameters)
 				gyroCorr.y = gyroISUNEDBODY.y;// + BiasQuatGy;  // error on y should be added
 				gyroCorr.z = gyroISUNEDBODY.z;// + BiasQuatGz;  // error on z should be removed
 				xSemaphoreGive( dataMutex );
-				PrevgyroRPS = gyroRPS;
 			}
+			PrevgyroRPS = gyroRPS;
 		}
 		// get accel data
 		if( MPU.acceleration(&accelRaw) == ESP_OK ){ // read raw acceleration
