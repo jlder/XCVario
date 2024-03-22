@@ -1,8 +1,8 @@
 // compile options
 //
-#define LS6
+//#define LS6
 //#define TAURUS
-//#define VENTUS3
+#define VENTUS3
 //
 #define COMPUTEBIAS   // code to estimate gyro bias
 //
@@ -308,7 +308,6 @@ static int64_t prevdynPTime;
 static float dtdynP = PERIOD10HZ;
 static float dynP=0.0; // raw dynamic pressure
 static float PrevdynP=0.0;
-static float OATemp = 15.0; // OAT for pressure corrections (real or from standard atmosphere)
 static float ISATemp = 15.0;
 static float ISATempBias = 0.0;
 static float HasISATempBias = false;
@@ -466,7 +465,7 @@ extern UbloxGnssDecoder s2UbloxGnssDecoder;
 // alpha beta filter class
 class AlphaBeta {
 	public:
-		void Update(int N, float dt, float RawData);
+		void Update(int N, float dt, float RawData, float Threshold);
 		float Prim(void);
 		float Filt(void);
 
@@ -478,6 +477,9 @@ class AlphaBeta {
 		float beta;
 		bool firstpass = true;
 		int previousN = 0;
+		float fc1lowpass;
+		float fc2lowpass;
+		float RawDataLP;
 };
 
 float AlphaBeta::Prim(void) {
@@ -486,20 +488,26 @@ float AlphaBeta::Prim(void) {
 float AlphaBeta::Filt(void) {
 	return filt;
 }		
-void AlphaBeta::Update(int N, float dt, float RawData) {
+void AlphaBeta::Update(int N, float dt, float RawData, float Threshold) {
 	if (firstpass || (N == 0) ) {
 		delta = 0.0;
 		prim = 0.0;
 		filt = RawData;
+		RawDataLP = RawData;
 		firstpass = false;
 	} else {
 		if ( N != previousN ) {
 			alpha =  (2.0 * (2.0 * N - 1.0) / N / (N + 1.0));
 			beta = (6.0 / N / (N + 1.0));
+			fc2lowpass = N * dt;
+			fc1lowpass = 1.0 - fc2lowpass;
 		}
-		delta = RawData - filt;
-		prim = prim + beta * delta / dt;
-		filt = filt + alpha * delta + prim * dt;
+		RawDataLP = RawDataLP * fc1lowpass + RawData * fc2lowpass;		
+		if ( (Threshold == 0) || ((RawData - RawDataLP) < Threshold )) {
+			delta = RawData - filt;
+			prim = prim + beta * delta / dt;
+			filt = filt + alpha * delta + prim * dt;
+		}
 	}
 }
 // MOD#3 alpha beta class end
@@ -787,15 +795,16 @@ float PseudoHeadingPrim;// MOD#4 gyro bias
 	#define PitchLimit 0.175 // max longitudinal gravity acceleration (normalized acceleration) for 10° pitch
 	#define GMaxBias 0.005 // limit biais correction to 5 mrad/s
 	#define NGyrBias 3000 //  very long term average ~ 300 seconds
+	#define ThresholdGyrOutliers 0.1 // remove outiliers 0.1 rad/s away from signal
 	if ( TAS > 15.0 && RollLimit < abs(halfvy) && PitchLimit < abs(halfvx) ) {
 		// compute Gx - d(roll)/dt and Gy - d(pitch)/dt long term average.
-		GyroBiasx.Update( NGyrBias, dt, gxraw - RollAHRS.Prim() );
-		GyroBiasy.Update( NGyrBias, dt, gyraw - PitchAHRS.Prim() );		
+		GyroBiasx.Update( NGyrBias, dt, gxraw - RollAHRS.Prim(), ThresholdGyrOutliers );
+		GyroBiasy.Update( NGyrBias, dt, gyraw - PitchAHRS.Prim(), ThresholdGyrOutliers );		
 		// compute pseudo heading from GNSS
 		GnssTrack = atan2( GnssVx.Filt(), GnssVy.Filt() );
 		PseudoHeadingPrim = ( GnssVy.Prim() * cos(GnssTrack) - GnssVx.Prim() * sin(GnssTrack) ) / TAS;
 		// compute Gz - pseudo heading variation long term average.		
-		GyroBiasz.Update( NGyrBias, dt, gzraw - PseudoHeadingPrim );		
+		GyroBiasz.Update( NGyrBias, dt, gzraw - PseudoHeadingPrim, ThresholdGyrOutliers );		
 		// limit bias estimation	
 		if ( abs(GyroBiasx.Filt()) > GMaxBias ) Bias_Gx = copysign( GMaxBias, GyroBiasx.Filt()) ;
 		if ( abs(GyroBiasy.Filt()) > GMaxBias ) Bias_Gy = copysign( GMaxBias, GyroBiasy.Filt()) ;		
@@ -995,6 +1004,10 @@ static void processIMU(void *pvParameters)
 	PrevaccelISUNEDMPU.y = 0.0;
 	PrevaccelISUNEDMPU.z = -9.807;
 	
+	AlphaBeta gyroRPSx, gyroRPSy, gyroRPSz;
+	AlphaBeta accelISUNEDMPUx, accelISUNEDMPUy, accelISUNEDMPUz;
+	AlphaBeta GyroModule, AccelModule;
+	
 	
 	
 	// compute once the filter parameters in functions of values in FLASH
@@ -1014,42 +1027,26 @@ static void processIMU(void *pvParameters)
 			if (dtGyr == 0) dtGyr = PERIOD40HZ;
 			gyroDPS = mpud::gyroDegPerSec(gyroRaw, GYRO_FS); // For compatibility with Eckhard code only. Convert raw gyro to Gyro_FS full scale in degre per second 
 			gyroRPS = mpud::gyroRadPerSec(gyroRaw, GYRO_FS); // convert raw gyro to Gyro_FS full scale in radians per second
-			// eliminate gyro variations above PI rd/s
-			//if ( abs(gyroRPS.x-PrevgyroRPS.x) < M_PI && abs(gyroRPS.y-PrevgyroRPS.y) < M_PI && abs(gyroRPS.z-PrevgyroRPS.z) < M_PI ) { // discard zickets
-			if ( abs(gyroRPS.x-PrevgyroRPS.x) < MaxGyroVariation && abs(gyroRPS.y-PrevgyroRPS.y) < MaxGyroVariation && abs(gyroRPS.z-PrevgyroRPS.z) < MaxGyroVariation ) { // discard zickets
-				#ifdef FILTERMPU
-					#define NMPU 7.0 // MPU alpha/beta filter coeff
-					#define alfaMPU (2.0 * (2.0 * NMPU - 1.0) / NMPU / (NMPU + 1.0))
-					#define betaMPU (6.0 / NMPU / (NMPU + 1.0) )
-					deltaGyroRPS.x = gyroRPS.x - GyroRPSFilt.x;
-					GyroRPSPrim.x = GyroRPSPrim.x + betaMPU * deltaGyroRPS.x / dtGyr;
-					GyroRPSFilt.x = GyroRPSFilt.x + alfaMPU * deltaGyroRPS.x + GyroRPSPrim.x * dtGyr;
-					deltaGyroRPS.y = gyroRPS.y - GyroRPSFilt.y;
-					GyroRPSPrim.y = GyroRPSPrim.y + betaMPU * deltaGyroRPS.y / dtGyr;
-					GyroRPSFilt.y = GyroRPSFilt.y + alfaMPU * deltaGyroRPS.y + GyroRPSPrim.y * dtGyr;
-					deltaGyroRPS.z = gyroRPS.z - GyroRPSFilt.z;
-					GyroRPSPrim.z = GyroRPSPrim.z + betaMPU * deltaGyroRPS.z / dtGyr;
-					GyroRPSFilt.z = GyroRPSFilt.z + alfaMPU * deltaGyroRPS.z + GyroRPSPrim.z * dtGyr;					
-				#else
-					GyroRPSFilt = gyroRPS;
-				#endif
-				// convert gyro coordinates to ISU : rad/s NED MPU and remove bias
-				xSemaphoreTake( dataMutex, 2/portTICK_PERIOD_MS ); // prevent data conflicts for 2ms max.			
-				gyroISUNEDMPU.x = -(GyroRPSFilt.z - GroundGyroBias.z);
-				gyroISUNEDMPU.y = -(GyroRPSFilt.y - GroundGyroBias.y);
-				gyroISUNEDMPU.z = -(GyroRPSFilt.x - GroundGyroBias.x);
-						
-				// convert NEDMPU to NEDBODY			
-				gyroISUNEDBODY.x = C_T * gyroISUNEDMPU.x + STmultSS * gyroISUNEDMPU.y + STmultCS * gyroISUNEDMPU.z;
-				gyroISUNEDBODY.y = C_S * gyroISUNEDMPU.y - S_S * gyroISUNEDMPU.z;
-				gyroISUNEDBODY.z = -S_T * gyroISUNEDMPU.x + SSmultCT  * gyroISUNEDMPU.y + CTmultCS * gyroISUNEDMPU.z;
-				// correct gyro with flight gyro estimation
-				gyroCorr.x = gyroISUNEDBODY.x;// + BiasQuatGx;  // error on x should be added
-				gyroCorr.y = gyroISUNEDBODY.y;// + BiasQuatGy;  // error on y should be added
-				gyroCorr.z = gyroISUNEDBODY.z;// + BiasQuatGz;  // error on z should be removed
-				xSemaphoreGive( dataMutex );
-			}
-			PrevgyroRPS = gyroRPS;
+			#define MaxGyroVariation 1.0 // TDB if need to change for other gliders, in particular for motor gliders
+			#define MaxAccelVariation 10.0 // TDB if need to change for other gliders, in particular for motor gliders
+			#define NMPU 5.0 // MPU alpha/beta filter coeff			
+			gyroRPSx.Update(NMPU, dtGyr, gyroRPS.x, MaxGyroVariation);
+			gyroRPSy.Update(NMPU, dtGyr, gyroRPS.y, MaxGyroVariation);			
+			gyroRPSz.Update(NMPU, dtGyr, gyroRPS.z, MaxGyroVariation);
+			// convert gyro coordinates to ISU : rad/s NED MPU and remove bias
+			xSemaphoreTake( dataMutex, 2/portTICK_PERIOD_MS ); // prevent data conflicts for 2ms max.			
+			gyroISUNEDMPU.x = -(GyroRPSFilt.z - GroundGyroBias.z);
+			gyroISUNEDMPU.y = -(GyroRPSFilt.y - GroundGyroBias.y);
+			gyroISUNEDMPU.z = -(GyroRPSFilt.x - GroundGyroBias.x);
+			// convert NEDMPU to NEDBODY			
+			gyroISUNEDBODY.x = C_T * gyroISUNEDMPU.x + STmultSS * gyroISUNEDMPU.y + STmultCS * gyroISUNEDMPU.z;
+			gyroISUNEDBODY.y = C_S * gyroISUNEDMPU.y - S_S * gyroISUNEDMPU.z;
+			gyroISUNEDBODY.z = -S_T * gyroISUNEDMPU.x + SSmultCT  * gyroISUNEDMPU.y + CTmultCS * gyroISUNEDMPU.z;
+			// correct gyro with flight gyro estimation
+			gyroCorr.x = gyroISUNEDBODY.x;// + BiasQuatGx;  // error on x should be added
+			gyroCorr.y = gyroISUNEDBODY.y;// + BiasQuatGy;  // error on y should be added
+			gyroCorr.z = gyroISUNEDBODY.z;// + BiasQuatGz;  // error on z should be removed
+			xSemaphoreGive( dataMutex );			
 		}
 		// get accel data
 		if( MPU.acceleration(&accelRaw) == ESP_OK ){ // read raw acceleration
@@ -1058,34 +1055,16 @@ static void processIMU(void *pvParameters)
 			RawaccelISUNEDMPU.x = ((-accelG.z*9.807) - currentAccelBias.x ) * currentAccelGain.x;
 			RawaccelISUNEDMPU.y = ((-accelG.y*9.807) - currentAccelBias.y ) * currentAccelGain.y;
 			RawaccelISUNEDMPU.z = ((-accelG.x*9.807) - currentAccelBias.z ) * currentAccelGain.z;
-			// eliminate accel variations above 5 m/s²
-			if (PrevaccelISUNEDMPU.x==0.0 && PrevaccelISUNEDMPU.y==0.0 && PrevaccelISUNEDMPU.z==-9.807 ){
-				PrevaccelISUNEDMPU.x =RawaccelISUNEDMPU.x;
-				PrevaccelISUNEDMPU.y =RawaccelISUNEDMPU.y;
-				PrevaccelISUNEDMPU.z =RawaccelISUNEDMPU.z;
-			}
-			if ( abs(RawaccelISUNEDMPU.x-PrevaccelISUNEDMPU.x) < MaxAccelVariation && abs(RawaccelISUNEDMPU.y-PrevaccelISUNEDMPU.y) < MaxAccelVariation && abs(RawaccelISUNEDMPU.z-PrevaccelISUNEDMPU.z) < MaxAccelVariation ) { // remove zickets
-				#ifdef FILTERMPU
-					deltaaccelISUNEDMPU.x = RawaccelISUNEDMPU.x - accelISUNEDMPU.x;
-					accelISUNEDMPUPrim.x = accelISUNEDMPUPrim.x + betaMPU * deltaaccelISUNEDMPU.x / dtGyr;
-					accelISUNEDMPU.x = accelISUNEDMPU.x + alfaMPU * deltaaccelISUNEDMPU.x + accelISUNEDMPUPrim.x * dtGyr;
-					deltaaccelISUNEDMPU.y = RawaccelISUNEDMPU.y - accelISUNEDMPU.y;
-					accelISUNEDMPUPrim.y = accelISUNEDMPUPrim.y + betaMPU * deltaaccelISUNEDMPU.y / dtGyr;
-					accelISUNEDMPU.y = accelISUNEDMPU.y + alfaMPU * deltaaccelISUNEDMPU.y + accelISUNEDMPUPrim.y * dtGyr;
-					deltaaccelISUNEDMPU.z = RawaccelISUNEDMPU.z - accelISUNEDMPU.z;
-					accelISUNEDMPUPrim.z = accelISUNEDMPUPrim.z + betaMPU * deltaaccelISUNEDMPU.z / dtGyr;
-					accelISUNEDMPU.z = accelISUNEDMPU.z + alfaMPU * deltaaccelISUNEDMPU.z + accelISUNEDMPUPrim.z * dtGyr;
-				#else
-					accelISUNEDMPU = RawaccelISUNEDMPU;
-				#endif
-				xSemaphoreTake( dataMutex, 2/portTICK_PERIOD_MS ); // prevent data conflicts for 2ms max.				
-				// convert from MPU to BODY
-				accelISUNEDBODY.x = C_T * accelISUNEDMPU.x + STmultSS * accelISUNEDMPU.y + STmultCS * accelISUNEDMPU.z + ( gyroCorr.y * gyroCorr.y + gyroCorr.z * gyroCorr.z ) * DistCGVario;
-				accelISUNEDBODY.y = C_S * accelISUNEDMPU.y - S_S * accelISUNEDMPU.z;
-				accelISUNEDBODY.z = -S_T * accelISUNEDMPU.x + SSmultCT * accelISUNEDMPU.y + CTmultCS * accelISUNEDMPU.z;
-				xSemaphoreGive( dataMutex );
-				PrevaccelISUNEDMPU = RawaccelISUNEDMPU;				
-			}
+			#define MaxAccelVariation 10.0 // TDB if need to change for other gliders, in particular for motor gliders
+			accelISUNEDMPUx.Update(NMPU, dtGyr, RawaccelISUNEDMPU.x, MaxAccelVariation);
+			accelISUNEDMPUy.Update(NMPU, dtGyr, RawaccelISUNEDMPU.y, MaxAccelVariation);			
+			accelISUNEDMPUz.Update(NMPU, dtGyr, RawaccelISUNEDMPU.z, MaxAccelVariation);
+			xSemaphoreTake( dataMutex, 2/portTICK_PERIOD_MS ); // prevent data conflicts for 2ms max.				
+			// convert from MPU to BODY
+			accelISUNEDBODY.x = C_T * accelISUNEDMPUx.Filt() + STmultSS * accelISUNEDMPUy.Filt() + STmultCS * accelISUNEDMPUz.Filt() + ( gyroCorr.y * gyroCorr.y + gyroCorr.z * gyroCorr.z ) * DistCGVario;
+			accelISUNEDBODY.y = C_S * accelISUNEDMPUx.Filt() - S_S * accelISUNEDMPUz.Filt();
+			accelISUNEDBODY.z = -S_T * accelISUNEDMPUx.Filt() + SSmultCT * accelISUNEDMPUy.Filt() + CTmultCS * accelISUNEDMPUz.Filt();
+			xSemaphoreGive( dataMutex );
 		}
 		
 		// attitude initialization when XCVario starts during first 10 iterations 
@@ -1141,8 +1120,10 @@ static void processIMU(void *pvParameters)
 				
 				
 				// compute roll and pitch alpha beta filter
-				RollAHRS.Update( 6, dtGyr, Roll );// MOD#4 gyro bias
-				PitchAHRS.Update( 6, dtGyr, Pitch );// MOD#4 gyro bias
+				#define NAHRS 6 //  Filter parameter pseudo period ~ 0.6 seconds
+				#define ThresholdAHRSOutliers 1.0 // remove outiliers 1.0 rad away from signal				
+				RollAHRS.Update( NAHRS, dtGyr, Roll, ThresholdAHRSOutliers );// MOD#4 gyro bias
+				PitchAHRS.Update( NAHRS, dtGyr, Pitch, ThresholdAHRSOutliers );// MOD#4 gyro bias
 				
 				// compute sin and cos for Roll and Pitch from IMU quaternion since they are used in multiple calculations
 				cosRoll = cos( Roll );
@@ -1216,38 +1197,28 @@ static void processIMU(void *pvParameters)
 		if ( TAS < 15.0 ) {
 			// compute acceleration module variation
 			#define NAccel 6.0 // accel alpha/beta filter coeff
-			#define alfaAccelModule (2.0 * (2.0 * NAccel - 1.0) / NAccel / (NAccel + 1.0))
-			#define betaAccelModule (6.0 / NAccel / (NAccel + 1.0) )
-			deltaAccelModule = sqrt( accelISUNEDBODY.x * accelISUNEDBODY.x + accelISUNEDBODY.y * accelISUNEDBODY.y + accelISUNEDBODY.z * accelISUNEDBODY.z ) - AccelModuleFilt;
-			// filter gyro with alfa/beta
-			AccelModulePrimFilt = AccelModulePrimFilt + betaAccelModule * deltaAccelModule / dtGyr;
-			AccelModuleFilt = AccelModuleFilt + alfaAccelModule * deltaAccelModule + AccelModulePrimFilt * dtGyr;
-			// aysmétric filter with fast raise and slow decay
+			AccelModule.Update(NAccel, dtGyr, accelISUNEDBODY.x * accelISUNEDBODY.x + accelISUNEDBODY.y * accelISUNEDBODY.y + accelISUNEDBODY.z * accelISUNEDBODY.z, 0.0  );
+			// asysmetric filter with fast raise and slow decay
 			#define fcAccelLevel 3.0 // 3Hz low pass to filter 
 			#define fcAL1 (40.0/(40.0+fcAccelLevel))
 			#define fcAL2 (1.0-fcAL1)		
-			if ( AccelModulePrimLevel < abs(AccelModulePrimFilt) ) {
-				AccelModulePrimLevel = abs(AccelModulePrimFilt);
+			if ( AccelModulePrimLevel < abs(AccelModule.Prim()) ) {
+				AccelModulePrimLevel = abs(AccelModule.Prim());
 			} else {
-				AccelModulePrimLevel = fcAL1 * AccelModulePrimLevel +  fcAL2 * abs(AccelModulePrimFilt);
+				AccelModulePrimLevel = fcAL1 * AccelModulePrimLevel +  fcAL2 * abs(AccelModule.Prim());
 			}	
 			
 			// compute gyro module variation
 			#define NGyro 6.0 // gyro alpha/beta coeff
-			#define alfaGyroModule (2.0 * (2.0 * NGyro - 1.0) / NGyro / (NGyro + 1.0))
-			#define betaGyroModule (6.0 / NGyro / (NGyro + 1.0) )		
-			deltaGyroModule =  sqrt( gyroRPS.x * gyroRPS.x + gyroRPS.y * gyroRPS.y + gyroRPS.z * gyroRPS.z ) - GyroModuleFilt;
-			// filter gyro with alfa/beta
-			GyroModulePrimFilt = GyroModulePrimFilt + betaGyroModule * deltaGyroModule / dtGyr;
-			GyroModuleFilt = GyroModuleFilt + alfaGyroModule * deltaGyroModule + GyroModulePrimFilt * dtGyr;
-			// aysmétric filter with fast raise and slow decay
+			GyroModule.Update( NGyro, dtGyr, gyroRPSx.Filt() * gyroRPSx.Filt() + gyroRPSy.Filt() * gyroRPSy.Filt() + gyroRPSz.Filt() * gyroRPSz.Filt(), 0.0 );
+			// asymetric filter with fast raise and slow decay
 			#define fcGyroLevel 3.0 // 3Hz low pass to filter 
 			#define fcGL1 (40.0/(40.0+fcGyroLevel))
 			#define fcGL2 (1.0-fcGL1)		
-			if ( GyroModulePrimLevel < abs(GyroModulePrimFilt) ) {
-				GyroModulePrimLevel = abs(GyroModulePrimFilt);
+			if ( GyroModulePrimLevel < abs(GyroModule.Prim()) ) {
+				GyroModulePrimLevel = abs(GyroModule.Prim());
 			} else {
-				GyroModulePrimLevel = fcGL1 * GyroModulePrimLevel +  fcGL2 * abs(GyroModulePrimFilt);
+				GyroModulePrimLevel = fcGL1 * GyroModulePrimLevel +  fcGL2 * abs(GyroModule.Prim());
 			}			
 			// Estimate gyro bias and gravity up to 10 times, except if doing Lab test then only one estimation is performed
 			if ( (BIAS_Init < 10 && !LABtest) || BIAS_Init < 1 ) {
@@ -1261,9 +1232,9 @@ static void processIMU(void *pvParameters)
 						gyrostable++;
 						// during first 2.5 seconds, initialize gyro and gravity data
 						if ( gyrostable < 100 ) {
-							GxBias = gyroRPS.x;
-							GyBias = gyroRPS.y;
-							GzBias = gyroRPS.z;
+							GxBias = gyroRPSx.Filt();
+							GyBias = gyroRPSy.Filt();
+							GzBias = gyroRPSz.Filt();
 							Gravx = accelISUNEDBODY.x;
 							Gravy = accelISUNEDBODY.y;
 							Gravz = accelISUNEDBODY.z;
@@ -1272,9 +1243,9 @@ static void processIMU(void *pvParameters)
 							// between 2.5 seconds and 22.5 seconds, accumulate gyro and gravity data
 							if ( gyrostable <900 ) {
 								averagecount++;
-								GxBias += gyroRPS.x;
-								GyBias += gyroRPS.y;
-								GzBias += gyroRPS.z;
+								GxBias += gyroRPSx.Filt();
+								GyBias += gyroRPSy.Filt();
+								GzBias += gyroRPSz.Filt();
 								Gravx += accelISUNEDBODY.x;
 								Gravy += accelISUNEDBODY.y;
 								Gravz += accelISUNEDBODY.z;
@@ -1593,6 +1564,8 @@ void readSensors(void *pvParameters){
 	float VhPrev = 0.0;
 	float VhAvg = 0.0;
 	float VhHeading = 0.0;
+	
+	AlphaBeta OATemp;
 
 	#define DSR 15 // maximum number of samples spacing to compute wind.
 	int16_t tickDSR = 1;
@@ -1656,29 +1629,10 @@ void readSensors(void *pvParameters){
 		}
 		if ( dynP < 60.0 ) dynP = 0.0; // TODO decide if a dynP should be aboce certain value to be valid
 		dynamicP = dynP; // for compatibility with Eckhard code
-		
-		// Estimate OAT using standard temperature and difference between standard temperature and temperature of the day
-		// Because of EMI risks on the OAT sensor, which can create large OAT variations and therefore altitude and TAS variations, the idea is to
-		// track OAT using standard temperature and a bias which is the difference between standard temperature and OAT
-		// This bias is filtered to reduce effect of short term OAT spikes and is added to standard temperature to obtain a filtered temperature of teh day.
 
-		if ( !HasISATempBias ) { // initialize  temp bias first time
-			ISATemp = 15.0 - ( (altitude.get()/100) * 0.65 );
-			ISATempBias = OAT.get() - ISATemp;
-			OATemp = ISATemp + ISATempBias;			
-			HasISATempBias = true;
-			ESP_LOGI(FNAME,"OAT: %0.1f ISATempBias: %0.1f  Altitude %0.1f", OAT.get(),ISATempBias, altitude.get() );
-		} else {
-			if ( !(count % 10) ) {	// evaluation performed only every second
-				ISATemp = 15.0 - ( (altitude.get()/100) * 0.65 );
-				if (dynP < 100.0) { // when on ground fast update of temp bias
-					ISATempBias = ISATempBias * 0.9 + (OAT.get() - ISATemp) * 0.1;
-				} else { // flying slow update of temp bias
-					ISATempBias = ISATempBias * 0.99 + (OAT.get() - ISATemp) * 0.01;
-				}
-				OATemp = ISATemp + ISATempBias;
-			}
-		}
+		#define NOAT 200 //  Filter parameter pseudo period ~ 20.0 seconds
+		#define ThresholdOAT 10.0 // remove outiliers 10° away from average temperature		
+		OATemp.Update( NOAT, dtStat, OAT.get(), ThresholdOAT);
 		
 		// get MPU temp
 		MPUtempcel = MPU.getTemperature();
@@ -1722,33 +1676,15 @@ void readSensors(void *pvParameters){
 		
 		// MOD#4 gyro bias
 		// update filters with filter coefficients = 5 and dt = 0.1 second
-		GnssVx.Update( 5, 0.1, chosenGnss->speed.x);
-		GnssVy.Update( 5, 0.1, chosenGnss->speed.y);		
-		GnssVx.Update( 5, 0.1, chosenGnss->speed.y);
+		#define NGNSS 4 //  Filter parameter pseudo period ~ 0.4 seconds
+		#define ThresholdGNSSOutliers 10.0 // remove outiliers 10.0 m/s away from signal		
+		GnssVx.Update( NGNSS, 0.1, chosenGnss->speed.x, ThresholdGNSSOutliers);
+		GnssVy.Update( NGNSS, 0.1, chosenGnss->speed.y, ThresholdGNSSOutliers);		
+		GnssVx.Update( NGNSS, 0.1, chosenGnss->speed.y, ThresholdGNSSOutliers);
 		
-		#ifdef COMPUTEBIAS
-		// alpha/beta filter on GNSS route to reduce noise and get route variation
-		// GNSSRoute and GNSSRoutePrim are only computed if TAS > 15 m/s
-		/*
-		#define NGNSS 7.0 // GNSS alpha/beta. Sample rate is 0 Hz = 0.1 second
-		#define alphaGNSSRoute (2.0 * (2.0 * NGNSS - 1.0) / NGNSS / (NGNSS + 1.0))
-		#define betaGNSSRoute (6.0 / NGNSS / (NGNSS + 1.0))		
-		if ( TAS > 15.0 ) {
-			deltaGNSSRoute = GNSSRouteraw - GNSSRoute;
-			if ( deltaGNSSRoute > 180.0 ) deltaGNSSRoute = deltaGNSSRoute - 360.0;
-			if ( deltaGNSSRoute < -180.0 ) deltaGNSSRoute = deltaGNSSRoute + 360.0;			
-			GNSSRoutePrim = GNSSRoutePrim + betaGNSSRoute * deltaGNSSRoute / dtStat;
-			GNSSRoute = GNSSRoute + alphaGNSSRoute * deltaGNSSRoute + GNSSRoutePrim * PERIOD10HZ;	//TODO consider changing 0.1 with actual GNSS time difference
-		} else {
-			GNSSRoutePrim = 0.0;
-			GNSSRoute = 0.0;
-		}
-		*/
-		#endif
-
 		// compute CAS, ALT and Vzbaro using alpha/beta filters.  TODO consider using atmospher.h functions
 		if (statP > 500.0) {
-			Rho = (100.0 * statP / 287.058 / (273.15 + OATemp));
+			Rho = (100.0 * statP / 287.058 / (273.15 + OATemp.Filt()));
 		} else {
 			Rho = RhoSLISA;
 		}
@@ -1767,7 +1703,7 @@ void readSensors(void *pvParameters){
 		#define NALT 8.0 // ALT alpha/beta coeff
 		#define alphaALT (2.0 * (2.0 * NALT - 1.0) / NALT / (NALT + 1.0))
 		#define betaALT (6.0 / NALT / (NALT + 1.0) )	
-		ALTraw = (1.0 - pow( (statP-(QNH.get()-1013.25)) * 0.000986923 , 0.1902891634 ) ) * (273.15 + OATemp) * 153.846153846;
+		ALTraw = (1.0 - pow( (statP-(QNH.get()-1013.25)) * 0.000986923 , 0.1902891634 ) ) * (273.15 + OATemp.Filt()) * 153.846153846;
 		if ( FirsTimeSensor > 0 ) { // initialize Altitude and Energy filters
 			ALT = ALTraw;
 			ALTbi = ALT;
@@ -2313,7 +2249,7 @@ void readSensors(void *pvParameters){
 					(int32_t)(BiasAoB*1000),
 					(int32_t)(RTKNproj*1000),(int32_t)(RTKEproj*1000),(int32_t)(-RTKUproj*1000),(int32_t)(RTKheading*10),
 					// $S2 stream
-					(int16_t)(OATemp*10.0), (int16_t)(OAT.get()*10.0), (int16_t)(MPUtempcel*10.0), chosenGnss->fix, chosenGnss->numSV,
+					(int16_t)(OATemp.Filt()*10.0), (int16_t)(OAT.get()*10.0), (int16_t)(MPUtempcel*10.0), chosenGnss->fix, chosenGnss->numSV,
 					(int32_t)(GroundGyroBias.x*100000.0), (int32_t)(GroundGyroBias.y*100000.0), (int32_t)(GroundGyroBias.z*100000.0),				
 					(int32_t)(BiasQuatGx*100000.0), (int32_t)(BiasQuatGy*100000.0), (int32_t)(BiasQuatGz*100000.0),
 					(int32_t)(GRAVITY*10000.0),(int16_t)BIAS_Init,(int16_t)(XCVTemp*10.0), (int16_t) NEnergy, (int16_t) (PeriodVelbi*10)
