@@ -499,11 +499,11 @@ void AlphaBeta::Update(int N, float dt, float RawData, float Threshold) {
 		if ( N != previousN ) {
 			alpha =  (2.0 * (2.0 * N - 1.0) / N / (N + 1.0));
 			beta = (6.0 / N / (N + 1.0));
-			fc2lowpass = N * dt;
+			fc2lowpass = dt / N;
 			fc1lowpass = 1.0 - fc2lowpass;
 		}
 		RawDataLP = RawDataLP * fc1lowpass + RawData * fc2lowpass;		
-		if ( (Threshold == 0) || ((RawData - RawDataLP) < Threshold )) {
+		if ( (Threshold == 0.0) || (abs(RawData - RawDataLP) < Threshold )) {
 			delta = RawData - filt;
 			prim = prim + beta * delta / dt;
 			filt = filt + alpha * delta + prim * dt;
@@ -1197,7 +1197,7 @@ static void processIMU(void *pvParameters)
 		if ( TAS < 15.0 ) {
 			// compute acceleration module variation
 			#define NAccel 6.0 // accel alpha/beta filter coeff
-			AccelModule.Update(NAccel, dtGyr, accelISUNEDBODY.x * accelISUNEDBODY.x + accelISUNEDBODY.y * accelISUNEDBODY.y + accelISUNEDBODY.z * accelISUNEDBODY.z, 0.0  );
+			AccelModule.Update(NAccel, dtGyr, sqrt(accelISUNEDBODY.x * accelISUNEDBODY.x + accelISUNEDBODY.y * accelISUNEDBODY.y + accelISUNEDBODY.z * accelISUNEDBODY.z), 0.0  );
 			// asysmetric filter with fast raise and slow decay
 			#define fcAccelLevel 3.0 // 3Hz low pass to filter 
 			#define fcAL1 (40.0/(40.0+fcAccelLevel))
@@ -1206,11 +1206,10 @@ static void processIMU(void *pvParameters)
 				AccelModulePrimLevel = abs(AccelModule.Prim());
 			} else {
 				AccelModulePrimLevel = fcAL1 * AccelModulePrimLevel +  fcAL2 * abs(AccelModule.Prim());
-			}	
-			
+			}
 			// compute gyro module variation
 			#define NGyro 6.0 // gyro alpha/beta coeff
-			GyroModule.Update( NGyro, dtGyr, gyroRPSx.Filt() * gyroRPSx.Filt() + gyroRPSy.Filt() * gyroRPSy.Filt() + gyroRPSz.Filt() * gyroRPSz.Filt(), 0.0 );
+			GyroModule.Update( NGyro, dtGyr, sqrt(gyroRPSx.Filt() * gyroRPSx.Filt() + gyroRPSy.Filt() * gyroRPSy.Filt() + gyroRPSz.Filt() * gyroRPSz.Filt()), 0.0 );
 			// asymetric filter with fast raise and slow decay
 			#define fcGyroLevel 3.0 // 3Hz low pass to filter 
 			#define fcGL1 (40.0/(40.0+fcGyroLevel))
@@ -1219,7 +1218,8 @@ static void processIMU(void *pvParameters)
 				GyroModulePrimLevel = abs(GyroModule.Prim());
 			} else {
 				GyroModulePrimLevel = fcGL1 * GyroModulePrimLevel +  fcGL2 * abs(GyroModule.Prim());
-			}			
+			}	
+			
 			// Estimate gyro bias and gravity up to 10 times, except if doing Lab test then only one estimation is performed
 			if ( (BIAS_Init < 10 && !LABtest) || BIAS_Init < 1 ) {
 				// When MPU temperature is controled and temperature is locked   or   when there is no temperature control
@@ -1632,8 +1632,8 @@ void readSensors(void *pvParameters){
 
 		#define NOAT 200 //  Filter parameter pseudo period ~ 20.0 seconds
 		#define ThresholdOAT 10.0 // remove outiliers 10° away from average temperature		
-		OATemp.Update( NOAT, dtStat, OAT.get(), ThresholdOAT);
-		
+		OATemp.Update( NOAT, dtStat, OAT.get(), ThresholdOAT );
+
 		// get MPU temp
 		MPUtempcel = MPU.getTemperature();
 		
@@ -2017,15 +2017,15 @@ void readSensors(void *pvParameters){
 			ias.set( cas );  // low pass filter
 		}		
 		
-		/* // TODO remove unecessary code for flgiht test
+		// TODO remove unecessary code for flgiht test
 		xSemaphoreTake(xMutex,portMAX_DELAY );
 
-		float te = bmpVario.readTE( tasraw );
+		float te = bmpVario.readTE( TAS );
 		if( (int( te_vario.get()*20 +0.5 ) != int( te*20 +0.5)) || !(count%10) ){  // a bit more fine granular updates than 0.1 m/s as of sound
 			te_vario.set( te );  // max 10x per second
 		}
 		xSemaphoreGive(xMutex);
-		*/ // TODO remove unecessary code for flgiht test
+		// TODO remove unecessary code for flgiht test
 		
 		// ESP_LOGI(FNAME,"count %d ccp %d", count, ccp );
 		if( !(count % ccp) ) {
