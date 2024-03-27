@@ -1,8 +1,8 @@
 // compile options
 //
-//#define LS6
+#define LS6
 //#define TAURUS
-#define VENTUS3
+//#define VENTUS3
 //
 #define COMPUTEBIAS   // code to estimate gyro bias
 //
@@ -501,6 +501,7 @@ void AlphaBeta::Update(int N, float dt, float RawData, float Threshold) {
 			beta = (6.0 / N / (N + 1.0));
 			fc2lowpass = 1.0 / N;
 			fc1lowpass = 1.0 - fc2lowpass;
+			previousN = N;
 		}
 		RawDataLP = RawDataLP * fc1lowpass + RawData * fc2lowpass;		
 		if ( (Threshold == 0.0) || (abs(RawData - RawDataLP) < Threshold )) {
@@ -694,10 +695,10 @@ void drawDisplay(void *pvParameters){
 				// ESP_LOGI(FNAME,"TE=%2.3f", te_vario.get() );
 // modif gfm affichage d'une tension batterie nulle tant que les biais gyros n'ont pas été initialisés
 				if (  (BIAS_Init > 0)  || (TAS > 15.0) ){
-					display->drawDisplay( airspeed, TotalEnergy.Filt() /*te_vario.get()*/,  TotalEnergyAvg/*aTE*/, polar_sink, altitude.get(), t, battery, s2f_delta, as2f, average_climb.get(), Switch::getCruiseState(), gflags.standard_setting, flap_pos.get() );
+					display->drawDisplay( airspeed, TotalEnergy.Filt() /*te_vario.get()*/, AverageTotalEnergy.Filt()/*aTE*/, polar_sink, altitude.get(), t, battery, s2f_delta, as2f, average_climb.get(), Switch::getCruiseState(), gflags.standard_setting, flap_pos.get() );
 				}	
 				else {
-					display->drawDisplay( airspeed,  TotalEnergy.Filt() /*te_vario.get()*/, TotalEnergyAvg /*aTE*/, polar_sink, altitude.get(), t, 0.0, s2f_delta, as2f, average_climb.get(), Switch::getCruiseState(), gflags.standard_setting, flap_pos.get() );
+					display->drawDisplay( airspeed,  TotalEnergy.Filt() /*te_vario.get()*/, AverageTotalEnergy.Filt() /*aTE*/, polar_sink, altitude.get(), t, 0.0, s2f_delta, as2f, average_climb.get(), Switch::getCruiseState(), gflags.standard_setting, flap_pos.get() );
 				}
 // fin modif gfm
 				}
