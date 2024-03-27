@@ -1,8 +1,8 @@
 // compile options
 //
-#define LS6
+//#define LS6
 //#define TAURUS
-//#define VENTUS3
+#define VENTUS3
 //
 #define COMPUTEBIAS   // code to estimate gyro bias
 //
@@ -373,10 +373,10 @@ static float XCVTemp=15.0;//External temperature for MPU temp control
 
 #define RhoSLISA 1.225
 static float Rho;
-static float CASraw;
-static float deltaCAS;
-static float CASprim = 0.0;
-static float CAS = 0.0;
+//static float CASraw;
+//static float deltaCAS;
+//static float CASprim = 0.0;
+// static float CAS = 0.0;
 static float Rhocorr = RhoSLISA;
 static float TAS = 0.0;
 static float TASprim;
@@ -384,11 +384,11 @@ static float ALTraw;
 static float deltaALT;
 static float ALTPrim = 0.0;
 static float Vzbaro = 0.0;
-static float ALT = 0.0;
-static float EnergyFilt = 0.0;
-static float deltaTE;
-static float TEPrim = 0.0;
-static float TEFilt = 0.0;
+// static float ALT = 0.0;
+// static float EnergyFilt = 0.0;
+// static float deltaTE;
+// static float TEPrim = 0.0;
+//static float TEFilt = 0.0;
 
 float NEnergy = 10.0;
 float alphaEnergy;
@@ -466,8 +466,11 @@ extern UbloxGnssDecoder s2UbloxGnssDecoder;
 class AlphaBeta {
 	public:
 		void Update(int N, float dt, float RawData, float Threshold);
+		void Update(int N, float dt, float RawData);		
 		float Prim(void);
+		float Prim(float PrimMin, float PrimMax);
 		float Filt(void);
+		float Filt(float FiltMin, float FiltMax);
 
 	private:
 		float delta;
@@ -485,9 +488,27 @@ class AlphaBeta {
 float AlphaBeta::Prim(void) {
 	return prim;
 }
+
+float AlphaBeta::Prim(float PrimMin, float PrimMax) {
+	if ( prim < PrimMin ) prim = PrimMin;
+	if ( prim > PrimMax ) prim = PrimMax;
+	return prim;
+}
+
 float AlphaBeta::Filt(void) {
 	return filt;
-}		
+}
+
+float AlphaBeta::Filt(float FiltMin, float FiltMax ) {
+	if (filt < FiltMin ) filt = FiltMin;
+	if (filt > FiltMax ) filt = FiltMax;
+	return filt;
+}
+
+void AlphaBeta::Update(int N, float dt, float RawData) {
+	AlphaBeta::Update( N, dt, RawData, 0.0 );
+}
+		
 void AlphaBeta::Update(int N, float dt, float RawData, float Threshold) {
 	if (firstpass || (N == 0) ) {
 		delta = 0.0;
@@ -519,6 +540,8 @@ AlphaBeta RollAHRS, PitchAHRS;
 AlphaBeta GnssVx, GnssVy, GnssVz;
 // declare alpha beta filters for Energy and average Energy calculations
 AlphaBeta Energy, TotalEnergy, AverageTotalEnergy;
+// declare alpha beta for CAS and TAS
+AlphaBeta CAS, ALT;
 
 #define GYRO_FS (mpud::GYRO_FS_250DPS)
 
@@ -1200,7 +1223,7 @@ static void processIMU(void *pvParameters)
 		if ( TAS < 15.0 ) {
 			// compute acceleration module variation
 			#define NAccel 6.0 // accel alpha/beta filter coeff
-			AccelModule.Update(NAccel, dtGyr, sqrt(accelISUNEDBODY.x * accelISUNEDBODY.x + accelISUNEDBODY.y * accelISUNEDBODY.y + accelISUNEDBODY.z * accelISUNEDBODY.z), 0.0  );
+			AccelModule.Update(NAccel, dtGyr, sqrt(accelISUNEDBODY.x * accelISUNEDBODY.x + accelISUNEDBODY.y * accelISUNEDBODY.y + accelISUNEDBODY.z * accelISUNEDBODY.z) );
 			// asysmetric filter with fast raise and slow decay
 			#define fcAccelLevel 3.0 // 3Hz low pass to filter 
 			#define fcAL1 (40.0/(40.0+fcAccelLevel))
@@ -1212,7 +1235,7 @@ static void processIMU(void *pvParameters)
 			}
 			// compute gyro module variation
 			#define NGyro 6.0 // gyro alpha/beta coeff
-			GyroModule.Update( NGyro, dtGyr, sqrt(gyroRPSx.Filt() * gyroRPSx.Filt() + gyroRPSy.Filt() * gyroRPSy.Filt() + gyroRPSz.Filt() * gyroRPSz.Filt()), 0.0 );
+			GyroModule.Update( NGyro, dtGyr, sqrt(gyroRPSx.Filt() * gyroRPSx.Filt() + gyroRPSy.Filt() * gyroRPSy.Filt() + gyroRPSz.Filt() * gyroRPSz.Filt()) );
 			// asymetric filter with fast raise and slow decay
 			#define fcGyroLevel 3.0 // 3Hz low pass to filter 
 			#define fcGL1 (40.0/(40.0+fcGyroLevel))
@@ -1692,6 +1715,7 @@ void readSensors(void *pvParameters){
 		} else {
 			Rho = RhoSLISA;
 		}
+		/* old CAS solution
 		#define NCAS 8.0 // CAS alpha/beta filter coeff
 		#define alphaCAS (2.0 * (2.0 * NCAS - 1.0) / NCAS / (NCAS + 1.0))
 		#define betaCAS (6.0 / NCAS / (NCAS + 1.0) )
@@ -1700,10 +1724,14 @@ void readSensors(void *pvParameters){
 		CASprim = CASprim + betaCAS * deltaCAS / dtdynP;
 		CAS = CAS + alphaCAS * deltaCAS + CASprim * dtdynP;
 		if (CAS < 0.0) CAS = 0.0;
-		Rhocorr = sqrt(RhoSLISA/Rho);
-		TAS = Rhocorr * CAS;
-		TASprim = Rhocorr * CASprim;
+		*/
+		#define NCAS 8.0 // CAS alpha/beta filter coeff
+		CAS.Update( NCAS, dtdynP, sqrt(2 * dynP / RhoSLISA) );
 		
+		Rhocorr = sqrt(RhoSLISA/Rho);
+		TAS = Rhocorr * CAS.Filt( 0.0, 100.0 );
+		TASprim = Rhocorr * CAS.Prim( -10.0, 10.0 );
+		/* old ALT
 		#define NALT 8.0 // ALT alpha/beta coeff
 		#define alphaALT (2.0 * (2.0 * NALT - 1.0) / NALT / (NALT + 1.0))
 		#define betaALT (6.0 / NALT / (NALT + 1.0) )	
@@ -1724,9 +1752,14 @@ void readSensors(void *pvParameters){
 			ALTPrim = ALTPrim + betaALT * deltaALT / dtStat;
 			ALT = ALT + alphaALT * deltaALT + ALTPrim * dtStat;
 		}
+		*/
+		#define NALT 8.0 // ALT alpha/beta coeff
+		#define MaxAltVariation 3.0 // ALT max variation during dt = 0.1S ( 3.0/0.1 = 30m/s)
+		ALT.Update( NALT, dtStat, (1.0 - pow( (statP-(QNH.get()-1013.25)) * 0.000986923 , 0.1902891634 ) ) * (273.15 + OATemp.Filt()) * 153.846153846, MaxAltVariation );
+		
 		// in glider operation, gaining altitude and energy is considered positive. However in NED representation vertical axis is positive pointing down.
 		// therefore Vzbaro in NED is the opposite of altitude variation.
-		Vzbaro = - ALTPrim;
+		Vzbaro = -ALT.Prim(-30.0, 30.0);
 		
 		// compute AoA (Angle of attack) and AoB (Angle od slip)
 		#define FreqAlpha 0.7 // Hz
@@ -1737,13 +1770,13 @@ void readSensors(void *pvParameters){
 		#define fcAoB2 (1.0-fcAoB1)		
 		WingLoad = gross_weight.get() / polar_wingarea.get();  // should be only computed when pilot change weight settings in XCVario
 		xSemaphoreTake( dataMutex, 2/portTICK_PERIOD_MS ); // prevent data conflicts for 1ms max.		
-		if ( (dynP>100.0) && (CAS>10.0) && (TAS>10.0) && (abs(accelISUNEDBODY.z) > 1.0) ) { // compute AoA and AoB only when dynamic pressure is above 100 Pa, CAS & TAS abobe 10m/s and accel z above 1 m/s²
+		if ( (dynP>100.0) && (CAS.Filt() >10.0) && (TAS>10.0) && (abs(accelISUNEDBODY.z) > 1.0) ) { // compute AoA and AoB only when dynamic pressure is above 100 Pa, CAS & TAS abobe 10m/s and accel z above 1 m/s²
 			AccelzFiltAoA = 0.8 * AccelzFiltAoA + 0.2 * accelISUNEDBODY.z; // simple ~3 Hz low pass on accel z
-			CL = -AccelzFiltAoA * 2 / RhoSLISA * WingLoad / CAS / CAS;
+			CL = -AccelzFiltAoA * 2 / RhoSLISA * WingLoad / CAS.Filt() / CAS.Filt();
 			dAoA = ( CL - prevCL ) / CLA;
 			prevCL = CL;
 			if (abs(AccelzFiltAoA) > 1.0) { //when not close to Az=0, hybridation of aoa from drag & aoa from lift
-				AoARaw = -(accelISUNEDBODY.x / accelISUNEDBODY.z) - Speed2Fly.cw( CAS ) / Speed2Fly.getN();
+				AoARaw = -(accelISUNEDBODY.x / accelISUNEDBODY.z) - Speed2Fly.cw( CAS.Filt() ) / Speed2Fly.getN();
 				AoA = fcAoA1 * ( AoA + dAoA ) + fcAoA2 * AoARaw ;
 			}  else { //when  close to Az=0, only aoa from lift considered
                 AoA = ( AoA + dAoA ) ;
@@ -1848,7 +1881,7 @@ void readSensors(void *pvParameters){
 		EnergyFilt = EnergyFilt + alphaTE * deltaEnergy + EnergyPrim * dtStat;
 		*/
 		#define NTE 8.0 // ALT alpha/beta coeff
-		Energy.Update( NTE, dtStat, ( TASbiSquare / GRAVITY / 2.0 ), 0.0 );
+		Energy.Update( NTE, dtStat, ( TASbiSquare / GRAVITY / 2.0 ) );
 
 		/* old version
 		// filter total energy variation for display to pilot
@@ -1864,7 +1897,7 @@ void readSensors(void *pvParameters){
 		#define fcTEAvg2 ( 1.0 - fcTEAvg1 )			
 		TotalEnergyAvg = fcTEAvg1 * TotalEnergyAvg + fcTEAvg2 * TotalEnergy;
 		*/
-		AverageTotalEnergy.Update( 200, 0.1, TotalEnergy.Filt(), 0.0 );
+		AverageTotalEnergy.Update( 200, 0.1, TotalEnergy.Filt() );
 
 		#ifdef COMPUTEWIND
 		// TODO test and optimze wind calculation
@@ -2022,7 +2055,7 @@ void readSensors(void *pvParameters){
 			// ESP_LOGI(FNAME,"AS: %f m/s, CURSL: %f°, SLIP: %f", as, -accelG[1]*K / (as*as), slipAngle );
 		} */ // TODO replace Eckhard code with flight test values
 		
-		cas = CAS * 3.6;
+		cas = CAS.Filt() * 3.6;
 		if( (int( ias.get()+0.5 ) != int( cas+0.5 ) ) || !(count%20) ){
 			ias.set( cas );  // low pass filter
 		}		
@@ -2241,7 +2274,7 @@ void readSensors(void *pvParameters){
 					statTime, (int32_t)(statP*100.0),(int32_t)(teP*100.0), (int16_t)(dynP*10), 
 					(int64_t)(chosenGnss->time*1000.0), (int16_t)(chosenGnss->speed.x*100), (int16_t)(chosenGnss->speed.y*100), (int16_t)(chosenGnss->speed.z*100), (int16_t)(GNSSRouteraw*10),
 					(int32_t)(Pitch*1000.0), (int32_t)(Roll*1000.0), (int32_t)(Yaw*1000.0),
-					(int32_t)(CAS*100), (int32_t)(TAS*100), (int32_t)(ALT*100), (int32_t)(Vzbaro*100),
+					(int32_t)(CAS.Filt()*100), (int32_t)(TAS*100), (int32_t)(ALT.Filt()*100), (int32_t)(Vzbaro*100),
 					(int32_t)(AoA*1000), (int32_t)(AoB*1000),
 					(int32_t)(Ubi*100), (int32_t)(Vbi*100),(int32_t)(Wbi*100), (int32_t)(Vzbi*100),				
 					(int32_t)(TotalEnergy.Filt()*100),
@@ -2273,7 +2306,7 @@ void readSensors(void *pvParameters){
 					statTime, (int32_t)(statP*100.0),(int32_t)(teP*100.0), (int16_t)(dynP*10), 
 					(int64_t)(chosenGnss->time*1000.0), (int16_t)(chosenGnss->speed.x*100), (int16_t)(chosenGnss->speed.y*100), (int16_t)(chosenGnss->speed.z*100), (int16_t)(GNSSRouteraw*10),
 					(int32_t)(Pitch*1000.0), (int32_t)(Roll*1000.0), (int32_t)(Yaw*1000.0),
-					(int32_t)(CAS*100), (int32_t)(TAS*100), (int32_t)(ALT*100), (int32_t)(Vzbaro*100),
+					(int32_t)(CAS.Filt()*100), (int32_t)(TAS*100), (int32_t)(ALT.Filt()*100), (int32_t)(Vzbaro*100),
 					(int32_t)(AoA*1000), (int32_t)(AoB*1000),
 					(int32_t)(Ubi*100), (int32_t)(Vbi*100),(int32_t)(Wbi*100), (int32_t)(Vzbi*100),				
 					(int32_t)(TotalEnergy.Filt()*100),
