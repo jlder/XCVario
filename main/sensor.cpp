@@ -1,8 +1,8 @@
 // compile options
 //
-//#define LS6
+#define LS6
 //#define TAURUS
-#define VENTUS3
+//#define VENTUS3
 //
 #define COMPUTEBIAS   // code to estimate gyro bias
 //
@@ -1426,8 +1426,6 @@ static void processIMU(void *pvParameters)
 			xSemaphoreGive( BTMutex );
 		} 
 		
-		Router::routeXCV();		
-
 		mtick++;
 		
 		vTaskDelayUntil(&xLastWakeTime_mpu, 25/portTICK_PERIOD_MS);  // 25 ms = 40 Hz loop
