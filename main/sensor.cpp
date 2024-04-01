@@ -521,7 +521,7 @@ public:
 };
 
 // MOD#3 alpha beta class end
-
+/*
 class LowPass {
 private:
 	float c, a1, a2, a3, b1, b2 = 0.0; // filter parameters
@@ -548,6 +548,43 @@ public:
         return output;
     }
 };
+*/
+
+class LowPassFilter {
+private:
+    float x1, x2, y1, y2 = 0.0; // Past inputs and outputs
+	float output;
+    float RC = 0.0;
+	float alpha = 1.0; // Filter coefficients
+	float beta = 0.0; 
+	bool firstpass = true; // bool to initialize parameters at first pass
+public:
+    void Update(float cutoffFreq, float dt, float input ) {
+        if ( dt!= 0.0 ) {
+			if ( firstpass == true ) {
+				RC = 1.0 / (2 * 3.14159265358979323846 / dt);
+				alpha = dt / (RC + dt);
+				beta = RC / (RC + dt);
+				x1 = input;
+				x2 = input;
+				y1 = input;
+				y2 = input;
+				firstpass = false;
+			}
+			output = alpha * (input + x1) + beta * y1 + beta * x2 - alpha * y2;
+			x2 = x1;
+			x1 = input;
+			y2 = y1;
+			y1 = output;
+		} else {
+			output = input;
+		}
+    }
+	float LowPass() {
+		return output;
+	}
+	
+ };
 
 
 // declare alpha beta filters classes for AHRS roll and pitch
@@ -558,6 +595,8 @@ AlphaBeta GnssVx, GnssVy, GnssVz;
 AlphaBeta Energy, TotalEnergy, AverageTotalEnergy;
 // declare alpha beta for CAS and TAS
 AlphaBeta CAS, ALT;
+// declare low pass filter for GyroBiasx,y and z
+LowPassFilter GyroBiasx, GyroBiasy, GyroBiasz;
 
 #define GYRO_FS (mpud::GYRO_FS_250DPS)
 
@@ -819,7 +858,6 @@ float deltaGx;
 float deltaGy;
 float deltaGz;
 float GyrxzAmplitudeKdyn = 0.0;
-AlphaBeta GyroBiasx, GyroBiasy, GyroBiasz; // MOD#4 gyro bias
 float GnssTrack;// MOD#4 gyro bias
 float PseudoHeadingPrim;// MOD#4 gyro bias
 
@@ -836,21 +874,20 @@ float PseudoHeadingPrim;// MOD#4 gyro bias
 	#define RollLimit 0.175 // max lateral gravity acceleration (normalized acceleration) for 10° roll
 	#define PitchLimit 0.175 // max longitudinal gravity acceleration (normalized acceleration) for 10° pitch
 	#define GMaxBias 0.005 // limit biais correction to 5 mrad/s
-	#define NGyrBias 3000 //  very long term average ~ 300 seconds
-	#define ThresholdGyrOutliers 0.1 // remove outiliers 0.1 rad/s away from signal
+	#define GyroCutoffFrequency 0.001 //  0.001 Hz to achieve a very long term average ~ 100 seconds
 	if ( TAS > 15.0 && RollLimit < abs(halfvy) && PitchLimit < abs(halfvx) ) {
 		// compute Gx - d(roll)/dt and Gy - d(pitch)/dt long term average.
-		GyroBiasx.Update( NGyrBias, dt, gxraw - RollAHRS.Prim(), ThresholdGyrOutliers );
-		GyroBiasy.Update( NGyrBias, dt, gyraw - PitchAHRS.Prim(), ThresholdGyrOutliers );		
+		GyroBiasx.Update( GyroCutoffFrequency, dt, gxraw - RollAHRS.Prim() );
+		GyroBiasy.Update( GyroCutoffFrequency, dt, gyraw - PitchAHRS.Prim() );		
 		// compute pseudo heading from GNSS
 		GnssTrack = atan2( GnssVx.Filt(), GnssVy.Filt() );
 		PseudoHeadingPrim = ( GnssVy.Prim() * cos(GnssTrack) - GnssVx.Prim() * sin(GnssTrack) ) / TAS;
 		// compute Gz - pseudo heading variation long term average.		
-		GyroBiasz.Update( NGyrBias, dt, gzraw - PseudoHeadingPrim, ThresholdGyrOutliers );		
+		GyroBiasz.Update( GyroCutoffFrequency, dt, gzraw - PseudoHeadingPrim );		
 		// limit bias estimation	
-		if ( abs(GyroBiasx.Filt()) > GMaxBias ) Bias_Gx = copysign( GMaxBias, GyroBiasx.Filt()) ;
-		if ( abs(GyroBiasy.Filt()) > GMaxBias ) Bias_Gy = copysign( GMaxBias, GyroBiasy.Filt()) ;		
-		if ( abs(GyroBiasz.Filt()) > GMaxBias ) Bias_Gz = copysign( GMaxBias, GyroBiasz.Filt()) ;		
+		if ( abs(GyroBiasx.LowPass()) > GMaxBias ) Bias_Gx = copysign( GMaxBias, GyroBiasx.LowPass()) ;
+		if ( abs(GyroBiasy.LowPass()) > GMaxBias ) Bias_Gy = copysign( GMaxBias, GyroBiasy.LowPass()) ;		
+		if ( abs(GyroBiasz.LowPass()) > GMaxBias ) Bias_Gz = copysign( GMaxBias, GyroBiasz.LowPass()) ;		
 	}
 	// MOD#4 gyro bias end
 	#endif
@@ -1071,15 +1108,15 @@ static void processIMU(void *pvParameters)
 			gyroRPS = mpud::gyroRadPerSec(gyroRaw, GYRO_FS); // convert raw gyro to Gyro_FS full scale in radians per second
 			#define MaxGyroVariation 1.0 // TDB if need to change for other gliders, in particular for motor gliders
 			#define MaxAccelVariation 10.0 // TDB if need to change for other gliders, in particular for motor gliders
-			#define NMPU 5.0 // MPU alpha/beta filter coeff			
+			#define NMPU 6.0 // MPU alpha/beta filter coeff			
 			gyroRPSx.Update(NMPU, dtGyr, gyroRPS.x, MaxGyroVariation);
 			gyroRPSy.Update(NMPU, dtGyr, gyroRPS.y, MaxGyroVariation);			
 			gyroRPSz.Update(NMPU, dtGyr, gyroRPS.z, MaxGyroVariation);
 			// convert gyro coordinates to ISU : rad/s NED MPU and remove bias
 			xSemaphoreTake( dataMutex, 2/portTICK_PERIOD_MS ); // prevent data conflicts for 2ms max.			
-			gyroISUNEDMPU.x = -(GyroRPSFilt.z - GroundGyroBias.z);
-			gyroISUNEDMPU.y = -(GyroRPSFilt.y - GroundGyroBias.y);
-			gyroISUNEDMPU.z = -(GyroRPSFilt.x - GroundGyroBias.x);
+			gyroISUNEDMPU.x = -(gyroRPSz.Filt() - GroundGyroBias.z);
+			gyroISUNEDMPU.y = -(gyroRPSy.Filt() - GroundGyroBias.y);
+			gyroISUNEDMPU.z = -(gyroRPSx.Filt() - GroundGyroBias.x);
 			// convert NEDMPU to NEDBODY			
 			gyroISUNEDBODY.x = C_T * gyroISUNEDMPU.x + STmultSS * gyroISUNEDMPU.y + STmultCS * gyroISUNEDMPU.z;
 			gyroISUNEDBODY.y = C_S * gyroISUNEDMPU.y - S_S * gyroISUNEDMPU.z;
