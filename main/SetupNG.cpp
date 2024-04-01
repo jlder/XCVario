@@ -247,7 +247,7 @@ SetupNG<int>  			rt_s1_can( "S2_TX_CAN", 0, false, SYNC_NONE, VOLATILE );
 SetupNG<int>  			serial1_tx_inverted( "SERIAL2_TX_INV", RS232_INVERTED );
 SetupNG<int>  			serial1_rx_inverted( "SERIAL2_RX_INV", RS232_INVERTED );
 SetupNG<int>  			serial1_tx_enable( "SER1_TX_ENA", 1 );
-SetupNG<int>  			serial2_speed( "SERIAL1_SPEED", 5 ); // 57600 pbs for Ublox GNSS
+SetupNG<int>  			serial2_speed( "SERIAL1_SPEED", 6 ); // 115200 bps for Skytraq RTK PX1122R or Allystar TAU1201
 SetupNG<int>  			serial2_pins_twisted( "SERIAL1_PINS", 0 );
 SetupNG<int>  			serial2_tx( "SERIAL1_TX", 0 );     //  BT device and XCVario, Serial2 is foreseen for Protocols or Kobo
 SetupNG<int>  			rt_s2_xcv( "S1_TX_XCV", 1, false, SYNC_NONE, VOLATILE );
