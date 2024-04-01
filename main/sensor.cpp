@@ -464,75 +464,91 @@ extern UbloxGnssDecoder s2UbloxGnssDecoder;
 // MOD#3 alpha beta class begin
 // alpha beta filter class
 class AlphaBeta {
-	public:
-		void Update(int N, float dt, float RawData, float Threshold);
-		void Update(int N, float dt, float RawData);		
-		float Prim(void);
-		float Prim(float PrimMin, float PrimMax);
-		float Filt(void);
-		float Filt(float FiltMin, float FiltMax);
-
-	private:
-		float delta;
-		float prim;
-		float filt;
-		float alpha;
-		float beta;
-		bool firstpass = true;
-		int previousN = 0;
-		float fc1lowpass;
-		float fc2lowpass;
-		float RawDataLP;
-};
-
-float AlphaBeta::Prim(void) {
-	return prim;
-}
-
-float AlphaBeta::Prim(float PrimMin, float PrimMax) {
-	if ( prim < PrimMin ) prim = PrimMin;
-	if ( prim > PrimMax ) prim = PrimMax;
-	return prim;
-}
-
-float AlphaBeta::Filt(void) {
-	return filt;
-}
-
-float AlphaBeta::Filt(float FiltMin, float FiltMax ) {
-	if (filt < FiltMin ) filt = FiltMin;
-	if (filt > FiltMax ) filt = FiltMax;
-	return filt;
-}
-
-void AlphaBeta::Update(int N, float dt, float RawData) {
-	AlphaBeta::Update( N, dt, RawData, 0.0 );
-}
-		
-void AlphaBeta::Update(int N, float dt, float RawData, float Threshold) {
-	if (firstpass || (N == 0) ) {
-		delta = 0.0;
-		prim = 0.0;
-		filt = RawData;
-		RawDataLP = RawData;
-		firstpass = false;
-	} else {
-		if ( N != previousN ) {
-			alpha =  (2.0 * (2.0 * N - 1.0) / N / (N + 1.0));
-			beta = (6.0 / N / (N + 1.0));
-			fc2lowpass = 1.0 / N;
-			fc1lowpass = 1.0 - fc2lowpass;
-			previousN = N;
-		}
-		RawDataLP = RawDataLP * fc1lowpass + RawData * fc2lowpass;		
-		if ( (Threshold == 0.0) || (abs(RawData - RawDataLP) < Threshold )) {
-			delta = RawData - filt;
-			prim = prim + beta * delta / dt;
-			filt = filt + alpha * delta + prim * dt;
+private:
+	float delta = 0.0;
+	float prim = 0.0;
+	float filt = 0.0;
+	float alpha = 0.0;
+	float beta = 0.0;
+	bool firstpass = true;
+	int previousN = 0;
+	float fc1lowpass = 1.0;
+	float fc2lowpass = 0.0;
+	float RawDataLP = 0.0;	
+public:
+	void Update(int N, float dt, float RawData) {
+		Update( N, dt, RawData, 0.0 );
+	}
+	void Update(int N, float dt, float RawData, float Threshold) {
+		if (firstpass || (N == 0) ) {
+			delta = 0.0;
+			prim = 0.0;
+			filt = RawData;
+			RawDataLP = RawData;
+			firstpass = false;
+		} else {
+			if ( N != previousN ) {
+				alpha =  (2.0 * (2.0 * N - 1.0) / N / (N + 1.0));
+				beta = (6.0 / N / (N + 1.0));
+				fc2lowpass = 1.0 / N;
+				fc1lowpass = 1.0 - fc2lowpass;
+				previousN = N;
+			}
+			RawDataLP = RawDataLP * fc1lowpass + RawData * fc2lowpass;		
+			if ( (Threshold == 0.0) || (abs(RawData - RawDataLP) < Threshold )) {
+				delta = RawData - filt;
+				prim = prim + beta * delta / dt;
+				filt = filt + alpha * delta + prim * dt;
+			}
 		}
 	}
-}
+	float Prim(void) {
+		return prim;
+	}
+	float Prim(float PrimMin, float PrimMax) {
+		if ( prim < PrimMin ) prim = PrimMin;
+		if ( prim > PrimMax ) prim = PrimMax;
+		return prim;
+	}
+	float Filt(void) {
+		return filt;
+	}
+	float Filt(float FiltMin, float FiltMax ) {
+		if (filt < FiltMin ) filt = FiltMin;
+		if (filt > FiltMax ) filt = FiltMax;
+		return filt;
+	}
+};
+
 // MOD#3 alpha beta class end
+
+class LowPass {
+private:
+	float c, a1, a2, a3, b1, b2 = 0.0; // filter parameters
+    float x1, x2, y1, y2 = 0.0; // Past inputs and outputs
+	bool firstpass = true; // bool to initialize parameters at first pass
+public:
+    float process(float cutoffFreq, float dt, float input) {
+		if (firstpass == true ) {
+			// initialize filter parameters
+			c = 1.0 / tan(3.14159265358979323846 * cutoffFreq * dt);
+			a1 = 1.0 / (1.0 + sqrt(2.0) * c + c * c);
+			a2 = 2 * a1;
+			a3 = a1;
+			b1 = 2.0 * (1.0 - c * c) * a1;
+			b2 = (1.0 - sqrt(2.0) * c + c * c) * a1;
+			float x1, x2, y1, y2 = input; // initialize filter data with current input
+			firstpass = false;
+		}
+        double output = a1 * input + a2 * x1 + a3 * x2 - b1 * y1 - b2 * y2;
+        x2 = x1;
+        x1 = input;
+        y2 = y1;
+        y1 = output;
+        return output;
+    }
+};
+
 
 // declare alpha beta filters classes for AHRS roll and pitch
 AlphaBeta RollAHRS, PitchAHRS;
