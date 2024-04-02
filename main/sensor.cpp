@@ -1091,7 +1091,7 @@ static void processIMU(void *pvParameters)
 			gyroCorr.y = gyroISUNEDBODY.y;// + BiasQuatGy;  // error on y should be added
 			gyroCorr.z = gyroISUNEDBODY.z;// + BiasQuatGz;  // error on z should be removed
 			//xSemaphoreGive( dataMutex );
-			if ( gyroCorr.x == PrevgyroRPS.x && gyroCorr.y == PrevgyroRPS.y && gyroCorr.z == PrevgyroRPS.z ) {
+			if ( abs(gyroCorr.x - PrevgyroRPS.x)*100000 < 1.0 && abs(gyroCorr.y - PrevgyroRPS.y)*100000 < 1.0 && abs(gyroCorr.z - PrevgyroRPS.z)*100000 < 1.0 ) {
 				Alarm++;
 				if ( Alarm > 10 ) {
 					if( !gflags.gload_alarm ) {
@@ -1798,6 +1798,10 @@ void readSensors(void *pvParameters){
 		// in glider operation, gaining altitude and energy is considered positive. However in NED representation vertical axis is positive pointing down.
 		// therefore Vzbaro in NED is the opposite of altitude variation.
 		Vzbaro = -ALT.Prim(-30.0, 30.0);
+		
+		//sprintf(str,"$PB altitude, time : %lld, statP : %.4f, QNH.get() : %.4f, OATemp.Filt() : %.4f, Sensor OAT.get() : %.4f, Altitude : %.4f, Vzbaro : %.4f\r\n",
+		//			statTime, statP, QNH.get(), OATemp.Filt(), OAT.get(), ALT.Filt(), Vzbaro );					
+		//Router::sendXCV(str);		
 		
 		// compute AoA (Angle of attack) and AoB (Angle od slip)
 		#define FreqAlpha 0.7 // Hz
