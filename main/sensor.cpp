@@ -470,52 +470,44 @@ private:
 	float filt = 0.0;
 	float alpha = 0.0;
 	float beta = 0.0;
-	bool firstpass = true;
+	int ABinit = 10;
 	float fc1lowpass = 1.0;
 	float fc2lowpass = 0.0;
 	float RawDataLP = 0.0;
-	float DT = 0.0;
 public:
 	void Update(float N, float dt, float RawData) {
 		Update( N, dt, RawData, 0.0 );
 	}
 	void Update(float N, float dt, float RawData, float Threshold) {
-		if ( N != 0.0  || dt != 0.0 ) {
-			if ( firstpass ) {
-				filt = RawData;
-				alpha =  (2.0 * (2.0 * N - 1.0) / N / (N + 1.0));
-				beta = (6.0 / N / (N + 1.0));
-				RawDataLP = RawData;
-				fc2lowpass = 1.0 / (N * 6.28);
-				fc1lowpass = 1.0 - fc2lowpass;
-				firstpass = false;
-			}
-			RawDataLP = RawDataLP * fc1lowpass + RawData * fc2lowpass;		
-			if ( (Threshold == 0.0) || (abs(RawData - RawDataLP) < Threshold )) {
-				DT = DT + dt; // adjust DT in case a outiliers to avoid eroneous prim calculation
-				delta = RawData - filt;
-				prim = prim + beta * delta / DT;
-				filt = filt + alpha * delta + prim * DT;
-				DT = 0;
+		if ( (N != 0.0) && (dt != 0.0) ) {
+			if ( ABinit > 1 ) {
+				ABinit--;
 			} else {
-				DT = DT + dt; // accumulate dt in case of outliers
+				if ( ABinit == 1 ) {
+					filt = RawData;
+					alpha =  (2.0 * (2.0 * N - 1.0) / N / (N + 1.0));
+					beta = (6.0 / N / (N + 1.0));
+					RawDataLP = RawData;
+					fc2lowpass = 1.0 / (N * 6.28);
+					fc1lowpass = 1.0 - fc2lowpass;
+					ABinit = 0;
+				} else {
+					RawDataLP = RawDataLP * fc1lowpass + RawData * fc2lowpass;		
+					if ( (Threshold == 0.0) || (abs(RawData - RawDataLP) < Threshold )) {
+						delta = RawData - filt;
+						prim = prim + beta * delta / dt;
+						filt = filt + alpha * delta + prim * dt;
+					} else {
+						prim = 0.0;
+					}
+				}
 			}
 		}
 	}
 	float Prim(void) {
 		return prim;
 	}
-	float Prim(float PrimMin, float PrimMax) {
-		if ( prim < PrimMin ) prim = PrimMin;
-		if ( prim > PrimMax ) prim = PrimMax;
-		return prim;
-	}
 	float Filt(void) {
-		return filt;
-	}
-	float Filt(float FiltMin, float FiltMax ) {
-		if (filt < FiltMin ) filt = FiltMin;
-		if (filt > FiltMax ) filt = FiltMax;
 		return filt;
 	}
 };
@@ -1128,7 +1120,7 @@ static void processIMU(void *pvParameters)
 			//xSemaphoreTake( dataMutex, 1/portTICK_PERIOD_MS ); // prevent data conflicts for 1ms max.				
 			// convert from MPU to BODY
 			accelISUNEDBODY.x = C_T * accelISUNEDMPUx.Filt() + STmultSS * accelISUNEDMPUy.Filt() + STmultCS * accelISUNEDMPUz.Filt() + ( gyroCorr.y * gyroCorr.y + gyroCorr.z * gyroCorr.z ) * DistCGVario;
-			accelISUNEDBODY.y = C_S * accelISUNEDMPUx.Filt() - S_S * accelISUNEDMPUz.Filt();
+			accelISUNEDBODY.y = C_S * accelISUNEDMPUy.Filt() - S_S * accelISUNEDMPUz.Filt();
 			accelISUNEDBODY.z = -S_T * accelISUNEDMPUx.Filt() + SSmultCT * accelISUNEDMPUy.Filt() + CTmultCS * accelISUNEDMPUz.Filt();
 			//xSemaphoreGive( dataMutex );
 		}
@@ -1695,9 +1687,9 @@ void readSensors(void *pvParameters){
 		if ( dynP < 60.0 ) dynP = 0.0; // TODO decide if a dynP should be aboce certain value to be valid
 		dynamicP = dynP; // for compatibility with Eckhard code
 
-		#define NOAT 200 //  Filter parameter pseudo period ~ 20.0 seconds
-		#define ThresholdOAT 10.0 // remove outiliers 10° away from average temperature		
-		OATemp.Update( NOAT, dtStat, OAT.get(), ThresholdOAT );
+		#define NOAT 20 //  Filter parameter pseudo period ~ 20.0 seconds
+		#define ThresholdOAT 20.0 // remove outiliers 10° away from average temperature		
+		OATemp.Update( NOAT, 1.0, OAT.get(), ThresholdOAT );
 
 		// get MPU temp
 		MPUtempcel = MPU.getTemperature();
@@ -1741,7 +1733,7 @@ void readSensors(void *pvParameters){
 		
 		// MOD#4 gyro bias
 		// update filters with filter coefficients = 5 and dt = 0.1 second
-		#define NGNSS 4 //  Filter parameter pseudo period ~ 0.4 seconds
+		#define NGNSS 6 //  Filter parameter pseudo period ~ 0.4 seconds
 		#define ThresholdGNSSOutliers 10.0 // remove outiliers 10.0 m/s away from signal		
 		GnssVx.Update( NGNSS, 0.1, chosenGnss->speed.x, ThresholdGNSSOutliers);
 		GnssVy.Update( NGNSS, 0.1, chosenGnss->speed.y, ThresholdGNSSOutliers);		
@@ -1767,8 +1759,8 @@ void readSensors(void *pvParameters){
 		CAS.Update( NCAS, dtdynP, sqrt(2 * dynP / RhoSLISA) );
 		
 		Rhocorr = sqrt(RhoSLISA/Rho);
-		TAS = Rhocorr * CAS.Filt( 0.0, 100.0 );
-		TASprim = Rhocorr * CAS.Prim( -10.0, 10.0 );
+		TAS = Rhocorr * CAS.Filt();
+		TASprim = Rhocorr * CAS.Prim();
 		/* old ALT
 		#define NALT 8.0 // ALT alpha/beta coeff
 		#define alphaALT (2.0 * (2.0 * NALT - 1.0) / NALT / (NALT + 1.0))
@@ -1797,7 +1789,7 @@ void readSensors(void *pvParameters){
 		
 		// in glider operation, gaining altitude and energy is considered positive. However in NED representation vertical axis is positive pointing down.
 		// therefore Vzbaro in NED is the opposite of altitude variation.
-		Vzbaro = -ALT.Prim(-30.0, 30.0);
+		Vzbaro = -ALT.Prim();
 		
 		//sprintf(str,"$PB altitude, time : %lld, statP : %.4f, QNH.get() : %.4f, OATemp.Filt() : %.4f, Sensor OAT.get() : %.4f, Altitude : %.4f, Vzbaro : %.4f\r\n",
 		//			statTime, statP, QNH.get(), OATemp.Filt(), OAT.get(), ALT.Filt(), Vzbaro );					
@@ -2405,14 +2397,14 @@ void readTemp(void *pvParameters){
 				}
 				// ESP_LOGI(FNAME,"temperature=%2.1f", temperature );
 				delta_temperature = t - temperature; // TODO below are filters to remove or limit effects of OAT outliers (due to EMI on sensor in one experiment). We put dust under the carpet!!!
-				if ( abs(delta_temperature) > 50.0 ) {
-					delta_temperature = 0; // remove large outliers
-					if ( abs(temperature) > abs(t) ) {
-					temperature = t; // if temperature is an outlier (during init with GNSS?) reset temperature to last sensor value
-					}
-				}
-				if ( delta_temperature > 0.1 )  delta_temperature = 0.1; // limit temperature variation to 0.1°C /s in case of outliers within "normal" temperature range.
-				if ( delta_temperature < -0.1 )  delta_temperature = -0.1;				
+				//if ( abs(delta_temperature) > 50.0 ) {
+				//	delta_temperature = 0; // remove large outliers
+				//	if ( abs(temperature) > abs(t) ) {
+				//	temperature = t; // if temperature is an outlier (during init with GNSS?) reset temperature to last sensor value
+				//	}
+				//}
+				//if ( delta_temperature > 0.1 )  delta_temperature = 0.1; // limit temperature variation to 0.1°C /s in case of outliers within "normal" temperature range.
+				//if ( delta_temperature < -0.1 )  delta_temperature = -0.1;				
 				temperature =  temperature + 0.25 * delta_temperature; // A bit low pass as strategy against toggling
 				if( abs(temperature - temp_prev) > 0.1 ){
 					OAT.set( std::round(temperature*10)/10 );
