@@ -1037,6 +1037,8 @@ static void processIMU(void *pvParameters)
 	float YawInit = 0.0;
 	int16_t AttitudeInit = 0;
 	
+	int Alarm = 0;
+	
 	// initialize prevgyrotime
 	prevgyroTime = esp_timer_get_time()/1000.0;
 	PrevgyroRPS.x = 0.0;
@@ -1075,14 +1077,8 @@ static void processIMU(void *pvParameters)
 			gyroRPSx.Update(NMPU, dtGyr, gyroRPS.x, MaxGyroVariation);
 			gyroRPSy.Update(NMPU, dtGyr, gyroRPS.y, MaxGyroVariation);			
 			gyroRPSz.Update(NMPU, dtGyr, gyroRPS.z, MaxGyroVariation);
-			//sprintf(str,"$Test gyr, time: %lld, dt: %.4f, RPS: %.4f, RPS Filt: %.4f, ISUNEDMPU: %.4f, ISUNEDBODY: %.4f, Corr: %.4f\r\n",
-			//			gyroTime, dtGyr, gyroRPS.x, gyroRPSx.Filt(), gyroISUNEDMPU.x, gyroISUNEDBODY.x, gyroCorr.x );					
-			//Router::sendXCV(str);			
-			
-			
-			
 			// convert gyro coordinates to ISU : rad/s NED MPU and remove bias
-			xSemaphoreTake( dataMutex, 2/portTICK_PERIOD_MS ); // prevent data conflicts for 2ms max.			
+			//xSemaphoreTake( dataMutex, 1/portTICK_PERIOD_MS ); // prevent data conflicts for 1ms max.			
 			gyroISUNEDMPU.x = -(gyroRPSz.Filt() - GroundGyroBias.z);
 			gyroISUNEDMPU.y = -(gyroRPSy.Filt() - GroundGyroBias.y);
 			gyroISUNEDMPU.z = -(gyroRPSx.Filt() - GroundGyroBias.x);
@@ -1094,7 +1090,29 @@ static void processIMU(void *pvParameters)
 			gyroCorr.x = gyroISUNEDBODY.x;// + BiasQuatGx;  // error on x should be added
 			gyroCorr.y = gyroISUNEDBODY.y;// + BiasQuatGy;  // error on y should be added
 			gyroCorr.z = gyroISUNEDBODY.z;// + BiasQuatGz;  // error on z should be removed
-			xSemaphoreGive( dataMutex );			
+			//xSemaphoreGive( dataMutex );
+			if ( gyroCorr.x == PrevgyroRPS.x && gyroCorr.y == PrevgyroRPS.y && gyroCorr.z == PrevgyroRPS.z ) {
+				Alarm++;
+				if ( Alarm > 10 ) {
+					if( !gflags.gload_alarm ) {
+						Audio::alarm( true );
+						gflags.gload_alarm = true;
+					}
+				}
+			} else {
+				Alarm=0;
+				if( gflags.gload_alarm ) {
+					Audio::alarm( false );
+					gflags.gload_alarm = false;
+				}					
+			}
+			PrevgyroRPS.x = gyroCorr.x;
+			PrevgyroRPS.y = gyroCorr.y;
+			PrevgyroRPS.z = gyroCorr.z;
+				
+			//sprintf(str,"$Test gyr, time: %lld, dt: %.4f, RPS: %.4f, RPS Filt: %.4f, ISUNEDMPU: %.4f, ISUNEDBODY: %.4f, Corr: %.4f\r\n",
+			//			gyroTime, dtGyr, gyroRPS.x, gyroRPSx.Filt(), gyroISUNEDMPU.x, gyroISUNEDBODY.x, gyroCorr.x );					
+			//Router::sendXCV(str);				
 		}
 		// get accel data
 		if( MPU.acceleration(&accelRaw) == ESP_OK ){ // read raw acceleration
@@ -1107,12 +1125,12 @@ static void processIMU(void *pvParameters)
 			accelISUNEDMPUx.Update(NMPU, dtGyr, RawaccelISUNEDMPU.x, MaxAccelVariation);
 			accelISUNEDMPUy.Update(NMPU, dtGyr, RawaccelISUNEDMPU.y, MaxAccelVariation);			
 			accelISUNEDMPUz.Update(NMPU, dtGyr, RawaccelISUNEDMPU.z, MaxAccelVariation);
-			xSemaphoreTake( dataMutex, 2/portTICK_PERIOD_MS ); // prevent data conflicts for 2ms max.				
+			//xSemaphoreTake( dataMutex, 1/portTICK_PERIOD_MS ); // prevent data conflicts for 1ms max.				
 			// convert from MPU to BODY
 			accelISUNEDBODY.x = C_T * accelISUNEDMPUx.Filt() + STmultSS * accelISUNEDMPUy.Filt() + STmultCS * accelISUNEDMPUz.Filt() + ( gyroCorr.y * gyroCorr.y + gyroCorr.z * gyroCorr.z ) * DistCGVario;
 			accelISUNEDBODY.y = C_S * accelISUNEDMPUx.Filt() - S_S * accelISUNEDMPUz.Filt();
 			accelISUNEDBODY.z = -S_T * accelISUNEDMPUx.Filt() + SSmultCT * accelISUNEDMPUy.Filt() + CTmultCS * accelISUNEDMPUz.Filt();
-			xSemaphoreGive( dataMutex );
+			//xSemaphoreGive( dataMutex );
 		}
 		
 		// attitude initialization when XCVario starts during first 10 iterations 
@@ -1137,11 +1155,11 @@ static void processIMU(void *pvParameters)
 			if (!CALstream) { // if not in calibration mode MOD#8
 				if ( TAS > 15.0 ) {	// Update IMU, only consider centrifugal forces if TAS > 15 m/s
 					// estimate gravity in body frame taking into account centrifugal corrections
-					xSemaphoreTake( dataMutex, 2/portTICK_PERIOD_MS ); // prevent data conflicts for 2ms max.
+					//xSemaphoreTake( dataMutex, 2/portTICK_PERIOD_MS ); // prevent data conflicts for 2ms max.
 					gravISUNEDBODY.x = accelISUNEDBODY.x - gyroCorr.y * TASbi * AoA + gyroCorr.z * TASbi * (+AoB) - UbiPrim; // MOD#1 Latest signs 
 					gravISUNEDBODY.y = accelISUNEDBODY.y - gyroCorr.z * TASbi + gyroCorr.x * TASbi * AoA;
 					gravISUNEDBODY.z = accelISUNEDBODY.z + gyroCorr.y * TASbi - gyroCorr.x * TASbi * (+AoB); // MOD#1 Latest signs 
-					xSemaphoreGive( dataMutex );
+					//xSemaphoreGive( dataMutex );
 				} else {
 					// estimate gravity in body frame using accels only
 					gravISUNEDBODY.x = accelISUNEDBODY.x;
@@ -1185,12 +1203,12 @@ static void processIMU(void *pvParameters)
 				GravIMU.y = -GRAVITY * 2.0 * (q2 * q3 + q0 * q1);
 				GravIMU.z = -GRAVITY * (q0 * q0 - q1 * q1 - q2 * q2 + q3 * q3);
 				// compute kinetic accelerations using accelerations, corrected with gravity and centrifugal accels
-				xSemaphoreTake( dataMutex, 2/portTICK_PERIOD_MS ); // prevent data conflicts for 2ms max.
+				//xSemaphoreTake( dataMutex, 1/portTICK_PERIOD_MS ); // prevent data conflicts for 1ms max.
 				
 				UiPrim = accelISUNEDBODY.x - GravIMU.x - gyroCorr.y * TASbi * AoA + gyroCorr.z * TASbi * (+AoB); // MOD#1 Latest signs 
 				ViPrim = accelISUNEDBODY.y - GravIMU.y - gyroCorr.z * TASbi + gyroCorr.x * TASbi * AoA;			
 				WiPrim = accelISUNEDBODY.z - GravIMU.z + gyroCorr.y * TASbi - gyroCorr.x * TASbi * (+AoB); // MOD#1 Latest signs
-				xSemaphoreGive( dataMutex );			
+				//xSemaphoreGive( dataMutex );			
 				// UiPrim = accelISUNEDBODY.x - GravIMU.x - gyroCorr.y * Wbi + gyroCorr.z * Vbi;
 				// ViPrim = accelISUNEDBODY.y - GravIMU.y - gyroCorr.z * Ubi + gyroCorr.x * Wbi;			
 				// WiPrim = accelISUNEDBODY.z - GravIMU.z + gyroCorr.y * Ubi - gyroCorr.x * Vbi;			
@@ -1222,7 +1240,7 @@ static void processIMU(void *pvParameters)
 				}
 				fcVelbi1 = ( DynPeriodVelbi / ( DynPeriodVelbi + dtGyr ));
 				fcVelbi2 = ( 1.0 - fcVelbi1 );
-				xSemaphoreTake( dataMutex, 2/portTICK_PERIOD_MS ); // prevent data conflicts for 2ms max.			
+				//xSemaphoreTake( dataMutex, 1/portTICK_PERIOD_MS ); // prevent data conflicts for 1ms max.			
 				UbiPrim = fcVelbi1 * ( UbiPrim + UiPrimPrimS * dtGyr ) + fcVelbi2 * UbPrimS;
 				VbiPrim = fcVelbi1 * ( VbiPrim + ViPrimPrimS * dtGyr ) + fcVelbi2 * VbPrimS;			
 				WbiPrim = fcVelbi1 * ( WbiPrim + WiPrimPrimS * dtGyr ) + fcVelbi2 * WbPrimS;
@@ -1236,7 +1254,7 @@ static void processIMU(void *pvParameters)
 				TASbiSquare = Ubi * Ubi + Vbi * Vbi + Wbi * Wbi;
 				TASbi = sqrt( TASbiSquare );
 				
-				xSemaphoreGive( dataMutex );
+				//xSemaphoreGive( dataMutex );
 			}
 		}
 
@@ -1443,9 +1461,9 @@ static void processIMU(void *pvParameters)
 				(int32_t)(gyroISUNEDBODY.x*100000.0), (int32_t)(gyroISUNEDBODY.y*100000.0),(int32_t)(gyroISUNEDBODY.z*100000.0),
 				(int32_t) ProcessTimeIMU
 				); 
-			xSemaphoreTake( BTMutex, 2/portTICK_PERIOD_MS ); // prevent BT conflicts for 2ms max.
+			//xSemaphoreTake( BTMutex, 2/portTICK_PERIOD_MS ); // prevent BT conflicts for 2ms max.
 			Router::sendXCV(str);
-			xSemaphoreGive( BTMutex );
+			//xSemaphoreGive( BTMutex );
 		} 
 		
 		mtick++;
@@ -1789,7 +1807,7 @@ void readSensors(void *pvParameters){
 		#define fcAoB1 (10.0/(10.0+FreqBeta))
 		#define fcAoB2 (1.0-fcAoB1)		
 		WingLoad = gross_weight.get() / polar_wingarea.get();  // should be only computed when pilot change weight settings in XCVario
-		xSemaphoreTake( dataMutex, 2/portTICK_PERIOD_MS ); // prevent data conflicts for 1ms max.		
+		//xSemaphoreTake( dataMutex, 2/portTICK_PERIOD_MS ); // prevent data conflicts for 1ms max.		
 		if ( (dynP>100.0) && (CAS.Filt() >10.0) && (TAS>10.0) && (abs(accelISUNEDBODY.z) > 1.0) ) { // compute AoA and AoB only when dynamic pressure is above 100 Pa, CAS & TAS abobe 10m/s and accel z above 1 m/s²
 			AccelzFiltAoA = 0.8 * AccelzFiltAoA + 0.2 * accelISUNEDBODY.z; // simple ~3 Hz low pass on accel z
 			CL = -AccelzFiltAoA * 2 / RhoSLISA * WingLoad / CAS.Filt() / CAS.Filt();
@@ -1851,7 +1869,7 @@ void readSensors(void *pvParameters){
 		Vybi = cosRoll * Vbi - sinRoll * Wbi;
 		Vzbi = -sinPitch * Ubi + sinRoll * cosPitch * Vbi + cosRoll * cosPitch * Wbi;
 
-		xSemaphoreGive( dataMutex );
+		//xSemaphoreGive( dataMutex );
 		
 		// TODO update comment when better solution found
 		// option 1
@@ -2317,9 +2335,9 @@ void readSensors(void *pvParameters){
 					(int32_t)(BiasQuatGx*100000.0), (int32_t)(BiasQuatGy*100000.0), (int32_t)(BiasQuatGz*100000.0),
 					(int32_t)(GRAVITY*10000.0),(int16_t)BIAS_Init,(int16_t)(XCVTemp*10.0), (int16_t) NEnergy, (int16_t) (PeriodVelbi*10)
 					);
-				xSemaphoreTake( BTMutex, 2/portTICK_PERIOD_MS );				
+				//xSemaphoreTake( BTMutex, 2/portTICK_PERIOD_MS );				
 				Router::sendXCV(str);
-				xSemaphoreGive( BTMutex );				
+				//xSemaphoreGive( BTMutex );				
 			} else {
 				// send $S1 only every 100ms
 				sprintf(str,"$S1,%lld,%i,%i,%i,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$S3,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",
@@ -2344,9 +2362,9 @@ void readSensors(void *pvParameters){
 					(int32_t)(BiasAoB*1000),
 					(int32_t)(RTKNproj*1000),(int32_t)(RTKEproj*1000),(int32_t)(-RTKUproj*1000),(int32_t)(RTKheading*10)				
 				);
-				xSemaphoreTake( BTMutex, 2/portTICK_PERIOD_MS );				
+				//xSemaphoreTake( BTMutex, 2/portTICK_PERIOD_MS );				
 				Router::sendXCV(str);
-				xSemaphoreGive( BTMutex );				
+				//xSemaphoreGive( BTMutex );				
 			}
 		}
 		Router::routeXCV();
