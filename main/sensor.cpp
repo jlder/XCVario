@@ -471,34 +471,34 @@ private:
 	float alpha = 0.0;
 	float beta = 0.0;
 	bool firstpass = true;
-	int previousN = 0;
 	float fc1lowpass = 1.0;
 	float fc2lowpass = 0.0;
-	float RawDataLP = 0.0;	
+	float RawDataLP = 0.0;
+	float DT = 0.0;
 public:
-	void Update(int N, float dt, float RawData) {
+	void Update(float N, float dt, float RawData) {
 		Update( N, dt, RawData, 0.0 );
 	}
-	void Update(int N, float dt, float RawData, float Threshold) {
-		if (firstpass || (N == 0) ) {
-			delta = 0.0;
-			prim = 0.0;
-			filt = RawData;
-			RawDataLP = RawData;
-			firstpass = false;
-		} else {
-			if ( N != previousN ) {
+	void Update(float N, float dt, float RawData, float Threshold) {
+		if ( N != 0.0  || dt != 0.0 ) {
+			if ( firstpass ) {
+				filt = RawData;
 				alpha =  (2.0 * (2.0 * N - 1.0) / N / (N + 1.0));
 				beta = (6.0 / N / (N + 1.0));
-				fc2lowpass = 1.0 / N;
+				RawDataLP = RawData;
+				fc2lowpass = 1.0 / (N * 6.28);
 				fc1lowpass = 1.0 - fc2lowpass;
-				previousN = N;
+				firstpass = false;
 			}
 			RawDataLP = RawDataLP * fc1lowpass + RawData * fc2lowpass;		
 			if ( (Threshold == 0.0) || (abs(RawData - RawDataLP) < Threshold )) {
+				DT = DT + dt; // adjust DT in case a outiliers to avoid eroneous prim calculation
 				delta = RawData - filt;
-				prim = prim + beta * delta / dt;
-				filt = filt + alpha * delta + prim * dt;
+				prim = prim + beta * delta / DT;
+				filt = filt + alpha * delta + prim * DT;
+				DT = 0;
+			} else {
+				DT = DT + dt; // accumulate dt in case of outliers
 			}
 		}
 	}
@@ -521,67 +521,30 @@ public:
 };
 
 // MOD#3 alpha beta class end
-/*
-class LowPass {
-private:
-	float c, a1, a2, a3, b1, b2 = 0.0; // filter parameters
-    float x1, x2, y1, y2 = 0.0; // Past inputs and outputs
-	bool firstpass = true; // bool to initialize parameters at first pass
-public:
-    float process(float cutoffFreq, float dt, float input) {
-		if (firstpass == true ) {
-			// initialize filter parameters
-			c = 1.0 / tan(3.14159265358979323846 * cutoffFreq * dt);
-			a1 = 1.0 / (1.0 + sqrt(2.0) * c + c * c);
-			a2 = 2 * a1;
-			a3 = a1;
-			b1 = 2.0 * (1.0 - c * c) * a1;
-			b2 = (1.0 - sqrt(2.0) * c + c * c) * a1;
-			float x1, x2, y1, y2 = input; // initialize filter data with current input
-			firstpass = false;
-		}
-        double output = a1 * input + a2 * x1 + a3 * x2 - b1 * y1 - b2 * y2;
-        x2 = x1;
-        x1 = input;
-        y2 = y1;
-        y1 = output;
-        return output;
-    }
-};
-*/
 
 class LowPassFilter {
 private:
-    float x1, x2, y1, y2 = 0.0; // Past inputs and outputs
-	float output;
+	float output1 = 0.0;
+	float output2 = 0.0;
     float RC = 0.0;
 	float alpha = 1.0; // Filter coefficients
 	float beta = 0.0; 
 	bool firstpass = true; // bool to initialize parameters at first pass
 public:
-    void Update(float cutoffFreq, float dt, float input ) {
+    void Update(float cutoffperiod, float dt, float input ) {
         if ( dt!= 0.0 ) {
 			if ( firstpass == true ) {
-				RC = 1.0 / (2 * 3.14159265358979323846 / dt);
-				alpha = dt / (RC + dt);
-				beta = RC / (RC + dt);
-				x1 = input;
-				x2 = input;
-				y1 = input;
-				y2 = input;
+				RC = cutoffperiod / 6.28;
+				alpha = RC / (RC + dt);
+				beta = 1.0 - alpha;
 				firstpass = false;
 			}
-			output = alpha * (input + x1) + beta * y1 + beta * x2 - alpha * y2;
-			x2 = x1;
-			x1 = input;
-			y2 = y1;
-			y1 = output;
-		} else {
-			output = input;
+			output1 = alpha * output1 + beta * input;
+			output2 = alpha * output2 + beta * output1;
 		}
     }
 	float LowPass() {
-		return output;
+		return output2;
 	}
 	
  };
@@ -874,16 +837,16 @@ float PseudoHeadingPrim;// MOD#4 gyro bias
 	#define RollLimit 0.175 // max lateral gravity acceleration (normalized acceleration) for 10° roll
 	#define PitchLimit 0.175 // max longitudinal gravity acceleration (normalized acceleration) for 10° pitch
 	#define GMaxBias 0.005 // limit biais correction to 5 mrad/s
-	#define GyroCutoffFrequency 0.001 //  0.001 Hz to achieve a very long term average ~ 100 seconds
+	#define GyroCutoffPeriod 700 //  very long term average ~ 700 seconds
 	if ( TAS > 15.0 && RollLimit < abs(halfvy) && PitchLimit < abs(halfvx) ) {
 		// compute Gx - d(roll)/dt and Gy - d(pitch)/dt long term average.
-		GyroBiasx.Update( GyroCutoffFrequency, dt, gxraw - RollAHRS.Prim() );
-		GyroBiasy.Update( GyroCutoffFrequency, dt, gyraw - PitchAHRS.Prim() );		
+		GyroBiasx.Update( GyroCutoffPeriod, dt, gxraw - RollAHRS.Prim() );
+		GyroBiasy.Update( GyroCutoffPeriod, dt, gyraw - PitchAHRS.Prim() );		
 		// compute pseudo heading from GNSS
 		GnssTrack = atan2( GnssVx.Filt(), GnssVy.Filt() );
 		PseudoHeadingPrim = ( GnssVy.Prim() * cos(GnssTrack) - GnssVx.Prim() * sin(GnssTrack) ) / TAS;
 		// compute Gz - pseudo heading variation long term average.		
-		GyroBiasz.Update( GyroCutoffFrequency, dt, gzraw - PseudoHeadingPrim );		
+		GyroBiasz.Update( GyroCutoffPeriod, dt, gzraw - PseudoHeadingPrim );		
 		// limit bias estimation	
 		if ( abs(GyroBiasx.LowPass()) > GMaxBias ) Bias_Gx = copysign( GMaxBias, GyroBiasx.LowPass()) ;
 		if ( abs(GyroBiasy.LowPass()) > GMaxBias ) Bias_Gy = copysign( GMaxBias, GyroBiasy.LowPass()) ;		
@@ -1112,6 +1075,12 @@ static void processIMU(void *pvParameters)
 			gyroRPSx.Update(NMPU, dtGyr, gyroRPS.x, MaxGyroVariation);
 			gyroRPSy.Update(NMPU, dtGyr, gyroRPS.y, MaxGyroVariation);			
 			gyroRPSz.Update(NMPU, dtGyr, gyroRPS.z, MaxGyroVariation);
+			//sprintf(str,"$Test gyr, time: %lld, dt: %.4f, RPS: %.4f, RPS Filt: %.4f, ISUNEDMPU: %.4f, ISUNEDBODY: %.4f, Corr: %.4f\r\n",
+			//			gyroTime, dtGyr, gyroRPS.x, gyroRPSx.Filt(), gyroISUNEDMPU.x, gyroISUNEDBODY.x, gyroCorr.x );					
+			//Router::sendXCV(str);			
+			
+			
+			
 			// convert gyro coordinates to ISU : rad/s NED MPU and remove bias
 			xSemaphoreTake( dataMutex, 2/portTICK_PERIOD_MS ); // prevent data conflicts for 2ms max.			
 			gyroISUNEDMPU.x = -(gyroRPSz.Filt() - GroundGyroBias.z);
