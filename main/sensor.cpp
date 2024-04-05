@@ -483,6 +483,7 @@ public:
 		if ( N != 0.0  ) {
 			alpha =  (2.0 * (2.0 * N - 1.0) / N / (N + 1.0));
 			beta = (6.0 / N / (N + 1.0));
+			firstpass = true;
 		}
 		Threshold = limit;
 	}
@@ -494,6 +495,8 @@ public:
 			if ( firstpass ) {
 				filt = RawData;
 				_filt = RawData;
+				prim = 0.0;
+				_prim = 0.0;
 				firstpass = false;
 				zicket = 4*MaxZicket;
 			} else {
@@ -513,7 +516,7 @@ public:
 					}
 				} else {
 					_delta = RawData - _filt;
-					_prim = _prim + beta * _delta + _prim * dt;
+					_prim = _prim + beta * _delta / dt;
 					_filt = _filt + alpha * _delta + _prim * dt;
 					if ( abs(_delta) < Threshold || (Threshold == 0.0) ) zicket--; else zicket = 4*MaxZicket;
 					if ( zicket <= MaxZicket ) {
@@ -525,11 +528,20 @@ public:
 			}
 		}
 	}
+	
 
 	float Raw(void) {
 		return _RawData;
 	}
-	
+	float Thresh(void) {
+		return Threshold;
+	}
+	float Delt(void) {
+		return delta;
+	}
+	float _Delt(void) {
+		return _delta;
+	}
 	float Prim(void) {
 		return prim;
 	}
@@ -538,10 +550,13 @@ public:
 		return _prim;
 	}
 	
-	float Filt(void) {
+	float ABfilt(void) {
 		return filt;
 	}
 	
+	float Filt(void) {
+		return filt;
+	}
 	float _Filt(void) {
 		return _filt;
 	}
@@ -550,13 +565,18 @@ public:
 		return zicket;
 	}
 	
+	bool Stable(void) {
+		bool test = true;
+		if ( zicket == 0 ) return test; else return !test;
+	}
+	
 	float Prim(float PrimMin, float PrimMax) {
 		if ( prim < PrimMin ) prim = PrimMin;
 		if ( prim > PrimMax ) prim = PrimMax;
 		return prim;
 	}
 	
-	float Filt(float FiltMin, float FiltMax ) {
+	float ABfilt(float FiltMin, float FiltMax ) {
 		if (filt < FiltMin ) filt = FiltMin;
 		if (filt > FiltMax ) filt = FiltMax;
 		return filt;
@@ -597,34 +617,34 @@ public:
  };
 
 // alpha beta class for gyros
-AlphaBeta gyroRPSx, gyroRPSy, gyroRPSz;
+static AlphaBeta gyroRPSx, gyroRPSy, gyroRPSz;
 
 // alpha beta class for accels
-AlphaBeta accelISUNEDMPUx, accelISUNEDMPUy, accelISUNEDMPUz;
+static AlphaBeta accelISUNEDMPUx, accelISUNEDMPUy, accelISUNEDMPUz;
 
 // alpha beta class for gyro and accel module
-AlphaBeta GyroModule, AccelModule;
+static AlphaBeta GyroModule, AccelModule;
 
 // alpha beta filters classes for AHRS roll and pitch
-AlphaBeta RollAHRS, PitchAHRS;
+static AlphaBeta RollAHRS, PitchAHRS;
 
 // alpha beta filters classes for GNSS vector coordinates
-AlphaBeta GnssVx, GnssVy, GnssVz;
+static AlphaBeta GnssVx, GnssVy, GnssVz;
 
 // alpha beta filters for Energy and average Energy calculations
-AlphaBeta Energy;
+static AlphaBeta Energy;
 
 // declare alpha beta for CAS and TAS
-AlphaBeta CAS, ALT;
+static AlphaBeta CAS, ALT;
 
 // Out side temp alpha beta class 
-AlphaBeta OATemp;
+static AlphaBeta OATemp;
 
 // declare low pass for TotalEnergy and AverageTotalEnergy
-LowPassFilter TotalEnergy, AverageTotalEnergy;
+static LowPassFilter TotalEnergy, AverageTotalEnergy;
 
 // declare low pass filter for GyroBiasx,y and z
-LowPassFilter GyroBiasx, GyroBiasy, GyroBiasz;
+static LowPassFilter GyroBiasx, GyroBiasy, GyroBiasz;
 
 
 
@@ -911,7 +931,7 @@ float PseudoHeadingPrim;// MOD#4 gyro bias
 		GyroBiasx.LPFupdate( GyroCutoffPeriod, dt, gxraw - RollAHRS.Prim() );
 		GyroBiasy.LPFupdate( GyroCutoffPeriod, dt, gyraw - PitchAHRS.Prim() );		
 		// compute pseudo heading from GNSS
-		GnssTrack = atan2( GnssVx.Filt(), GnssVy.Filt() );
+		GnssTrack = atan2( GnssVx.ABfilt(), GnssVy.ABfilt() );
 		PseudoHeadingPrim = ( GnssVy.Prim() * cos(GnssTrack) - GnssVx.Prim() * sin(GnssTrack) ) / TAS;
 		// compute Gz - pseudo heading variation long term average.		
 		GyroBiasz.LPFupdate( GyroCutoffPeriod, dt, gzraw - PseudoHeadingPrim );		
@@ -1115,7 +1135,7 @@ static void processIMU(void *pvParameters)
 	PrevaccelISUNEDMPU.x = 0.0;
 	PrevaccelISUNEDMPU.y = 0.0;
 	PrevaccelISUNEDMPU.z = -9.807;
-
+	
 	// alpha beta gyros parameters
 	#define NGyro 6 //  AB Filter parameter
 	#define GyroOutlier 1.0 // 1 rad/s maximum variation sample to sample
@@ -1165,9 +1185,9 @@ static void processIMU(void *pvParameters)
 			gyroRPSz.ABFupdate(dtGyr, gyroRPS.z );
 			// convert gyro coordinates to ISU : rad/s NED MPU and remove bias
 			xSemaphoreTake( dataMutex, 3/portTICK_PERIOD_MS ); // prevent data conflicts for 3ms max.			
-			gyroISUNEDMPU.x = -(gyroRPSz.Filt() - GroundGyroBias.z);
-			gyroISUNEDMPU.y = -(gyroRPSy.Filt() - GroundGyroBias.y);
-			gyroISUNEDMPU.z = -(gyroRPSx.Filt() - GroundGyroBias.x);
+			gyroISUNEDMPU.x = -(gyroRPSz.ABfilt() - GroundGyroBias.z);
+			gyroISUNEDMPU.y = -(gyroRPSy.ABfilt() - GroundGyroBias.y);
+			gyroISUNEDMPU.z = -(gyroRPSx.ABfilt() - GroundGyroBias.x);
 			// convert NEDMPU to NEDBODY			
 			gyroISUNEDBODY.x = C_T * gyroISUNEDMPU.x + STmultSS * gyroISUNEDMPU.y + STmultCS * gyroISUNEDMPU.z;
 			gyroISUNEDBODY.y = C_S * gyroISUNEDMPU.y - S_S * gyroISUNEDMPU.z;
@@ -1197,7 +1217,7 @@ static void processIMU(void *pvParameters)
 			PrevgyroRPS.z = gyroCorr.z;
 				
 			//sprintf(str,"$Test gyr, time: %lld, dt: %.4f, RPS: %.4f, RPS Filt: %.4f, ISUNEDMPU: %.4f, ISUNEDBODY: %.4f, Corr: %.4f\r\n",
-			//			gyroTime, dtGyr, gyroRPS.x, gyroRPSx.Filt(), gyroISUNEDMPU.x, gyroISUNEDBODY.x, gyroCorr.x );					
+			//			gyroTime, dtGyr, gyroRPS.x, gyroRPSx.ABfilt(), gyroISUNEDMPU.x, gyroISUNEDBODY.x, gyroCorr.x );					
 			//Router::sendXCV(str);				
 		}
 		// get accel data
@@ -1213,9 +1233,9 @@ static void processIMU(void *pvParameters)
 			accelISUNEDMPUz.ABFupdate(dtGyr, RawaccelISUNEDMPU.z );
 			xSemaphoreTake( dataMutex, 3/portTICK_PERIOD_MS ); // prevent data conflicts for 3ms max.				
 			// convert from MPU to BODY
-			accelISUNEDBODY.x = C_T * accelISUNEDMPUx.Filt() + STmultSS * accelISUNEDMPUy.Filt() + STmultCS * accelISUNEDMPUz.Filt() + ( gyroCorr.y * gyroCorr.y + gyroCorr.z * gyroCorr.z ) * DistCGVario;
-			accelISUNEDBODY.y = C_S * accelISUNEDMPUy.Filt() - S_S * accelISUNEDMPUz.Filt();
-			accelISUNEDBODY.z = -S_T * accelISUNEDMPUx.Filt() + SSmultCT * accelISUNEDMPUy.Filt() + CTmultCS * accelISUNEDMPUz.Filt();
+			accelISUNEDBODY.x = C_T * accelISUNEDMPUx.ABfilt() + STmultSS * accelISUNEDMPUy.ABfilt() + STmultCS * accelISUNEDMPUz.ABfilt() + ( gyroCorr.y * gyroCorr.y + gyroCorr.z * gyroCorr.z ) * DistCGVario;
+			accelISUNEDBODY.y = C_S * accelISUNEDMPUy.ABfilt() - S_S * accelISUNEDMPUz.ABfilt();
+			accelISUNEDBODY.z = -S_T * accelISUNEDMPUx.ABfilt() + SSmultCT * accelISUNEDMPUy.ABfilt() + CTmultCS * accelISUNEDMPUz.ABfilt();
 			xSemaphoreGive( dataMutex );
 		}
 		
@@ -1359,7 +1379,7 @@ static void processIMU(void *pvParameters)
 			}
 			// compute gyro module variation
 			// update gyro module filter
-			GyroModule.ABFupdate( dtGyr, sqrt(gyroRPSx.Filt() * gyroRPSx.Filt() + gyroRPSy.Filt() * gyroRPSy.Filt() + gyroRPSz.Filt() * gyroRPSz.Filt()) );
+			GyroModule.ABFupdate( dtGyr, sqrt(gyroRPSx.ABfilt() * gyroRPSx.ABfilt() + gyroRPSy.ABfilt() * gyroRPSy.ABfilt() + gyroRPSz.ABfilt() * gyroRPSz.ABfilt()) );
 			// asymetric filter with fast raise and slow decay
 			#define fcGyroLevel 3.0 // 3Hz low pass to filter 
 			#define fcGL1 (40.0/(40.0+fcGyroLevel))
@@ -1382,9 +1402,9 @@ static void processIMU(void *pvParameters)
 						gyrostable++;
 						// during first 2.5 seconds, initialize gyro and gravity data
 						if ( gyrostable < 100 ) {
-							GxBias = gyroRPSx.Filt();
-							GyBias = gyroRPSy.Filt();
-							GzBias = gyroRPSz.Filt();
+							GxBias = gyroRPSx.ABfilt();
+							GyBias = gyroRPSy.ABfilt();
+							GzBias = gyroRPSz.ABfilt();
 							Gravx = accelISUNEDBODY.x;
 							Gravy = accelISUNEDBODY.y;
 							Gravz = accelISUNEDBODY.z;
@@ -1393,9 +1413,9 @@ static void processIMU(void *pvParameters)
 							// between 2.5 seconds and 22.5 seconds, accumulate gyro and gravity data
 							if ( gyrostable <900 ) {
 								averagecount++;
-								GxBias += gyroRPSx.Filt();
-								GyBias += gyroRPSy.Filt();
-								GzBias += gyroRPSz.Filt();
+								GxBias += gyroRPSx.ABfilt();
+								GyBias += gyroRPSy.ABfilt();
+								GzBias += gyroRPSz.ABfilt();
 								Gravx += accelISUNEDBODY.x;
 								Gravy += accelISUNEDBODY.y;
 								Gravz += accelISUNEDBODY.z;
@@ -1714,11 +1734,6 @@ void readSensors(void *pvParameters){
 	float VhAvg = 0.0;
 	float VhHeading = 0.0;
 	
-	// alpha beta OAT parameters
-	#define NOAT 20 // Outside temp filter coeff
-	#define TempOutliers 20 // 20° maximum variation sample to sample 
-	OATemp.ABFinit( NOAT, TempOutliers );
-	
 	// alpha beta GNSS parameters
 	#define NGNSS 6 //  Filter parameter 
 	#define GNSSOutliers 30.0 // 30 m/s maximum variation sample to sample		
@@ -1802,9 +1817,6 @@ void readSensors(void *pvParameters){
 		if ( dynP < 60.0 ) dynP = 0.0; // TODO decide if a dynP should be aboce certain value to be valid
 		dynamicP = dynP; // for compatibility with Eckhard code
 
-		// Update Outside temperature filter
-		OATemp.ABFupdate( dtStat, OAT.get() );
-
 		// get MPU temp
 		MPUtempcel = MPU.getTemperature();
 		
@@ -1853,7 +1865,7 @@ void readSensors(void *pvParameters){
 		
 		// compute CAS, ALT and Vzbaro using alpha/beta filters.  TODO consider using atmospher.h functions
 		if (statP > 500.0) {
-			Rho = (100.0 * statP / 287.058 / (273.15 + OATemp.Filt()));
+			Rho = (100.0 * statP / 287.058 / (273.15 + OAT.get()));
 		} else {
 			Rho = RhoSLISA;
 		}
@@ -1871,13 +1883,13 @@ void readSensors(void *pvParameters){
 		CAS.ABFupdate( dtdynP, sqrt(2 * dynP / RhoSLISA) );
 		
 		Rhocorr = sqrt(RhoSLISA/Rho);
-		TAS = Rhocorr * CAS.Filt(0.0, 100.0);
+		TAS = Rhocorr * CAS.ABfilt(0.0, 100.0);
 		TASprim = Rhocorr * CAS.Prim(-100.0, 100.0);
 		/* old ALT
 		#define NALT 8.0 // ALT alpha/beta coeff
 		#define alphaALT (2.0 * (2.0 * NALT - 1.0) / NALT / (NALT + 1.0))
 		#define betaALT (6.0 / NALT / (NALT + 1.0) )	
-		ALTraw = (1.0 - pow( (statP-(QNH.get()-1013.25)) * 0.000986923 , 0.1902891634 ) ) * (273.15 + OATemp.Filt()) * 153.846153846;
+		ALTraw = (1.0 - pow( (statP-(QNH.get()-1013.25)) * 0.000986923 , 0.1902891634 ) ) * (273.15 + OAT.get()) * 153.846153846;
 		if ( FirsTimeSensor > 0 ) { // initialize Altitude and Energy filters
 			ALT = ALTraw;
 			ALTbi = ALT;
@@ -1896,14 +1908,14 @@ void readSensors(void *pvParameters){
 		}
 		*/
 		// update altitude filter
-		ALT.ABFupdate( dtStat, (1.0 - pow( (statP-(QNH.get()-1013.25)) * 0.000986923 , 0.1902891634 ) ) * (273.15 + OATemp.Filt()) * 153.846153846 );
+		ALT.ABFupdate( dtStat, (1.0 - pow( (statP-(QNH.get()-1013.25)) * 0.000986923 , 0.1902891634 ) ) * (273.15 + OAT.get()) * 153.846153846 );
 	
 		// in glider operation, gaining altitude and energy is considered positive. However in NED representation vertical axis is positive pointing down.
 		// therefore Vzbaro in NED is the opposite of altitude variation.
 		Vzbaro = -ALT.Prim();
 		
-		//sprintf(str,"$PB altitude, time : %lld, statP : %.4f, QNH.get() : %.4f, OATemp.Filt() : %.4f, Sensor OAT.get() : %.4f, Altitude : %.4f, Vzbaro : %.4f\r\n",
-		//			statTime, statP, QNH.get(), OATemp.Filt(), OAT.get(), ALT.Filt(), Vzbaro );					
+		//sprintf(str,"$PB altitude, time : %lld, statP : %.4f, QNH.get() : %.4f, OAT.get() : %.4f, Sensor OAT.get() : %.4f, Altitude : %.4f, Vzbaro : %.4f\r\n",
+		//			statTime, statP, QNH.get(), OAT.get(), OAT.get(), ALT.ABfilt(), Vzbaro );					
 		//Router::sendXCV(str);		
 		
 		// compute AoA (Angle of attack) and AoB (Angle od slip)
@@ -1915,13 +1927,13 @@ void readSensors(void *pvParameters){
 		#define fcAoB2 (1.0-fcAoB1)		
 		WingLoad = gross_weight.get() / polar_wingarea.get();  // should be only computed when pilot change weight settings in XCVario
 		xSemaphoreTake( dataMutex, 3/portTICK_PERIOD_MS ); // prevent data conflicts for 3ms max.		
-		if ( (dynP>100.0) && (CAS.Filt() >10.0) && (TAS>10.0) && (abs(accelISUNEDBODY.z) > 1.0) ) { // compute AoA and AoB only when dynamic pressure is above 100 Pa, CAS & TAS abobe 10m/s and accel z above 1 m/s²
+		if ( (dynP>100.0) && (CAS.ABfilt() >10.0) && (TAS>10.0) && (abs(accelISUNEDBODY.z) > 1.0) ) { // compute AoA and AoB only when dynamic pressure is above 100 Pa, CAS & TAS abobe 10m/s and accel z above 1 m/s²
 			AccelzFiltAoA = 0.8 * AccelzFiltAoA + 0.2 * accelISUNEDBODY.z; // simple ~3 Hz low pass on accel z
-			CL = -AccelzFiltAoA * 2 / RhoSLISA * WingLoad / CAS.Filt() / CAS.Filt();
+			CL = -AccelzFiltAoA * 2 / RhoSLISA * WingLoad / CAS.ABfilt() / CAS.ABfilt();
 			dAoA = ( CL - prevCL ) / CLA;
 			prevCL = CL;
 			if (abs(AccelzFiltAoA) > 1.0) { //when not close to Az=0, hybridation of aoa from drag & aoa from lift
-				AoARaw = -(accelISUNEDBODY.x / accelISUNEDBODY.z) - Speed2Fly.cw( CAS.Filt() ) / Speed2Fly.getN();
+				AoARaw = -(accelISUNEDBODY.x / accelISUNEDBODY.z) - Speed2Fly.cw( CAS.ABfilt() ) / Speed2Fly.getN();
 				AoA = fcAoA1 * ( AoA + dAoA ) + fcAoA2 * AoARaw ;
 			}  else { //when  close to Az=0, only aoa from lift considered
                 AoA = ( AoA + dAoA ) ;
@@ -2046,10 +2058,11 @@ void readSensors(void *pvParameters){
 		TotalEnergyAvg = fcTEAvg1 * TotalEnergyAvg + fcTEAvg2 * TotalEnergy;
 		*/
 		AverageTotalEnergy.LPFupdate( 20, 0.1, TotalEnergy.LowPass1() );
-		sprintf(str,"$Test altitude, alt raw: %.4f, filt: %.4f, prim: %.4f, _filt: %.4f, _prim: %.4f, zicket: %d, Var Energy: %.4f, Vzbi: %.4f,Tot Energy: %.4f, avg tot energy: %4f, cas raw: %.4f, Cas filt: %.4f, cas _filt: %.4f, Cas prim: %.4f, cas _prim: %.4f, Cas zicket: %d\r\n",
-		
-		ALT.Raw(), ALT.Filt(), ALT.Prim(), ALT._Filt(), ALT._Prim(), ALT.Zicket(), Energy.Prim(), Vzbi, TotalEnergy.LowPass1(), AverageTotalEnergy.LowPass1(), CAS.Raw(), CAS.Filt(), CAS._Filt(), CAS.Prim(), CAS._Prim(), CAS.Zicket() );					
-		Router::sendXCV(str);	
+
+//		sprintf(str,"$Test altitude, alt raw: %.4f, filt: %.4f, prim: %.4f, _filt: %.4f, _prim: %.4f, zicket: %d, Var Energy: %.4f, Vzbi: %.4f,Tot Energy: %.4f, avg tot energy: %4f, cas raw: %.4f, Cas filt: %.4f, cas _filt: %.4f, Cas prim: %.4f, cas _prim: %.4f, Cas zicket: %d\r\n",
+//		
+//		ALT.Raw(), ALT.ABfilt(), ALT.Prim(), ALT._Filt(), ALT._Prim(), ALT.Zicket(), Energy.Prim(), Vzbi, TotalEnergy.LowPass1(), AverageTotalEnergy.LowPass1(), CAS.Raw(), CAS.ABfilt(), CAS._Filt(), CAS.Prim(), CAS._Prim(), CAS.Zicket() );					
+//		Router::sendXCV(str);	
 
 		#ifdef COMPUTEWIND
 		// TODO test and optimze wind calculation
@@ -2207,7 +2220,7 @@ void readSensors(void *pvParameters){
 			// ESP_LOGI(FNAME,"AS: %f m/s, CURSL: %f°, SLIP: %f", as, -accelG[1]*K / (as*as), slipAngle );
 		} */ // TODO replace Eckhard code with flight test values
 		
-		cas = CAS.Filt() * 3.6;
+		cas = CAS.ABfilt() * 3.6;
 		if( (int( ias.get()+0.5 ) != int( cas+0.5 ) ) || !(count%20) ){
 			ias.set( cas );  // low pass filter
 		}		
@@ -2426,7 +2439,7 @@ void readSensors(void *pvParameters){
 					statTime, (int32_t)(statP*100.0),(int32_t)(teP*100.0), (int16_t)(dynP*10), 
 					(int64_t)(chosenGnss->time*1000.0), (int16_t)(chosenGnss->speed.x*100), (int16_t)(chosenGnss->speed.y*100), (int16_t)(chosenGnss->speed.z*100), (int16_t)(GNSSRouteraw*10),
 					(int32_t)(Pitch*1000.0), (int32_t)(Roll*1000.0), (int32_t)(Yaw*1000.0),
-					(int32_t)(CAS.Filt()*100), (int32_t)(TAS*100), (int32_t)(ALT.Filt()*100), (int32_t)(Vzbaro*100),
+					(int32_t)(CAS.ABfilt()*100), (int32_t)(TAS*100), (int32_t)(ALT.ABfilt()*100), (int32_t)(Vzbaro*100),
 					(int32_t)(AoA*1000), (int32_t)(AoB*1000),
 					(int32_t)(Ubi*100), (int32_t)(Vbi*100),(int32_t)(Wbi*100), (int32_t)(Vzbi*100),				
 					(int32_t)(TotalEnergy.LowPass1()*100),
@@ -2444,7 +2457,7 @@ void readSensors(void *pvParameters){
 					(int32_t)(BiasAoB*1000),
 					(int32_t)(RTKNproj*1000),(int32_t)(RTKEproj*1000),(int32_t)(-RTKUproj*1000),(int32_t)(RTKheading*10),
 					// $S2 stream
-					(int16_t)(OATemp.Filt()*10.0), (int16_t)(OAT.get()*10.0), (int16_t)(MPUtempcel*10.0), chosenGnss->fix, chosenGnss->numSV,
+					(int16_t)(OAT.get()*10.0), (int16_t)(OAT.get()*10.0), (int16_t)(MPUtempcel*10.0), chosenGnss->fix, chosenGnss->numSV,
 					(int32_t)(GroundGyroBias.x*100000.0), (int32_t)(GroundGyroBias.y*100000.0), (int32_t)(GroundGyroBias.z*100000.0),				
 					(int32_t)(BiasQuatGx*100000.0), (int32_t)(BiasQuatGy*100000.0), (int32_t)(BiasQuatGz*100000.0),
 					(int32_t)(GRAVITY*10000.0),(int16_t)BIAS_Init,(int16_t)(XCVTemp*10.0), (int16_t) NEnergy, (int16_t) (PeriodVelbi*10)
@@ -2458,7 +2471,7 @@ void readSensors(void *pvParameters){
 					statTime, (int32_t)(statP*100.0),(int32_t)(teP*100.0), (int16_t)(dynP*10), 
 					(int64_t)(chosenGnss->time*1000.0), (int16_t)(chosenGnss->speed.x*100), (int16_t)(chosenGnss->speed.y*100), (int16_t)(chosenGnss->speed.z*100), (int16_t)(GNSSRouteraw*10),
 					(int32_t)(Pitch*1000.0), (int32_t)(Roll*1000.0), (int32_t)(Yaw*1000.0),
-					(int32_t)(CAS.Filt()*100), (int32_t)(TAS*100), (int32_t)(ALT.Filt()*100), (int32_t)(Vzbaro*100),
+					(int32_t)(CAS.ABfilt()*100), (int32_t)(TAS*100), (int32_t)(ALT.ABfilt()*100), (int32_t)(Vzbaro*100),
 					(int32_t)(AoA*1000), (int32_t)(AoB*1000),
 					(int32_t)(Ubi*100), (int32_t)(Vbi*100),(int32_t)(Wbi*100), (int32_t)(Vzbi*100),				
 					(int32_t)(TotalEnergy.LowPass1()*100),
@@ -2501,7 +2514,7 @@ void readTemp(void *pvParameters){
 		// ESP_LOGI(FNAME,"Battery=%f V", battery );
 		if( !SetupCommon::isClient() ) {  // client Vario will get Temperature info from main Vario
 			t = ds18b20.getTemp();
-			if( t ==  DEVICE_DISCONNECTED_C || (t< -45.0) || (t>+60.0)) {
+			if( t ==  DEVICE_DISCONNECTED_C ) {
 				if( gflags.validTemperature == true ) {
 					ESP_LOGI(FNAME,"Temperatur Sensor disconnected or out of realistic range , please plug Temperature Sensor or check sensor");
 					gflags.validTemperature = false;
@@ -2514,8 +2527,11 @@ void readTemp(void *pvParameters){
 					gflags.validTemperature = true;
 				}
 				// ESP_LOGI(FNAME,"temperature=%2.1f", temperature );
-
-				temperature =  0.75 * temperature + 0.25 * t; // A bit low pass as strategy against toggling
+				OATemp.ABFupdate( 1.0, t );
+				temperature =  OATemp.ABfilt();
+		sprintf(str,"$Test temp boucle, t=: %.4f, raw: %.4f, Threshold: %.4f, Delta: %.4f, _Delta: %.4f, Prim: %.4f, filt: %.4f, _prim: %.4f, _filt: %.4f, zicket: %d\r\n",		
+		t, OATemp.Raw(), OATemp.Thresh(), OATemp.Delt(), OATemp._Delt(), OATemp.Prim(), OATemp.Filt(), OATemp._Prim(), OATemp._Filt(), OATemp.Zicket() );					
+		Router::sendXCV(str);				
 				if( abs(temperature - temp_prev) > 0.1 ){
 					OAT.set( std::round(temperature*10)/10 );
 					ESP_LOGI(FNAME,"NEW temperature=%2.1f, prev T=%2.1f", temperature, temp_prev );
@@ -2952,24 +2968,49 @@ void system_startup(void *args){
 	}
 	ESP_LOGI(FNAME,"Now start T sensor test");
 	// Temp Sensor test
+
 	if( !SetupCommon::isClient()  ) {
+
+		// OAT alpha beta filter parameters
+		#define NOAT 6 // Outside temp filter coeff, high damping
+		#define TempOutliers 20 // 20° maximum variation sample to sample 
+		OATemp.ABFinit( NOAT, TempOutliers );
 		ESP_LOGI(FNAME,"Now start T sensor test");
 		ds18b20.begin();
 		temperature = ds18b20.getTemp();
+		OATemp.ABFupdate( 0.1, temperature );
 		ESP_LOGI(FNAME,"End T sensor test");
 		if( temperature == DEVICE_DISCONNECTED_C ) {
 			ESP_LOGE(FNAME,"Error: Self test Temperatur Sensor failed; returned T=%2.2f", temperature );
 			display->writeText( line++, "Temp Sensor: NOT FOUND");
 			gflags.validTemperature = false;
 			logged_tests += "External Temperature Sensor: NOT FOUND\n";
-		}else
-		{
-			ESP_LOGI(FNAME,"Self test Temperatur Sensor PASSED; returned T=%2.2f", temperature );
-			display->writeText( line++, "Temp Sensor: OK");
-			gflags.validTemperature = true;
-			logged_tests += "External Temperature Sensor:PASSED\n";
-			// OAT.set( temperature ); don't set temperature during init, wait for main loop which check if temperature is realistic
-
+		} else {
+			for ( int nbsample = 0; nbsample < 20 && !OATemp.Stable(); nbsample++ ) {
+				sprintf(str,"$Test temp init: temperature: %.4f, raw: %.4f, Threshold: %.4f, Delta: %.4f, _Delta: %.4f, Prim: %.4f, filt: %.4f, _prim: %.4f, _filt: %.4f, zicket: %d, stable: %d\r\n",		
+				temperature, OATemp.Raw(), OATemp.Thresh(), OATemp.Delt(), OATemp._Delt(), OATemp.Prim(), OATemp.Filt(), OATemp._Prim(), OATemp._Filt(), OATemp.Zicket(), OATemp.Stable() );					
+				Router::sendXCV(str);
+				temperature = ds18b20.getTemp();
+				if ( temperature < -45.0 || temperature > 65.0 ) OATemp.ABFinit( NOAT, TempOutliers ); else OATemp.ABFupdate( 0.1, temperature );
+				delay( 100 );
+				Router::routeXCV();
+			}
+			sprintf(str,"$Test temp init: temperature: %.4f, raw: %.4f, Threshold: %.4f, Delta: %.4f, _Delta: %.4f, Prim: %.4f, filt: %.4f, _prim: %.4f, _filt: %.4f, zicket: %d, stable: %d\r\n",		
+			temperature, OATemp.Raw(), OATemp.Thresh(), OATemp.Delt(), OATemp._Delt(), OATemp.Prim(), OATemp.Filt(), OATemp._Prim(), OATemp._Filt(), OATemp.Zicket(), OATemp.Stable() );					
+			Router::sendXCV(str);			
+			if ( OATemp.Stable() ) {
+				ESP_LOGI(FNAME,"Self test Temperatur Sensor PASSED; returned T=%2.2f", temperature );
+				display->writeText( line++, "Temp Sensor: OK");
+				gflags.validTemperature = true;
+				logged_tests += "External Temperature Sensor:PASSED\n";
+				OAT.set( OATemp.ABfilt() ); 
+			} else {
+				ESP_LOGI(FNAME,"Self test Temperatur Sensor FAILED; not stable returned T=%2.2f", temperature );
+				display->writeText( line++, "Temp Sensor: FAILED use 15°C");
+				gflags.validTemperature = true;
+				logged_tests += "External Temperature Sensor:UNSTABLE use 15°C\n";
+				OAT.set( 15.0 );
+			}
 		}
 	}
 	ESP_LOGI(FNAME,"Absolute pressure sensors init, detect type of sensor type..");
