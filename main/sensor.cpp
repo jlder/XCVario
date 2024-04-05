@@ -1145,7 +1145,7 @@ static void processIMU(void *pvParameters)
 	accelISUNEDMPUz.ABFinit( NAccel, AccelOutlier, Accelmin, Accelmax );
 	
 	// alpha beta gyro and accel module parameters
-	#define NModule 6 //  AB Filter parameter
+	#define NModule 8 //  AB Filter parameter
 	#define ModuleOutlier 0.0	// no outlier filtering
 	GyroModule.ABFinit( NModule, ModuleOutlier );
 	AccelModule.ABFinit( NModule, ModuleOutlier );
