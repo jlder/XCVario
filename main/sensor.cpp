@@ -474,25 +474,40 @@ private:
 	float alpha = 0.0;
 	float beta = 0.0;
 	float Threshold = 0.0;
+	float primMin = 0.0;
+	float primMax = 0.0;
+	float filtMin = 0.0;
+	float filtMax = 0.0;
 	bool firstpass = true;
 	int zicket = 0;
-	float _RawData = 0.0;
 
 public:
-	void ABFinit( int16_t N, float limit ) {
+	void ABFinit( int16_t N ) {
+		ABFinit( N, 0.0, 0.0, 0.0, 0.0, 0.0 );
+	}
+	void ABFinit( int16_t N, float _Threshold ) {
+		ABFinit( N, _Threshold, 0.0, 0.0, 0.0, 0.0 );
+	}
+	void ABFinit( int16_t N, float _Threshold, float _filtMin, float _filtMax ) {
+		ABFinit( N, _Threshold, _filtMin, _filtMax, 0.0, 0.0 );
+	}
+	void ABFinit( int16_t N, float _Threshold, float _filtMin, float _filtMax, float _primMin, float _primMax ) {
 		if ( N != 0.0  ) {
 			alpha =  (2.0 * (2.0 * N - 1.0) / N / (N + 1.0));
 			beta = (6.0 / N / (N + 1.0));
 			firstpass = true;
 		}
-		Threshold = limit;
+		Threshold = _Threshold;
+		filtMin = _filtMin;
+		filtMax = _filtMax;
+		primMin = _primMin;
+		primMax = _primMax;
 	}
 	
 	void ABFupdate(float dt, float RawData ) {
 		#define MaxZicket 2 // maximum number of concecuitives zickets to let the filter track the signal. If zicket is higher a step change in signal is suspected
-		_RawData = RawData;
 		if ( dt != 0.0 ) {
-			if ( firstpass ) {
+			if ( firstpass ) { // initialize filter variables when first called
 				filt = RawData;
 				_filt = RawData;
 				prim = 0.0;
@@ -500,26 +515,42 @@ public:
 				firstpass = false;
 				zicket = 4*MaxZicket;
 			} else {
-				if ( zicket <= MaxZicket ) {
+				if ( zicket <= MaxZicket ) { 
+					// if filter stable
 					delta = RawData - filt;
 					if ( (abs(delta) < Threshold ) || (Threshold == 0.0) ) {
+						// new data below threshold
 						prim = prim + beta * delta / dt;
+						if ( primMin != 0.0 || primMax != 0.0 ) {
+							if ( prim < primMin ) prim = primMin;
+							if ( prim > primMax ) prim = primMax;
+						}
 						filt = filt + alpha * delta + prim * dt;
+						if ( filtMin != 0.0 || filtMax != 0.0 ) {
+							if ( filt < filtMin ) filt = filtMin;
+							if ( filt > filtMax ) filt = filtMax;
+						}
 						zicket = 0;
 					} else {
+						// new data above threshold, additional zicket
 						zicket++;
-						if ( zicket > MaxZicket ) { 
+						if ( zicket > MaxZicket ) {
+							// if new zicket makes filter unstable (step change), arm and switch to alternate AB filter
 							_prim = prim;
 							_filt = filt;
 							zicket = 4*MaxZicket;
 						}
 					}
 				} else {
+					// if filter unstable - step change
+					// update alternate filter to track step change
 					_delta = RawData - _filt;
 					_prim = _prim + beta * _delta / dt;
 					_filt = _filt + alpha * _delta + _prim * dt;
+					// if new data below threshold, reduce number of zicket
 					if ( abs(_delta) < Threshold || (Threshold == 0.0) ) zicket--; else zicket = 4*MaxZicket;
 					if ( zicket <= MaxZicket ) {
+						// if number of zicket below stability criteria, arm and switch to primary filter
 						prim = _prim;
 						filt = _filt;
 						zicket = 0;
@@ -529,59 +560,18 @@ public:
 		}
 	}
 	
-
-	float Raw(void) {
-		return _RawData;
-	}
-	float Thresh(void) {
-		return Threshold;
-	}
-	float Delt(void) {
-		return delta;
-	}
-	float _Delt(void) {
-		return _delta;
-	}
-	float Prim(void) {
-		return prim;
-	}
-	
-	float _Prim(void) {
-		return _prim;
-	}
-	
 	float ABfilt(void) {
 		return filt;
 	}
 	
-	float Filt(void) {
-		return filt;
-	}
-	float _Filt(void) {
-		return _filt;
-	}
-	
-	int Zicket(void) {
-		return zicket;
+	float ABprim(void) {
+		return prim;
 	}
 	
 	bool Stable(void) {
 		bool test = true;
 		if ( zicket == 0 ) return test; else return !test;
 	}
-	
-	float Prim(float PrimMin, float PrimMax) {
-		if ( prim < PrimMin ) prim = PrimMin;
-		if ( prim > PrimMax ) prim = PrimMax;
-		return prim;
-	}
-	
-	float ABfilt(float FiltMin, float FiltMax ) {
-		if (filt < FiltMin ) filt = FiltMin;
-		if (filt > FiltMax ) filt = FiltMax;
-		return filt;
-	}
-	
 };
 
 // MOD#3 alpha beta class end
@@ -928,11 +918,11 @@ float PseudoHeadingPrim;// MOD#4 gyro bias
 	#define GyroCutoffPeriod 700 //  very long term average ~ 700 seconds
 	if ( TAS > 15.0 && RollLimit < abs(halfvy) && PitchLimit < abs(halfvx) ) {
 		// compute Gx - d(roll)/dt and Gy - d(pitch)/dt long term average.
-		GyroBiasx.LPFupdate( GyroCutoffPeriod, dt, gxraw - RollAHRS.Prim() );
-		GyroBiasy.LPFupdate( GyroCutoffPeriod, dt, gyraw - PitchAHRS.Prim() );		
+		GyroBiasx.LPFupdate( GyroCutoffPeriod, dt, gxraw - RollAHRS.ABprim() );
+		GyroBiasy.LPFupdate( GyroCutoffPeriod, dt, gyraw - PitchAHRS.ABprim() );		
 		// compute pseudo heading from GNSS
 		GnssTrack = atan2( GnssVx.ABfilt(), GnssVy.ABfilt() );
-		PseudoHeadingPrim = ( GnssVy.Prim() * cos(GnssTrack) - GnssVx.Prim() * sin(GnssTrack) ) / TAS;
+		PseudoHeadingPrim = ( GnssVy.ABprim() * cos(GnssTrack) - GnssVx.ABprim() * sin(GnssTrack) ) / TAS;
 		// compute Gz - pseudo heading variation long term average.		
 		GyroBiasz.LPFupdate( GyroCutoffPeriod, dt, gzraw - PseudoHeadingPrim );		
 		// limit bias estimation	
@@ -1139,16 +1129,20 @@ static void processIMU(void *pvParameters)
 	// alpha beta gyros parameters
 	#define NGyro 6 //  AB Filter parameter
 	#define GyroOutlier 1.0 // 1 rad/s maximum variation sample to sample
-	gyroRPSx.ABFinit( NGyro, GyroOutlier );
-	gyroRPSy.ABFinit( NGyro, GyroOutlier );
-	gyroRPSz.ABFinit( NGyro, GyroOutlier );	
+	#define Gyromin -4.0
+	#define Gyromax 4.0
+	gyroRPSx.ABFinit( NGyro, GyroOutlier, Gyromin, Gyromax );
+	gyroRPSy.ABFinit( NGyro, GyroOutlier, Gyromin, Gyromax );
+	gyroRPSz.ABFinit( NGyro, GyroOutlier, Gyromin, Gyromax );	
 
 	// alpha beta accels parameters
 	#define NAccel 6 //  AB Filter parameter
 	#define AccelOutlier 10.0 // 10 m/s² maximum variation sample to sample
-	accelISUNEDMPUx.ABFinit( NAccel, AccelOutlier );
-	accelISUNEDMPUy.ABFinit( NAccel, AccelOutlier );
-	accelISUNEDMPUz.ABFinit( NAccel, AccelOutlier );
+	#define Accelmin -60.0
+	#define Accelmax 60.0
+	accelISUNEDMPUx.ABFinit( NAccel, AccelOutlier, Accelmin, Accelmax );
+	accelISUNEDMPUy.ABFinit( NAccel, AccelOutlier, Accelmin, Accelmax );
+	accelISUNEDMPUz.ABFinit( NAccel, AccelOutlier, Accelmin, Accelmax );
 	
 	// alpha beta gyro and accel module parameters
 	#define NModule 6 //  AB Filter parameter
@@ -1159,8 +1153,10 @@ static void processIMU(void *pvParameters)
 	// alpha beta AHRS parameters
 	#define NAHRS 6 //  AB Filter parameter
 	#define AHRSOutliers 1.0 // remove outiliers 1.0 rad away from signal
-	RollAHRS.ABFinit( NAHRS, AHRSOutliers );
-	PitchAHRS.ABFinit( NAHRS, AHRSOutliers );	
+	#define AHRSmin -4.0
+	#define AHRSmax 4.0
+	RollAHRS.ABFinit( NAHRS, AHRSOutliers, AHRSmin, AHRSmax );
+	PitchAHRS.ABFinit( NAHRS, AHRSOutliers, AHRSmin, AHRSmax );	
 	
 	// compute once the filter parameters in functions of values in FLASH
 	PeriodVelbi = velbi_period.get(); // period in second for baro/inertial velocity. period long enough to reduce effect of baro wind gradients
@@ -1372,10 +1368,10 @@ static void processIMU(void *pvParameters)
 			#define fcAccelLevel 3.0 // 3Hz low pass to filter 
 			#define fcAL1 (40.0/(40.0+fcAccelLevel))
 			#define fcAL2 (1.0-fcAL1)		
-			if ( AccelModulePrimLevel < abs(AccelModule.Prim()) ) {
-				AccelModulePrimLevel = abs(AccelModule.Prim());
+			if ( AccelModulePrimLevel < abs(AccelModule.ABprim()) ) {
+				AccelModulePrimLevel = abs(AccelModule.ABprim());
 			} else {
-				AccelModulePrimLevel = fcAL1 * AccelModulePrimLevel +  fcAL2 * abs(AccelModule.Prim());
+				AccelModulePrimLevel = fcAL1 * AccelModulePrimLevel +  fcAL2 * abs(AccelModule.ABprim());
 			}
 			// compute gyro module variation
 			// update gyro module filter
@@ -1384,10 +1380,10 @@ static void processIMU(void *pvParameters)
 			#define fcGyroLevel 3.0 // 3Hz low pass to filter 
 			#define fcGL1 (40.0/(40.0+fcGyroLevel))
 			#define fcGL2 (1.0-fcGL1)		
-			if ( GyroModulePrimLevel < abs(GyroModule.Prim()) ) {
-				GyroModulePrimLevel = abs(GyroModule.Prim());
+			if ( GyroModulePrimLevel < abs(GyroModule.ABprim()) ) {
+				GyroModulePrimLevel = abs(GyroModule.ABprim());
 			} else {
-				GyroModulePrimLevel = fcGL1 * GyroModulePrimLevel +  fcGL2 * abs(GyroModule.Prim());
+				GyroModulePrimLevel = fcGL1 * GyroModulePrimLevel +  fcGL2 * abs(GyroModule.ABprim());
 			}	
 			
 			// Estimate gyro bias and gravity up to 10 times, except if doing Lab test then only one estimation is performed
@@ -1736,23 +1732,33 @@ void readSensors(void *pvParameters){
 	
 	// alpha beta GNSS parameters
 	#define NGNSS 6 //  Filter parameter 
-	#define GNSSOutliers 30.0 // 30 m/s maximum variation sample to sample		
-	GnssVx.ABFinit( NGNSS, GNSSOutliers );
-	GnssVy.ABFinit( NGNSS, GNSSOutliers );
-	GnssVz.ABFinit( NGNSS, GNSSOutliers );
+	#define GNSSOutliers 30.0 // 30 m/s maximum variation sample to sample
+	#define Vgnssmin -100.0
+	#define Vgnssmax 100.0
+	GnssVx.ABFinit( NGNSS, GNSSOutliers, Vgnssmin, Vgnssmax );
+	GnssVy.ABFinit( NGNSS, GNSSOutliers, Vgnssmin, Vgnssmax );
+	GnssVz.ABFinit( NGNSS, GNSSOutliers, Vgnssmin, Vgnssmax );
 
 	// alpha beta filters paramegters for Energy and average Energy
 	#define NTE 6 // Energy alpha/beta coeff
-	#define EnergyOutliers 30.0 // 30 m/s maximum variation sample to sample	
-	Energy.ABFinit(  NTE,  EnergyOutliers );
+	#define EnergyOutliers 30.0 // 30 m/s maximum variation sample to sample
+	#define Energymin -30.0
+	#define Energymax 30.0
+	Energy.ABFinit(  NTE,  EnergyOutliers, Energymin, Energymax );
 
 	// alpha beta parameters for CAS and TAS
 	#define NCAS 6 // CAS alpha/beta filter coeff
 	#define SpeedOutliers 30.0 // 30 m/s maximum variation sample to sample
-	CAS.ABFinit( NCAS, SpeedOutliers );
+	#define CASmin 0.0
+	#define CASmax 100.0
+	#define CASPrimmin -30.0
+	#define CASPrimmax 30.0
+	CAS.ABFinit( NCAS, SpeedOutliers, CASmin, CASmax, CASPrimmin, CASPrimmax );
 	#define NALT 6 // ALT alpha/beta coeff
 	#define AltitudeOutliers 30.0 // 30 m maximum variation sample to sample
-	ALT.ABFinit( NALT, AltitudeOutliers );	
+	#define Altmin -500.0
+	#define Altmax 12000
+	ALT.ABFinit( NALT, AltitudeOutliers, Altmin, Altmax );	
 
 	#define DSR 15 // maximum number of samples spacing to compute wind.
 	int16_t tickDSR = 1;
@@ -1883,8 +1889,8 @@ void readSensors(void *pvParameters){
 		CAS.ABFupdate( dtdynP, sqrt(2 * dynP / RhoSLISA) );
 		
 		Rhocorr = sqrt(RhoSLISA/Rho);
-		TAS = Rhocorr * CAS.ABfilt(0.0, 100.0);
-		TASprim = Rhocorr * CAS.Prim(-100.0, 100.0);
+		TAS = Rhocorr * CAS.ABfilt();
+		TASprim = Rhocorr * CAS.ABprim();
 		/* old ALT
 		#define NALT 8.0 // ALT alpha/beta coeff
 		#define alphaALT (2.0 * (2.0 * NALT - 1.0) / NALT / (NALT + 1.0))
@@ -1912,7 +1918,7 @@ void readSensors(void *pvParameters){
 	
 		// in glider operation, gaining altitude and energy is considered positive. However in NED representation vertical axis is positive pointing down.
 		// therefore Vzbaro in NED is the opposite of altitude variation.
-		Vzbaro = -ALT.Prim();
+		Vzbaro = -ALT.ABprim();
 		
 		//sprintf(str,"$PB altitude, time : %lld, statP : %.4f, QNH.get() : %.4f, OAT.get() : %.4f, Sensor OAT.get() : %.4f, Altitude : %.4f, Vzbaro : %.4f\r\n",
 		//			statTime, statP, QNH.get(), OAT.get(), OAT.get(), ALT.ABfilt(), Vzbaro );					
@@ -2049,7 +2055,7 @@ void readSensors(void *pvParameters){
 		TEPrim = TEPrim + betaEnergy * deltaTE / dtStat;
 		TEFilt = TEFilt + alphaEnergy * deltaTE + TEPrim * dtStat;
 		*/		
-		TotalEnergy.LPFupdate( te_filt.get(), dtStat, (-Vzbi + Energy.Prim()) );
+		TotalEnergy.LPFupdate( te_filt.get(), dtStat, (-Vzbi + Energy.ABprim()) );
 		
 		/* old version// Total energy integration over 20 seconds
 		#define PeriodTEAvg 20
@@ -2061,7 +2067,7 @@ void readSensors(void *pvParameters){
 
 //		sprintf(str,"$Test altitude, alt raw: %.4f, filt: %.4f, prim: %.4f, _filt: %.4f, _prim: %.4f, zicket: %d, Var Energy: %.4f, Vzbi: %.4f,Tot Energy: %.4f, avg tot energy: %4f, cas raw: %.4f, Cas filt: %.4f, cas _filt: %.4f, Cas prim: %.4f, cas _prim: %.4f, Cas zicket: %d\r\n",
 //		
-//		ALT.Raw(), ALT.ABfilt(), ALT.Prim(), ALT._Filt(), ALT._Prim(), ALT.Zicket(), Energy.Prim(), Vzbi, TotalEnergy.LowPass1(), AverageTotalEnergy.LowPass1(), CAS.Raw(), CAS.ABfilt(), CAS._Filt(), CAS.Prim(), CAS._Prim(), CAS.Zicket() );					
+//		ALT.Raw(), ALT.ABfilt(), ALT.ABprim(), ALT._Filt(), ALT._Prim(), ALT.Zicket(), Energy.ABprim(), Vzbi, TotalEnergy.LowPass1(), AverageTotalEnergy.LowPass1(), CAS.Raw(), CAS.ABfilt(), CAS._Filt(), CAS.ABprim(), CAS._Prim(), CAS.Zicket() );					
 //		Router::sendXCV(str);	
 
 		#ifdef COMPUTEWIND
@@ -2529,9 +2535,6 @@ void readTemp(void *pvParameters){
 				// ESP_LOGI(FNAME,"temperature=%2.1f", temperature );
 				OATemp.ABFupdate( 1.0, t );
 				temperature =  OATemp.ABfilt();
-		sprintf(str,"$Test temp boucle, t=: %.4f, raw: %.4f, Threshold: %.4f, Delta: %.4f, _Delta: %.4f, Prim: %.4f, filt: %.4f, _prim: %.4f, _filt: %.4f, zicket: %d\r\n",		
-		t, OATemp.Raw(), OATemp.Thresh(), OATemp.Delt(), OATemp._Delt(), OATemp.Prim(), OATemp.Filt(), OATemp._Prim(), OATemp._Filt(), OATemp.Zicket() );					
-		Router::sendXCV(str);				
 				if( abs(temperature - temp_prev) > 0.1 ){
 					OAT.set( std::round(temperature*10)/10 );
 					ESP_LOGI(FNAME,"NEW temperature=%2.1f, prev T=%2.1f", temperature, temp_prev );
@@ -2970,36 +2973,28 @@ void system_startup(void *args){
 	// Temp Sensor test
 
 	if( !SetupCommon::isClient()  ) {
-
-		// OAT alpha beta filter parameters
-		#define NOAT 6 // Outside temp filter coeff, high damping
-		#define TempOutliers 20 // 20° maximum variation sample to sample 
-		OATemp.ABFinit( NOAT, TempOutliers );
 		ESP_LOGI(FNAME,"Now start T sensor test");
 		ds18b20.begin();
+		// OAT alpha beta filter parameters
+		#define NOAT 6 // Outside Temp AB filter coeff
+		#define TempOutliers 20 // 20° maximum variation sample to sample 
+		OATemp.ABFinit( NOAT, TempOutliers );
 		temperature = ds18b20.getTemp();
 		OATemp.ABFupdate( 0.1, temperature );
-		ESP_LOGI(FNAME,"End T sensor test");
 		if( temperature == DEVICE_DISCONNECTED_C ) {
 			ESP_LOGE(FNAME,"Error: Self test Temperatur Sensor failed; returned T=%2.2f", temperature );
 			display->writeText( line++, "Temp Sensor: NOT FOUND");
 			gflags.validTemperature = false;
 			logged_tests += "External Temperature Sensor: NOT FOUND\n";
 		} else {
+			// read OAT sensor multiple times until temperature is within range and stable
 			for ( int nbsample = 0; nbsample < 20 && !OATemp.Stable(); nbsample++ ) {
-				sprintf(str,"$Test temp init: temperature: %.4f, raw: %.4f, Threshold: %.4f, Delta: %.4f, _Delta: %.4f, Prim: %.4f, filt: %.4f, _prim: %.4f, _filt: %.4f, zicket: %d, stable: %d\r\n",		
-				temperature, OATemp.Raw(), OATemp.Thresh(), OATemp.Delt(), OATemp._Delt(), OATemp.Prim(), OATemp.Filt(), OATemp._Prim(), OATemp._Filt(), OATemp.Zicket(), OATemp.Stable() );					
-				Router::sendXCV(str);
 				temperature = ds18b20.getTemp();
 				if ( temperature < -45.0 || temperature > 65.0 ) OATemp.ABFinit( NOAT, TempOutliers ); else OATemp.ABFupdate( 0.1, temperature );
 				delay( 100 );
-				Router::routeXCV();
 			}
-			sprintf(str,"$Test temp init: temperature: %.4f, raw: %.4f, Threshold: %.4f, Delta: %.4f, _Delta: %.4f, Prim: %.4f, filt: %.4f, _prim: %.4f, _filt: %.4f, zicket: %d, stable: %d\r\n",		
-			temperature, OATemp.Raw(), OATemp.Thresh(), OATemp.Delt(), OATemp._Delt(), OATemp.Prim(), OATemp.Filt(), OATemp._Prim(), OATemp._Filt(), OATemp.Zicket(), OATemp.Stable() );					
-			Router::sendXCV(str);			
 			if ( OATemp.Stable() ) {
-				ESP_LOGI(FNAME,"Self test Temperatur Sensor PASSED; returned T=%2.2f", temperature );
+				ESP_LOGI(FNAME,"Self test Temperature Sensor PASSED; returned T=%2.2f", temperature );
 				display->writeText( line++, "Temp Sensor: OK");
 				gflags.validTemperature = true;
 				logged_tests += "External Temperature Sensor:PASSED\n";
@@ -3012,6 +3007,7 @@ void system_startup(void *args){
 				OAT.set( 15.0 );
 			}
 		}
+		ESP_LOGI(FNAME,"End T sensor test");
 	}
 	ESP_LOGI(FNAME,"Absolute pressure sensors init, detect type of sensor type..");
 
