@@ -482,16 +482,16 @@ private:
 	int zicket = 0;
 
 public:
-	void ABFinit( int16_t N ) {
-		ABFinit( N, 0.0, 0.0, 0.0, 0.0, 0.0 );
+	void ABinit( int16_t N ) {
+		ABinit( N, 0.0, 0.0, 0.0, 0.0, 0.0 );
 	}
-	void ABFinit( int16_t N, float _Threshold ) {
-		ABFinit( N, _Threshold, 0.0, 0.0, 0.0, 0.0 );
+	void ABinit( int16_t N, float _Threshold ) {
+		ABinit( N, _Threshold, 0.0, 0.0, 0.0, 0.0 );
 	}
-	void ABFinit( int16_t N, float _Threshold, float _filtMin, float _filtMax ) {
-		ABFinit( N, _Threshold, _filtMin, _filtMax, 0.0, 0.0 );
+	void ABinit( int16_t N, float _Threshold, float _filtMin, float _filtMax ) {
+		ABinit( N, _Threshold, _filtMin, _filtMax, 0.0, 0.0 );
 	}
-	void ABFinit( int16_t N, float _Threshold, float _filtMin, float _filtMax, float _primMin, float _primMax ) {
+	void ABinit( int16_t N, float _Threshold, float _filtMin, float _filtMax, float _primMin, float _primMax ) {
 		if ( N != 0.0  ) {
 			alpha =  (2.0 * (2.0 * N - 1.0) / N / (N + 1.0));
 			beta = (6.0 / N / (N + 1.0));
@@ -504,7 +504,7 @@ public:
 		primMax = _primMax;
 	}
 	
-	void ABFupdate(float dt, float RawData ) {
+	void ABupdate(float dt, float RawData ) {
 		#define MaxZicket 2 // maximum number of concecuitives zickets to let the filter track the signal. If zicket is higher a step change in signal is suspected
 		if ( dt != 0.0 ) {
 			if ( firstpass ) { // initialize filter variables when first called
@@ -585,7 +585,7 @@ private:
 	float beta = 0.0; 
 	bool firstpass = true; // bool to initialize parameters at first pass
 public:
-    void LPFupdate(float cutoffperiod, float dt, float input ) {
+    void LPupdate(float cutoffperiod, float dt, float input ) {
         if ( dt!= 0.0 ) {
 			if ( firstpass == true ) {
 				RC = cutoffperiod / 6.28;
@@ -881,7 +881,7 @@ void MahonyUpdateIMU(float dt, float gxraw, float gyraw, float gzraw,
 					float &Bias_Gx, float &Bias_Gy, float &Bias_Gz ) {
 
 #define Nlimit 0.15 // stability criteria for gravity estimation from accels in m/s²
-#define Kp 0.1 // proportional feedback to sync quaternion
+#define Kp 0.7 // proportional feedback to sync quaternion
 
 #define Gyroprimlimit 0.3
 
@@ -918,13 +918,13 @@ float PseudoHeadingPrim;// MOD#4 gyro bias
 	#define GyroCutoffPeriod 700 //  very long term average ~ 700 seconds
 	if ( TAS > 15.0 && RollLimit < abs(halfvy) && PitchLimit < abs(halfvx) ) {
 		// compute Gx - d(roll)/dt and Gy - d(pitch)/dt long term average.
-		GyroBiasx.LPFupdate( GyroCutoffPeriod, dt, gxraw - RollAHRS.ABprim() );
-		GyroBiasy.LPFupdate( GyroCutoffPeriod, dt, gyraw - PitchAHRS.ABprim() );		
+		GyroBiasx.LPupdate( GyroCutoffPeriod, dt, gxraw - RollAHRS.ABprim() );
+		GyroBiasy.LPupdate( GyroCutoffPeriod, dt, gyraw - PitchAHRS.ABprim() );		
 		// compute pseudo heading from GNSS
 		GnssTrack = atan2( GnssVx.ABfilt(), GnssVy.ABfilt() );
 		PseudoHeadingPrim = ( GnssVy.ABprim() * cos(GnssTrack) - GnssVx.ABprim() * sin(GnssTrack) ) / TAS;
 		// compute Gz - pseudo heading variation long term average.		
-		GyroBiasz.LPFupdate( GyroCutoffPeriod, dt, gzraw - PseudoHeadingPrim );		
+		GyroBiasz.LPupdate( GyroCutoffPeriod, dt, gzraw - PseudoHeadingPrim );		
 		// limit bias estimation	
 		if ( abs(GyroBiasx.LowPass2()) > GMaxBias ) Bias_Gx = copysign( GMaxBias, GyroBiasx.LowPass2()) ;
 		if ( abs(GyroBiasy.LowPass2()) > GMaxBias ) Bias_Gy = copysign( GMaxBias, GyroBiasy.LowPass2()) ;		
@@ -948,7 +948,7 @@ float PseudoHeadingPrim;// MOD#4 gyro bias
 		// gyro should be corrected using error between vertical from IMU quaternion and observered vertical from accels.
 		// gyro correction is performed with PI feedback using Kp and Ki (proportional & integral) coefficients.
 		// these coefficients are adjusted dynamicaly (dynKp and dynKi) in function of gx and gz 
-
+/*
 		#define gxzlimit 0.3 // 0.3 rad/s threshold
 		GyrxzAmplitudeKdyn = abs(gyroCorr.x / 3.0) + abs(gyroCorr.z);
 		if  ( GyrxzAmplitudeKdyn < gxzlimit ) {
@@ -958,7 +958,6 @@ float PseudoHeadingPrim;// MOD#4 gyro bias
 		}
 		dynKi = dynKp * 0.1;
 		
-		/*
 		// gyro should be corrected using error between vertical from IMU quaternion and observered vertical from accels.
 		// Accels are good proxy for vertical :
 		// - when the flight mechanic forces apply, this is true when the module of acceleration is close to local gravity (GRAVITY)
@@ -993,10 +992,12 @@ float PseudoHeadingPrim;// MOD#4 gyro bias
 			if ( GravityModuleErr < -2.0 ) GravityModuleErr = -2.0;
 			// compute dynamic gain function of error magnitude
 			Kgain = pow( 10.0, GravityModuleErr );
-		} 
+		}
 		dynKp = Kgain * Kp;
 		dynKi = Kgain * Ki;
 		*/
+		dynKp = Kp;
+		dynKi = Kp / 10.0;
 		
 		// Normalise accelerometer measurement
 		recipNorm = 1.0 / AccelGravModule;
@@ -1131,32 +1132,32 @@ static void processIMU(void *pvParameters)
 	#define GyroOutlier 1.0 // 1 rad/s maximum variation sample to sample
 	#define Gyromin -4.0
 	#define Gyromax 4.0
-	gyroRPSx.ABFinit( NGyro, GyroOutlier, Gyromin, Gyromax );
-	gyroRPSy.ABFinit( NGyro, GyroOutlier, Gyromin, Gyromax );
-	gyroRPSz.ABFinit( NGyro, GyroOutlier, Gyromin, Gyromax );	
+	gyroRPSx.ABinit( NGyro, GyroOutlier, Gyromin, Gyromax );
+	gyroRPSy.ABinit( NGyro, GyroOutlier, Gyromin, Gyromax );
+	gyroRPSz.ABinit( NGyro, GyroOutlier, Gyromin, Gyromax );	
 
 	// alpha beta accels parameters
 	#define NAccel 6 //  AB Filter parameter
 	#define AccelOutlier 10.0 // 10 m/s² maximum variation sample to sample
 	#define Accelmin -60.0
 	#define Accelmax 60.0
-	accelISUNEDMPUx.ABFinit( NAccel, AccelOutlier, Accelmin, Accelmax );
-	accelISUNEDMPUy.ABFinit( NAccel, AccelOutlier, Accelmin, Accelmax );
-	accelISUNEDMPUz.ABFinit( NAccel, AccelOutlier, Accelmin, Accelmax );
+	accelISUNEDMPUx.ABinit( NAccel, AccelOutlier, Accelmin, Accelmax );
+	accelISUNEDMPUy.ABinit( NAccel, AccelOutlier, Accelmin, Accelmax );
+	accelISUNEDMPUz.ABinit( NAccel, AccelOutlier, Accelmin, Accelmax );
 	
 	// alpha beta gyro and accel module parameters
 	#define NModule 8 //  AB Filter parameter
 	#define ModuleOutlier 0.0	// no outlier filtering
-	GyroModule.ABFinit( NModule, ModuleOutlier );
-	AccelModule.ABFinit( NModule, ModuleOutlier );
+	GyroModule.ABinit( NModule, ModuleOutlier );
+	AccelModule.ABinit( NModule, ModuleOutlier );
 
 	// alpha beta AHRS parameters
 	#define NAHRS 6 //  AB Filter parameter
 	#define AHRSOutliers 1.0 // remove outiliers 1.0 rad away from signal
 	#define AHRSmin -4.0
 	#define AHRSmax 4.0
-	RollAHRS.ABFinit( NAHRS, AHRSOutliers, AHRSmin, AHRSmax );
-	PitchAHRS.ABFinit( NAHRS, AHRSOutliers, AHRSmin, AHRSmax );	
+	RollAHRS.ABinit( NAHRS, AHRSOutliers, AHRSmin, AHRSmax );
+	PitchAHRS.ABinit( NAHRS, AHRSOutliers, AHRSmin, AHRSmax );	
 	
 	// compute once the filter parameters in functions of values in FLASH
 	PeriodVelbi = velbi_period.get(); // period in second for baro/inertial velocity. period long enough to reduce effect of baro wind gradients
@@ -1176,9 +1177,9 @@ static void processIMU(void *pvParameters)
 			gyroDPS = mpud::gyroDegPerSec(gyroRaw, GYRO_FS); // For compatibility with Eckhard code only. Convert raw gyro to Gyro_FS full scale in degre per second 
 			gyroRPS = mpud::gyroRadPerSec(gyroRaw, GYRO_FS); // convert raw gyro to Gyro_FS full scale in radians per second
 			// update gyro filters
-			gyroRPSx.ABFupdate(dtGyr, gyroRPS.x );
-			gyroRPSy.ABFupdate(dtGyr, gyroRPS.y );			
-			gyroRPSz.ABFupdate(dtGyr, gyroRPS.z );
+			gyroRPSx.ABupdate(dtGyr, gyroRPS.x );
+			gyroRPSy.ABupdate(dtGyr, gyroRPS.y );			
+			gyroRPSz.ABupdate(dtGyr, gyroRPS.z );
 			// convert gyro coordinates to ISU : rad/s NED MPU and remove bias
 			xSemaphoreTake( dataMutex, 3/portTICK_PERIOD_MS ); // prevent data conflicts for 3ms max.			
 			gyroISUNEDMPU.x = -(gyroRPSz.ABfilt() - GroundGyroBias.z);
@@ -1224,9 +1225,9 @@ static void processIMU(void *pvParameters)
 			RawaccelISUNEDMPU.y = ((-accelG.y*9.807) - currentAccelBias.y ) * currentAccelGain.y;
 			RawaccelISUNEDMPU.z = ((-accelG.x*9.807) - currentAccelBias.z ) * currentAccelGain.z;
 			// update accels filters
-			accelISUNEDMPUx.ABFupdate(dtGyr, RawaccelISUNEDMPU.x );
-			accelISUNEDMPUy.ABFupdate(dtGyr, RawaccelISUNEDMPU.y );			
-			accelISUNEDMPUz.ABFupdate(dtGyr, RawaccelISUNEDMPU.z );
+			accelISUNEDMPUx.ABupdate(dtGyr, RawaccelISUNEDMPU.x );
+			accelISUNEDMPUy.ABupdate(dtGyr, RawaccelISUNEDMPU.y );			
+			accelISUNEDMPUz.ABupdate(dtGyr, RawaccelISUNEDMPU.z );
 			xSemaphoreTake( dataMutex, 3/portTICK_PERIOD_MS ); // prevent data conflicts for 3ms max.				
 			// convert from MPU to BODY
 			accelISUNEDBODY.x = C_T * accelISUNEDMPUx.ABfilt() + STmultSS * accelISUNEDMPUy.ABfilt() + STmultCS * accelISUNEDMPUz.ABfilt() + ( gyroCorr.y * gyroCorr.y + gyroCorr.z * gyroCorr.z ) * DistCGVario;
@@ -1288,8 +1289,8 @@ static void processIMU(void *pvParameters)
 				
 				
 				// update roll and pitch alpha beta filter
-				RollAHRS.ABFupdate( dtGyr, Roll );// MOD#4 gyro bias
-				PitchAHRS.ABFupdate( dtGyr, Pitch );// MOD#4 gyro bias
+				RollAHRS.ABupdate( dtGyr, Roll );// MOD#4 gyro bias
+				PitchAHRS.ABupdate( dtGyr, Pitch );// MOD#4 gyro bias
 				
 				// compute sin and cos for Roll and Pitch from IMU quaternion since they are used in multiple calculations
 				cosRoll = cos( Roll );
@@ -1363,7 +1364,7 @@ static void processIMU(void *pvParameters)
 		if ( TAS < 15.0 ) {
 			// compute acceleration module variation
 			// update accel module filter
-			AccelModule.ABFupdate(dtGyr, sqrt(accelISUNEDBODY.x * accelISUNEDBODY.x + accelISUNEDBODY.y * accelISUNEDBODY.y + accelISUNEDBODY.z * accelISUNEDBODY.z) );
+			AccelModule.ABupdate(dtGyr, sqrt(accelISUNEDBODY.x * accelISUNEDBODY.x + accelISUNEDBODY.y * accelISUNEDBODY.y + accelISUNEDBODY.z * accelISUNEDBODY.z) );
 			// asysmetric filter with fast raise and slow decay
 			#define fcAccelLevel 3.0 // 3Hz low pass to filter 
 			#define fcAL1 (40.0/(40.0+fcAccelLevel))
@@ -1375,7 +1376,7 @@ static void processIMU(void *pvParameters)
 			}
 			// compute gyro module variation
 			// update gyro module filter
-			GyroModule.ABFupdate( dtGyr, sqrt(gyroRPSx.ABfilt() * gyroRPSx.ABfilt() + gyroRPSy.ABfilt() * gyroRPSy.ABfilt() + gyroRPSz.ABfilt() * gyroRPSz.ABfilt()) );
+			GyroModule.ABupdate( dtGyr, sqrt(gyroRPSx.ABfilt() * gyroRPSx.ABfilt() + gyroRPSy.ABfilt() * gyroRPSy.ABfilt() + gyroRPSz.ABfilt() * gyroRPSz.ABfilt()) );
 			// asymetric filter with fast raise and slow decay
 			#define fcGyroLevel 3.0 // 3Hz low pass to filter 
 			#define fcGL1 (40.0/(40.0+fcGyroLevel))
@@ -1735,16 +1736,16 @@ void readSensors(void *pvParameters){
 	#define GNSSOutliers 30.0 // 30 m/s maximum variation sample to sample
 	#define Vgnssmin -100.0
 	#define Vgnssmax 100.0
-	GnssVx.ABFinit( NGNSS, GNSSOutliers, Vgnssmin, Vgnssmax );
-	GnssVy.ABFinit( NGNSS, GNSSOutliers, Vgnssmin, Vgnssmax );
-	GnssVz.ABFinit( NGNSS, GNSSOutliers, Vgnssmin, Vgnssmax );
+	GnssVx.ABinit( NGNSS, GNSSOutliers, Vgnssmin, Vgnssmax );
+	GnssVy.ABinit( NGNSS, GNSSOutliers, Vgnssmin, Vgnssmax );
+	GnssVz.ABinit( NGNSS, GNSSOutliers, Vgnssmin, Vgnssmax );
 
 	// alpha beta filters paramegters for Energy and average Energy
 	#define NTE 6 // Energy alpha/beta coeff
 	#define EnergyOutliers 30.0 // 30 m/s maximum variation sample to sample
 	#define Energymin -30.0
 	#define Energymax 30.0
-	Energy.ABFinit(  NTE,  EnergyOutliers, Energymin, Energymax );
+	Energy.ABinit(  NTE,  EnergyOutliers, Energymin, Energymax );
 
 	// alpha beta parameters for CAS and TAS
 	#define NCAS 6 // CAS alpha/beta filter coeff
@@ -1753,12 +1754,12 @@ void readSensors(void *pvParameters){
 	#define CASmax 100.0
 	#define CASPrimmin -30.0
 	#define CASPrimmax 30.0
-	CAS.ABFinit( NCAS, SpeedOutliers, CASmin, CASmax, CASPrimmin, CASPrimmax );
+	CAS.ABinit( NCAS, SpeedOutliers, CASmin, CASmax, CASPrimmin, CASPrimmax );
 	#define NALT 6 // ALT alpha/beta coeff
 	#define AltitudeOutliers 30.0 // 30 m maximum variation sample to sample
 	#define Altmin -500.0
 	#define Altmax 12000
-	ALT.ABFinit( NALT, AltitudeOutliers, Altmin, Altmax );	
+	ALT.ABinit( NALT, AltitudeOutliers, Altmin, Altmax );	
 
 	#define DSR 15 // maximum number of samples spacing to compute wind.
 	int16_t tickDSR = 1;
@@ -1865,9 +1866,9 @@ void readSensors(void *pvParameters){
 		
 		// MOD#4 gyro bias
 		// update GNSS speed filters 
-		GnssVx.ABFupdate( 0.1, chosenGnss->speed.x );
-		GnssVy.ABFupdate( 0.1, chosenGnss->speed.y );		
-		GnssVx.ABFupdate( 0.1, chosenGnss->speed.y );
+		GnssVx.ABupdate( 0.1, chosenGnss->speed.x );
+		GnssVy.ABupdate( 0.1, chosenGnss->speed.y );		
+		GnssVx.ABupdate( 0.1, chosenGnss->speed.y );
 		
 		// compute CAS, ALT and Vzbaro using alpha/beta filters.  TODO consider using atmospher.h functions
 		if (statP > 500.0) {
@@ -1886,7 +1887,7 @@ void readSensors(void *pvParameters){
 		if (CAS < 0.0) CAS = 0.0;
 		*/
 		// update CAS filter
-		CAS.ABFupdate( dtdynP, sqrt(2 * dynP / RhoSLISA) );
+		CAS.ABupdate( dtdynP, sqrt(2 * dynP / RhoSLISA) );
 		
 		Rhocorr = sqrt(RhoSLISA/Rho);
 		TAS = Rhocorr * CAS.ABfilt();
@@ -1914,7 +1915,7 @@ void readSensors(void *pvParameters){
 		}
 		*/
 		// update altitude filter
-		ALT.ABFupdate( dtStat, (1.0 - pow( (statP-(QNH.get()-1013.25)) * 0.000986923 , 0.1902891634 ) ) * (273.15 + OAT.get()) * 153.846153846 );
+		ALT.ABupdate( dtStat, (1.0 - pow( (statP-(QNH.get()-1013.25)) * 0.000986923 , 0.1902891634 ) ) * (273.15 + OAT.get()) * 153.846153846 );
 	
 		// in glider operation, gaining altitude and energy is considered positive. However in NED representation vertical axis is positive pointing down.
 		// therefore Vzbaro in NED is the opposite of altitude variation.
@@ -2047,7 +2048,7 @@ void readSensors(void *pvParameters){
 		EnergyFilt = EnergyFilt + alphaTE * deltaEnergy + EnergyPrim * dtStat;
 		*/
 		// update energy filter
-		Energy.ABFupdate( dtStat, ( TASbiSquare / GRAVITY / 2.0 ) );
+		Energy.ABupdate( dtStat, ( TASbiSquare / GRAVITY / 2.0 ) );
 
 		/* old version
 		// filter total energy variation for display to pilot
@@ -2055,7 +2056,7 @@ void readSensors(void *pvParameters){
 		TEPrim = TEPrim + betaEnergy * deltaTE / dtStat;
 		TEFilt = TEFilt + alphaEnergy * deltaTE + TEPrim * dtStat;
 		*/		
-		TotalEnergy.LPFupdate( te_filt.get(), dtStat, (-Vzbi + Energy.ABprim()) );
+		TotalEnergy.LPupdate( te_filt.get(), dtStat, (-Vzbi + Energy.ABprim()) );
 		
 		/* old version// Total energy integration over 20 seconds
 		#define PeriodTEAvg 20
@@ -2063,7 +2064,7 @@ void readSensors(void *pvParameters){
 		#define fcTEAvg2 ( 1.0 - fcTEAvg1 )			
 		TotalEnergyAvg = fcTEAvg1 * TotalEnergyAvg + fcTEAvg2 * TotalEnergy;
 		*/
-		AverageTotalEnergy.LPFupdate( 20, 0.1, TotalEnergy.LowPass1() );
+		AverageTotalEnergy.LPupdate( 20, 0.1, TotalEnergy.LowPass1() );
 
 //		sprintf(str,"$Test altitude, alt raw: %.4f, filt: %.4f, prim: %.4f, _filt: %.4f, _prim: %.4f, zicket: %d, Var Energy: %.4f, Vzbi: %.4f,Tot Energy: %.4f, avg tot energy: %4f, cas raw: %.4f, Cas filt: %.4f, cas _filt: %.4f, Cas prim: %.4f, cas _prim: %.4f, Cas zicket: %d\r\n",
 //		
@@ -2533,7 +2534,7 @@ void readTemp(void *pvParameters){
 					gflags.validTemperature = true;
 				}
 				// ESP_LOGI(FNAME,"temperature=%2.1f", temperature );
-				OATemp.ABFupdate( 1.0, t );
+				OATemp.ABupdate( 1.0, t );
 				temperature =  OATemp.ABfilt();
 				if( abs(temperature - temp_prev) > 0.1 ){
 					OAT.set( std::round(temperature*10)/10 );
@@ -2978,9 +2979,9 @@ void system_startup(void *args){
 		// OAT alpha beta filter parameters
 		#define NOAT 6 // Outside Temp AB filter coeff
 		#define TempOutliers 20 // 20° maximum variation sample to sample 
-		OATemp.ABFinit( NOAT, TempOutliers );
+		OATemp.ABinit( NOAT, TempOutliers );
 		temperature = ds18b20.getTemp();
-		OATemp.ABFupdate( 0.1, temperature );
+		OATemp.ABupdate( 0.1, temperature );
 		if( temperature == DEVICE_DISCONNECTED_C ) {
 			ESP_LOGE(FNAME,"Error: Self test Temperatur Sensor failed; returned T=%2.2f", temperature );
 			display->writeText( line++, "Temp Sensor: NOT FOUND");
@@ -2990,7 +2991,8 @@ void system_startup(void *args){
 			// read OAT sensor multiple times until temperature is within range and stable
 			for ( int nbsample = 0; nbsample < 20 && !OATemp.Stable(); nbsample++ ) {
 				temperature = ds18b20.getTemp();
-				if ( temperature < -45.0 || temperature > 65.0 ) OATemp.ABFinit( NOAT, TempOutliers ); else OATemp.ABFupdate( 0.1, temperature );
+				// if temperature out of range, re-init the filter
+				if ( temperature < -45.0 || temperature > 65.0 ) OATemp.ABinit( NOAT, TempOutliers ); else OATemp.ABupdate( 0.1, temperature );
 				delay( 100 );
 			}
 			if ( OATemp.Stable() ) {
