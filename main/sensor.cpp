@@ -328,6 +328,8 @@ static float UbiPrim = 0.0;
 static float VbiPrim = 0.0;
 static float WbiPrim = 0.0;
 
+float Mahonykp = 0.1;
+
 static int32_t cur_gyro_bias[3];
 
 bool IMUstream = false; // IMU FT stream
@@ -996,7 +998,7 @@ float PseudoHeadingPrim;// MOD#4 gyro bias
 		dynKp = Kgain * Kp;
 		dynKi = Kgain * Ki;
 		*/
-		dynKp = Kp;
+		dynKp = Mahonykp; 
 		dynKi = Kp / 10.0;
 		
 		// Normalise accelerometer measurement
@@ -1161,6 +1163,8 @@ static void processIMU(void *pvParameters)
 	
 	// compute once the filter parameters in functions of values in FLASH
 	PeriodVelbi = velbi_period.get(); // period in second for baro/inertial velocity. period long enough to reduce effect of baro wind gradients
+	Mahonykp = kp_Mahony.get(); // get last kp value from NV memory
+	
 	
 	while (1) {
 

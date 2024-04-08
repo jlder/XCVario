@@ -51,6 +51,10 @@ void change_bifilt(){
 		PeriodVelbi = velbi_period.get(); // period in second for baro/inertial velocity. period long enough to reduce effect of baro wind gradients
 }
 
+void change_kpMahony(){
+		Mahonykp = kp_Mahony.get(); // unit for Mahony Kp adjustement
+}
+
 void change_ballast() {
 	Speed2Fly.change_ballast();
 }
@@ -399,4 +403,5 @@ SetupNG<float>			gravity("LOCAL_GRAVITY", 9.807);
 SetupNG<float>          mpu_temperature("MPUTEMP", 45.0, true, SYNC_FROM_MASTER, PERSISTENT, chg_mpu_target );    // default for AHRS chip temperature (XCV 2023)
 SetupNG<float> 			te_filt( "TE FILTER",2.5, true, SYNC_FROM_MASTER, PERSISTENT, change_tefilter );
 SetupNG<float> 			velbi_period( "VELBI_PERIOD",6.0, true, SYNC_FROM_MASTER, PERSISTENT, change_bifilt );
+SetupNG<float>			kp_Mahony("KP Mahony", 1.0, true, SYNC_FROM_MASTER, PERSISTENT, change_kpMahony );
 

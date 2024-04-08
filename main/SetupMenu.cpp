@@ -2017,6 +2017,10 @@ int bifilt_adj( SetupMenuValFloat * p ){
 	return 0;
 }
 
+int kp_adj( SetupMenuValFloat * p ){
+		Mahonykp = kp_Mahony.get(); // period in second for baro/inertial velocity. period long enough to reduce effect of baro wind gradients
+	return 0;
+}
 
 void SetupMenu::flighttest_menu_create( MenuEntry *top ){
 	
@@ -2029,6 +2033,11 @@ void SetupMenu::flighttest_menu_create( MenuEntry *top ){
 	velbiperiod->setHelp(PROGMEM"TE filter time");
 	velbiperiod->setPrecision(1);
 	top->addEntry( velbiperiod );
+	
+	SetupMenuValFloat * kpMahony = new SetupMenuValFloat( "Kp Mahony filter", "unit",	0.0, 9.9, 0.1, kp_adj, true, &kp_Mahony );
+	velbiperiod->setHelp(PROGMEM"TE filter time");
+	velbiperiod->setPrecision(1);
+	top->addEntry( velbiperiod );	
 	
 }
 
