@@ -407,5 +407,5 @@ SetupNG<float>			gravity("LOCAL_GRAVITY", 9.807);
 SetupNG<float>          mpu_temperature("MPUTEMP", 45.0, true, SYNC_FROM_MASTER, PERSISTENT, chg_mpu_target );    // default for AHRS chip temperature (XCV 2023)
 SetupNG<float> 			te_filt( "TE FILTER",2.5, true, SYNC_FROM_MASTER, PERSISTENT, change_tefilter );
 SetupNG<float> 			velbi_period( "VELBI_PERIOD",6.0, true, SYNC_FROM_MASTER, PERSISTENT, change_bifilt );
-SetupNG<float>			kp_Mahony("KP Mahony", 100.0, true, SYNC_FROM_MASTER, PERSISTENT, change_kpMahony );
-SetupNG<float>			ki_Mahony("KI Mahony", 2.0, true, SYNC_FROM_MASTER, PERSISTENT, change_kiMahony );
+SetupNG<float>			kp_Mahony("KP Mahony", 0.1, true, SYNC_FROM_MASTER, PERSISTENT, change_kpMahony );
+SetupNG<float>			ki_Mahony("KI Mahony", 0.002, true, SYNC_FROM_MASTER, PERSISTENT, change_kiMahony );
