@@ -576,7 +576,11 @@ void Protocols::parseNMEA( const char *str ){
 		// Structure:
 		// $GNRMV,s.sss,x.xxx,x.xxx,x.xxx,x.xxx,x.xxx*hh<CR><LF>
 		//ex: $GNRMV,124951.800,-0.000,0.000,0.000,0.000,0.000*5F
-		sscanf( str,"$GNRMV,%f,%f,%f,%f,%f,%f*%x",&Allytime,&AllyvelN,&AllyvelE,&AllyvelU,&Allyvel3D,&Allyvel2D,&Allycs);
+		sscanf( str,"$GNRMV,%f,%f,%f,%f,%f,%f*%x",&Allytime,&AllyvelE,&AllyvelN,&AllyvelU,&Allyvel3D,&Allyvel2D,&Allycs);
+		int calc_cs=calcNMEACheckSum( str );
+		if( calc_cs != Allycs ){
+			Allytime = -1.0; // if checksum error, set time to -1	
+		}		
 		// MOD#5 add Allystar TAU1201 end
 	}
 	

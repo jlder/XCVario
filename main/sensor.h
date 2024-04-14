@@ -127,6 +127,7 @@ extern float alphaEnergy;
 extern float betaEnergy;
 extern float PeriodVelbi;
 extern float Mahonykp;
+extern float Mahonyki;
 
 extern float RTKtime;
 extern float RTKEvel;

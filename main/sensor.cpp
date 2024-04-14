@@ -329,6 +329,7 @@ static float VbiPrim = 0.0;
 static float WbiPrim = 0.0;
 
 float Mahonykp = 0.1;
+float Mahonyki = 0.002;
 
 static int32_t cur_gyro_bias[3];
 
@@ -339,6 +340,8 @@ bool TSTstream = false; // Test stream
 
 // MOD#2 add RTK begin
 float RTKtime;
+float prevRTKtime;
+float dtRTKtime = 0.125;
 float RTKEvel = 0.0;
 float RTKNvel = 0.0;
 float RTKUvel = 0.0;
@@ -352,6 +355,8 @@ float RTKheading = 0.0;
 // MOD#2 add RTK end
 
 // MOD#5 add Allystar TAU1201 velocity
+float dtAllytime = 0.1;
+float prevAllytime = 0.1;
 float Allytime = 0.0;
 float AllyvelN;
 float AllyvelE;
@@ -999,7 +1004,7 @@ float PseudoHeadingPrim;// MOD#4 gyro bias
 		dynKi = Kgain * Ki;
 		*/
 		dynKp = Mahonykp; 
-		dynKi = Kp / 10.0;
+		dynKi = Mahonyki;
 		
 		// Normalise accelerometer measurement
 		recipNorm = 1.0 / AccelGravModule;
@@ -1164,7 +1169,7 @@ static void processIMU(void *pvParameters)
 	// compute once the filter parameters in functions of values in FLASH
 	PeriodVelbi = velbi_period.get(); // period in second for baro/inertial velocity. period long enough to reduce effect of baro wind gradients
 	Mahonykp = kp_Mahony.get(); // get last kp value from NV memory
-	
+	Mahonyki = ki_Mahony.get(); // get last ki value from NV memory
 	
 	while (1) {
 
@@ -1700,6 +1705,7 @@ void readSensors(void *pvParameters){
 	
 	float deltaEnergy;
 	float EnergyPrim = 0.0;
+	float EnergyFilt = 0.0;
 	
 	int16_t FirsTimeSensor = 2;
 	
@@ -1745,11 +1751,11 @@ void readSensors(void *pvParameters){
 	GnssVz.ABinit( NGNSS, GNSSOutliers, Vgnssmin, Vgnssmax );
 
 	// alpha beta filters paramegters for Energy and average Energy
-	#define NTE 6 // Energy alpha/beta coeff
+	#define NTOTENR 6 // Energy alpha/beta coeff
 	#define EnergyOutliers 30.0 // 30 m/s maximum variation sample to sample
 	#define Energymin -30.0
 	#define Energymax 30.0
-	Energy.ABinit(  NTE,  EnergyOutliers, Energymin, Energymax );
+	Energy.ABinit(  NTOTENR,  EnergyOutliers, Energymin, Energymax );
 
 	// alpha beta parameters for CAS and TAS
 	#define NCAS 6 // CAS alpha/beta filter coeff
@@ -1851,28 +1857,46 @@ void readSensors(void *pvParameters){
 			chosenGnss->speed.x = RTKNvel;
 			chosenGnss->speed.y = RTKEvel;
 			chosenGnss->speed.z = -RTKUvel;
-			GNSSRouteraw = atan2(RTKNvel,RTKEvel);
+			dtRTKtime = RTKtime - prevRTKtime;
+			prevRTKtime = RTKtime;
+			if ( dtRTKtime > 0.05 ) {
+				GnssVx.ABupdate( dtRTKtime, chosenGnss->speed.x );
+				GnssVy.ABupdate( dtRTKtime, chosenGnss->speed.y );		
+				GnssVz.ABupdate( dtRTKtime, chosenGnss->speed.z );
+			}
+			GNSSRouteraw = atan2(GnssVx.ABfilt(),GnssVy.ABfilt());			
 		} else {
 			chosenGnss->fix = 0;
 		}
 		// MOD#2 add RTK end
 		
 		// MOD#5 add Allystar TAU1201 begin
-		if ( Allytime != 0.0 && Allyvel3D != 0.0 ) {
-			chosenGnss->fix = 7; // GNSS Allystar TAU1301 fix			
+		if ( Allytime >= 0 ) {
+			chosenGnss->fix = 7; // GNSS Allystar TAU1301 fix	
 			chosenGnss->time = Allytime;
+			dtAllytime = Allytime - prevAllytime;
+			prevAllytime = Allytime;
 			chosenGnss->speed.x = AllyvelN;
 			chosenGnss->speed.y = AllyvelE;
 			chosenGnss->speed.z = -AllyvelU;
-			GNSSRouteraw = atan2(AllyvelN,AllyvelE);
-		}
+			if ( dtAllytime > 0.05 ) {
+				GnssVx.ABupdate( dtAllytime, chosenGnss->speed.x );
+				GnssVy.ABupdate( dtAllytime, chosenGnss->speed.y );		
+				GnssVz.ABupdate( dtAllytime, chosenGnss->speed.z );
+			}
+			GNSSRouteraw = atan2(GnssVx.ABfilt(),GnssVy.ABfilt());
+		} else {
+			chosenGnss->fix = 8; // GNSS Allystar TAU1301 checksum error			
+			chosenGnss->time = -1;
+			chosenGnss->speed.x = 0.0;
+			chosenGnss->speed.y = 0.0;
+			chosenGnss->speed.z = 0.0;
+			GNSSRouteraw = 0.0;
+		}				
 		// MOD#5 add Allystar TAU1201 end	
 		
 		// MOD#4 gyro bias
-		// update GNSS speed filters 
-		GnssVx.ABupdate( 0.1, chosenGnss->speed.x );
-		GnssVy.ABupdate( 0.1, chosenGnss->speed.y );		
-		GnssVx.ABupdate( 0.1, chosenGnss->speed.y );
+
 		
 		// compute CAS, ALT and Vzbaro using alpha/beta filters.  TODO consider using atmospher.h functions
 		if (statP > 500.0) {
@@ -2043,31 +2067,36 @@ void readSensors(void *pvParameters){
 		
 		// option 2
 	
-		/* old version // kinetic energy calculation
+		// kinetic energy calculation
 		#define NTE 8.0 // ALT alpha/beta coeff
 		#define alphaTE (2.0 * (2.0 * NTE - 1.0) / NTE / (NTE + 1.0))
 		#define betaTE (6.0 / NTE / (NTE + 1.0) )
 		deltaEnergy = ( TASbiSquare / GRAVITY / 2.0 ) - EnergyFilt;
 		EnergyPrim = EnergyPrim + betaTE * deltaEnergy / dtStat; // variation of total energy+
 		EnergyFilt = EnergyFilt + alphaTE * deltaEnergy + EnergyPrim * dtStat;
-		*/
+	
 		// update energy filter
-		Energy.ABupdate( dtStat, ( TASbiSquare / GRAVITY / 2.0 ) );
+		Energy.ABupdate( dtStat, ( TASbiSquare / GRAVITY / 2.0 ) ); // TODO need to validate
 
-		/* old version
+		/*
 		// filter total energy variation for display to pilot
 		deltaTE = ( -Vzbi + EnergyPrim ) - TEFilt;
 		TEPrim = TEPrim + betaEnergy * deltaTE / dtStat;
 		TEFilt = TEFilt + alphaEnergy * deltaTE + TEPrim * dtStat;
-		*/		
-		TotalEnergy.LPupdate( te_filt.get(), dtStat, (-Vzbi + Energy.ABprim()) );
+		*/
+				
+		TotalEnergy.LPupdate( te_filt.get(), dtStat, (-Vzbi + EnergyPrim) );
+		// TotalEnergy.LPupdate( te_filt.get(), dtStat, (-Vzbi + Energy.ABprim()) );
 		
-		/* old version// Total energy integration over 20 seconds
+		
+		/*
+		// Total energy integration over 20 seconds
 		#define PeriodTEAvg 20
 		#define fcTEAvg1 ( PeriodTEAvg / ( PeriodTEAvg + PERIOD10HZ ))
 		#define fcTEAvg2 ( 1.0 - fcTEAvg1 )			
 		TotalEnergyAvg = fcTEAvg1 * TotalEnergyAvg + fcTEAvg2 * TotalEnergy;
 		*/
+		
 		AverageTotalEnergy.LPupdate( 20, 0.1, TotalEnergy.LowPass1() );
 
 //		sprintf(str,"$Test altitude, alt raw: %.4f, filt: %.4f, prim: %.4f, _filt: %.4f, _prim: %.4f, zicket: %d, Var Energy: %.4f, Vzbi: %.4f,Tot Energy: %.4f, avg tot energy: %4f, cas raw: %.4f, Cas filt: %.4f, cas _filt: %.4f, Cas prim: %.4f, cas _prim: %.4f, Cas zicket: %d\r\n",
@@ -2379,7 +2408,7 @@ void readSensors(void *pvParameters){
 			GNSS speed x or north in centimeters/s,
 			GNSS speed y or east in centimeters/s,
 			GNSS speed z or down in centimeters/s,
-			GNSS route in tenth of °,			
+			GNSS route in thousandth of rad,			
 			Pitch in milli rad,
 			Roll in milli rad,
 			Yaw in milli rad,
@@ -2440,15 +2469,16 @@ void readSensors(void *pvParameters){
 			RTKNproj in thousandths of meter;
 			RTKEproj in thousandths of meter;
 			RTKDproj in thousandths of meter;
-			RTKheading in tenth of degree;			
+			RTKheading in tousandth of rad;
+			Energy.ABprim()	in hundredth
 		*/		
 
 			if ( !(count % 50) ) { 
 				// send $S1 and $S2 every 50 cycles = 5 seconds
-				sprintf(str,"$S1,%lld,%i,%i,%i,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$S3,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$S2,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",
+				sprintf(str,"$S1,%lld,%i,%i,%i,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$S3,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$S2,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",
 				// $S1 stream
 					statTime, (int32_t)(statP*100.0),(int32_t)(teP*100.0), (int16_t)(dynP*10), 
-					(int64_t)(chosenGnss->time*1000.0), (int16_t)(chosenGnss->speed.x*100), (int16_t)(chosenGnss->speed.y*100), (int16_t)(chosenGnss->speed.z*100), (int16_t)(GNSSRouteraw*10),
+					(int64_t)(chosenGnss->time*1000.0), (int16_t)(chosenGnss->speed.x*100), (int16_t)(chosenGnss->speed.y*100), (int16_t)(chosenGnss->speed.z*100), (int16_t)(GNSSRouteraw*1000),
 					(int32_t)(Pitch*1000.0), (int32_t)(Roll*1000.0), (int32_t)(Yaw*1000.0),
 					(int32_t)(CAS.ABfilt()*100), (int32_t)(TAS*100), (int32_t)(ALT.ABfilt()*100), (int32_t)(Vzbaro*100),
 					(int32_t)(AoA*1000), (int32_t)(AoB*1000),
@@ -2466,7 +2496,7 @@ void readSensors(void *pvParameters){
 					(int32_t)(UiPrimPrimS*100), (int32_t)(ViPrimPrimS*100),(int32_t)(WiPrimPrimS*100),	
 					(int32_t)(UbiPrim*100), (int32_t)(VbiPrim*100),(int32_t)(WbiPrim*100),
 					(int32_t)(BiasAoB*1000),
-					(int32_t)(RTKNproj*1000),(int32_t)(RTKEproj*1000),(int32_t)(-RTKUproj*1000),(int32_t)(RTKheading*10),
+					(int32_t)(RTKNproj*1000),(int32_t)(RTKEproj*1000),(int32_t)(-RTKUproj*1000),(int32_t)(RTKheading*1000), (int32_t)(Energy.ABprim() * 100),
 					// $S2 stream
 					(int16_t)(OAT.get()*10.0), (int16_t)(OAT.get()*10.0), (int16_t)(MPUtempcel*10.0), chosenGnss->fix, chosenGnss->numSV,
 					(int32_t)(GroundGyroBias.x*100000.0), (int32_t)(GroundGyroBias.y*100000.0), (int32_t)(GroundGyroBias.z*100000.0),				
@@ -2478,9 +2508,9 @@ void readSensors(void *pvParameters){
 				xSemaphoreGive( BTMutex );				
 			} else {
 				// send $S1 only every 100ms
-				sprintf(str,"$S1,%lld,%i,%i,%i,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$S3,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",
+				sprintf(str,"$S1,%lld,%i,%i,%i,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$S3,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",
 					statTime, (int32_t)(statP*100.0),(int32_t)(teP*100.0), (int16_t)(dynP*10), 
-					(int64_t)(chosenGnss->time*1000.0), (int16_t)(chosenGnss->speed.x*100), (int16_t)(chosenGnss->speed.y*100), (int16_t)(chosenGnss->speed.z*100), (int16_t)(GNSSRouteraw*10),
+					(int64_t)(chosenGnss->time*1000.0), (int16_t)(chosenGnss->speed.x*100), (int16_t)(chosenGnss->speed.y*100), (int16_t)(chosenGnss->speed.z*100), (int16_t)(GNSSRouteraw*1000),
 					(int32_t)(Pitch*1000.0), (int32_t)(Roll*1000.0), (int32_t)(Yaw*1000.0),
 					(int32_t)(CAS.ABfilt()*100), (int32_t)(TAS*100), (int32_t)(ALT.ABfilt()*100), (int32_t)(Vzbaro*100),
 					(int32_t)(AoA*1000), (int32_t)(AoB*1000),
@@ -2498,7 +2528,7 @@ void readSensors(void *pvParameters){
 					(int32_t)(UiPrimPrimS*100), (int32_t)(ViPrimPrimS*100),(int32_t)(WiPrimPrimS*100),	
 					(int32_t)(UbiPrim*100), (int32_t)(VbiPrim*100),(int32_t)(WbiPrim*100),
 					(int32_t)(BiasAoB*1000),
-					(int32_t)(RTKNproj*1000),(int32_t)(RTKEproj*1000),(int32_t)(-RTKUproj*1000),(int32_t)(RTKheading*10)				
+					(int32_t)(RTKNproj*1000),(int32_t)(RTKEproj*1000),(int32_t)(-RTKUproj*1000),(int32_t)(RTKheading*1000), (int32_t)(Energy.ABprim() * 100)			
 				);
 				xSemaphoreTake( BTMutex, 2/portTICK_PERIOD_MS );				
 				Router::sendXCV(str);
