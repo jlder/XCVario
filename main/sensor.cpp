@@ -1365,6 +1365,11 @@ static void processIMU(void *pvParameters)
 				TASbi = sqrt( TASbiSquare );
 				
 				xSemaphoreGive( dataMutex );
+				
+			// stream to test inertial values//sprintf(str,"$Test inertial, time: %lld, dt: %.4f, accx: %.4f, gravx: %.4f, accy: %.4f, gravy: %.4f, , accz: %.4f, gravz: %.4f,	Uip: %.4f, Uipp: %.4f, Vip: %.4f, Vipp: %.4f, Wip: %.4f, Wipp: %.4f, Pitch: %.4f, Roll: %.4f\r\n",
+			//gyroTime, dtGyr, accelISUNEDBODY.x, GravIMU.x, accelISUNEDBODY.y, GravIMU.y, accelISUNEDBODY.z, GravIMU.z,
+			//UiPrim, UiPrimPrimS, ViPrim, ViPrimPrimS, WiPrim, WiPrimPrimS, Pitch, Roll );					
+			//Router::sendXCV(str);					
 			}
 		}
 
@@ -1752,10 +1757,10 @@ void readSensors(void *pvParameters){
 
 	// alpha beta filters paramegters for Energy and average Energy
 	#define NTOTENR 6 // Energy alpha/beta coeff
-	#define EnergyOutliers 30.0 // 30 m/s maximum variation sample to sample
-	#define Energymin -30.0
-	#define Energymax 30.0
-	Energy.ABinit(  NTOTENR,  EnergyOutliers, Energymin, Energymax );
+	#define EnergyOutliers 10.0 // 10 m/s maximum variation sample to sample
+	#define EnergyPrimMin -30.0
+	#define EnergyPrimMax 30.0
+	Energy.ABinit(  NTOTENR,  EnergyOutliers, 0.0, 0.0, EnergyPrimMin, EnergyPrimMax );
 
 	// alpha beta parameters for CAS and TAS
 	#define NCAS 6 // CAS alpha/beta filter coeff
@@ -2076,33 +2081,13 @@ void readSensors(void *pvParameters){
 		EnergyFilt = EnergyFilt + alphaTE * deltaEnergy + EnergyPrim * dtStat;
 	
 		// update energy filter
-		Energy.ABupdate( dtStat, ( TASbiSquare / GRAVITY / 2.0 ) ); // TODO need to validate
+		Energy.ABupdate( dtStat, ( TASbiSquare / GRAVITY / 2.0 ) );
 
-		/*
 		// filter total energy variation for display to pilot
-		deltaTE = ( -Vzbi + EnergyPrim ) - TEFilt;
-		TEPrim = TEPrim + betaEnergy * deltaTE / dtStat;
-		TEFilt = TEFilt + alphaEnergy * deltaTE + TEPrim * dtStat;
-		*/
-				
-		TotalEnergy.LPupdate( te_filt.get(), dtStat, (-Vzbi + EnergyPrim) );
-		// TotalEnergy.LPupdate( te_filt.get(), dtStat, (-Vzbi + Energy.ABprim()) );
+		TotalEnergy.LPupdate( te_filt.get(), dtStat, (-Vzbi + Energy.ABprim()) );
 		
-		
-		/*
-		// Total energy integration over 20 seconds
-		#define PeriodTEAvg 20
-		#define fcTEAvg1 ( PeriodTEAvg / ( PeriodTEAvg + PERIOD10HZ ))
-		#define fcTEAvg2 ( 1.0 - fcTEAvg1 )			
-		TotalEnergyAvg = fcTEAvg1 * TotalEnergyAvg + fcTEAvg2 * TotalEnergy;
-		*/
-		
-		AverageTotalEnergy.LPupdate( 20, 0.1, TotalEnergy.LowPass1() );
-
-//		sprintf(str,"$Test altitude, alt raw: %.4f, filt: %.4f, prim: %.4f, _filt: %.4f, _prim: %.4f, zicket: %d, Var Energy: %.4f, Vzbi: %.4f,Tot Energy: %.4f, avg tot energy: %4f, cas raw: %.4f, Cas filt: %.4f, cas _filt: %.4f, Cas prim: %.4f, cas _prim: %.4f, Cas zicket: %d\r\n",
-//		
-//		ALT.Raw(), ALT.ABfilt(), ALT.ABprim(), ALT._Filt(), ALT._Prim(), ALT.Zicket(), Energy.ABprim(), Vzbi, TotalEnergy.LowPass1(), AverageTotalEnergy.LowPass1(), CAS.Raw(), CAS.ABfilt(), CAS._Filt(), CAS.ABprim(), CAS._Prim(), CAS.Zicket() );					
-//		Router::sendXCV(str);	
+		// filter average total energy 
+		AverageTotalEnergy.LPupdate( 30, 0.1, TotalEnergy.LowPass1() );
 
 		#ifdef COMPUTEWIND
 		// TODO test and optimze wind calculation
@@ -2470,12 +2455,11 @@ void readSensors(void *pvParameters){
 			RTKEproj in thousandths of meter;
 			RTKDproj in thousandths of meter;
 			RTKheading in tousandth of rad;
-			Energy.ABprim()	in hundredth
 		*/		
 
 			if ( !(count % 50) ) { 
 				// send $S1 and $S2 every 50 cycles = 5 seconds
-				sprintf(str,"$S1,%lld,%i,%i,%i,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$S3,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$S2,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",
+				sprintf(str,"$S1,%lld,%i,%i,%i,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$S3,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$S2,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",
 				// $S1 stream
 					statTime, (int32_t)(statP*100.0),(int32_t)(teP*100.0), (int16_t)(dynP*10), 
 					(int64_t)(chosenGnss->time*1000.0), (int16_t)(chosenGnss->speed.x*100), (int16_t)(chosenGnss->speed.y*100), (int16_t)(chosenGnss->speed.z*100), (int16_t)(GNSSRouteraw*1000),
@@ -2496,7 +2480,7 @@ void readSensors(void *pvParameters){
 					(int32_t)(UiPrimPrimS*100), (int32_t)(ViPrimPrimS*100),(int32_t)(WiPrimPrimS*100),	
 					(int32_t)(UbiPrim*100), (int32_t)(VbiPrim*100),(int32_t)(WbiPrim*100),
 					(int32_t)(BiasAoB*1000),
-					(int32_t)(RTKNproj*1000),(int32_t)(RTKEproj*1000),(int32_t)(-RTKUproj*1000),(int32_t)(RTKheading*1000), (int32_t)(Energy.ABprim() * 100),
+					(int32_t)(RTKNproj*1000),(int32_t)(RTKEproj*1000),(int32_t)(-RTKUproj*1000),(int32_t)(RTKheading*1000),
 					// $S2 stream
 					(int16_t)(OAT.get()*10.0), (int16_t)(OAT.get()*10.0), (int16_t)(MPUtempcel*10.0), chosenGnss->fix, chosenGnss->numSV,
 					(int32_t)(GroundGyroBias.x*100000.0), (int32_t)(GroundGyroBias.y*100000.0), (int32_t)(GroundGyroBias.z*100000.0),				
@@ -2508,7 +2492,7 @@ void readSensors(void *pvParameters){
 				xSemaphoreGive( BTMutex );				
 			} else {
 				// send $S1 only every 100ms
-				sprintf(str,"$S1,%lld,%i,%i,%i,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$S3,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",
+				sprintf(str,"$S1,%lld,%i,%i,%i,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$S3,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",
 					statTime, (int32_t)(statP*100.0),(int32_t)(teP*100.0), (int16_t)(dynP*10), 
 					(int64_t)(chosenGnss->time*1000.0), (int16_t)(chosenGnss->speed.x*100), (int16_t)(chosenGnss->speed.y*100), (int16_t)(chosenGnss->speed.z*100), (int16_t)(GNSSRouteraw*1000),
 					(int32_t)(Pitch*1000.0), (int32_t)(Roll*1000.0), (int32_t)(Yaw*1000.0),
@@ -2528,7 +2512,7 @@ void readSensors(void *pvParameters){
 					(int32_t)(UiPrimPrimS*100), (int32_t)(ViPrimPrimS*100),(int32_t)(WiPrimPrimS*100),	
 					(int32_t)(UbiPrim*100), (int32_t)(VbiPrim*100),(int32_t)(WbiPrim*100),
 					(int32_t)(BiasAoB*1000),
-					(int32_t)(RTKNproj*1000),(int32_t)(RTKEproj*1000),(int32_t)(-RTKUproj*1000),(int32_t)(RTKheading*1000), (int32_t)(Energy.ABprim() * 100)			
+					(int32_t)(RTKNproj*1000),(int32_t)(RTKEproj*1000),(int32_t)(-RTKUproj*1000),(int32_t)(RTKheading*1000)
 				);
 				xSemaphoreTake( BTMutex, 2/portTICK_PERIOD_MS );				
 				Router::sendXCV(str);
@@ -2784,9 +2768,9 @@ void system_startup(void *args){
 		if(abs(GRAVITY-9.807) > 0.5 ) GRAVITY = 9.807;
 		currentAccelBias = accl_bias.get();
 		currentAccelGain = accl_gain.get();	
-		// Check value just in case FLASH is not correct to reset to neutral values (OK range is +- 1 m/s² for bias and +-10% on gain)
-		if ( abs(currentAccelBias.x)>1.0 || abs(currentAccelBias.y)>1.0 || abs(currentAccelBias.z)>1.0 || 
-			abs(currentAccelGain.x-1.0)>0.1 || abs(currentAccelGain.y-1.0)>0.1 || abs(currentAccelGain.z-1.0)>0.1 ){
+		// Check value just in case FLASH is not correct to reset to neutral values (OK range is +- 2 m/s² for bias and +-20% on gain)
+		if ( abs(currentAccelBias.x)>2.0 || abs(currentAccelBias.y)>2.0 || abs(currentAccelBias.z)>2.0 || 
+			abs(currentAccelGain.x-1.0)>0.2 || abs(currentAccelGain.y-1.0)>0.2 || abs(currentAccelGain.z-1.0)>0.2 ){
 				currentAccelBias.x = 0.0;
 				currentAccelBias.y = 0.0;
 				currentAccelBias.z = 0.0;
@@ -2797,8 +2781,8 @@ void system_startup(void *args){
 		
 		// get last known ground gyro biases
 		GroundGyroBias = gyro_bias.get();
-		// Check value just in case FLASH is not correct to reset to neutral values (OK range is +-0.1 rad/s)
-		if ( abs(GroundGyroBias.x)>0.1 || abs(GroundGyroBias.y)>0.1 || abs(GroundGyroBias.z)>0.1 ) {
+		// Check value just in case FLASH is not correct to reset to neutral values (OK range is +-0.2 rad/s)
+		if ( abs(GroundGyroBias.x)>0.2 || abs(GroundGyroBias.y)>0.2 || abs(GroundGyroBias.z)>0.2 ) {
 				GroundGyroBias.x = 0.0;
 				GroundGyroBias.y = 0.0;
 				GroundGyroBias.z = 0.0;
