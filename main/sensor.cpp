@@ -1386,7 +1386,7 @@ static void processIMU(void *pvParameters)
 				GyroModulePrimLevel = fcGL1 * GyroModulePrimLevel +  fcGL2 * abs(GyroModule.ABprim());
 			}	
 			
-			// Estimate gyro bias and gravity up to 10 times, except if doing Lab test then only one estimation is performed
+			// Estimate gyro bias and gravity up to 100 times, except if doing Lab test then only one estimation is performed
 			if ( (BIAS_Init < 100 && !LABtest) || BIAS_Init < 1 ) {
 				// When MPU temperature is controled and temperature is locked   or   when there is no temperature control
 				if ( (HAS_MPU_TEMP_CONTROL && (MPU.getSiliconTempStatus() == MPU_T_LOCKED)) || !HAS_MPU_TEMP_CONTROL ) {
