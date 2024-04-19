@@ -564,9 +564,6 @@ public:
 					}						
 				}
 			}
-		} else { // TODO just for testing
-			filt = RawData;
-			prim = 0.0;
 		}
 	}
 	
@@ -639,9 +636,6 @@ static AlphaBeta CAS, ALT;
 
 // Out side temp alpha beta class 
 static AlphaBeta OATemp;
-
-// _U/V/WiPrim alpha beta class
-static AlphaBeta _UiPrim, _ViPrim, _WiPrim;
 
 // declare low pass for TotalEnergy and AverageTotalEnergy
 static LowPassFilter TotalEnergy, AverageTotalEnergy;
@@ -1142,45 +1136,35 @@ static void processIMU(void *pvParameters)
 	
 	// alpha beta gyros parameters
 	#define NGyro 6 //  AB Filter parameter
-	#define GyroOutlier 3.0 // 3 rad/s maximum variation sample to sample
-	#define Gyromin -6.0
-	#define Gyromax 6.0
+	#define GyroOutlier 1.0 // 1 rad/s maximum variation sample to sample
+	#define Gyromin -4.0
+	#define Gyromax 4.0
 	gyroRPSx.ABinit( NGyro, GyroOutlier, Gyromin, Gyromax );
 	gyroRPSy.ABinit( NGyro, GyroOutlier, Gyromin, Gyromax );
 	gyroRPSz.ABinit( NGyro, GyroOutlier, Gyromin, Gyromax );	
 
 	// alpha beta accels parameters
 	#define NAccel 6 //  AB Filter parameter
-	#define AccelOutlier 40.0 // 40 m/s² maximum variation sample to sample
-	#define Accelmin -80.0
-	#define Accelmax 80.0
+	#define AccelOutlier 10.0 // 10 m/s² maximum variation sample to sample
+	#define Accelmin -60.0
+	#define Accelmax 60.0
 	accelISUNEDMPUx.ABinit( NAccel, AccelOutlier, Accelmin, Accelmax );
 	accelISUNEDMPUy.ABinit( NAccel, AccelOutlier, Accelmin, Accelmax );
 	accelISUNEDMPUz.ABinit( NAccel, AccelOutlier, Accelmin, Accelmax );
 	
 	// alpha beta gyro and accel module parameters
 	#define NModule 8 //  AB Filter parameter
-	GyroModule.ABinit( NModule );
-	AccelModule.ABinit( NModule );
+	#define ModuleOutlier 0.0	// no outlier filtering
+	GyroModule.ABinit( NModule, ModuleOutlier );
+	AccelModule.ABinit( NModule, ModuleOutlier );
 
 	// alpha beta AHRS parameters
 	#define NAHRS 6 //  AB Filter parameter
-	#define AHRSOutliers 3.0 // remove outiliers 3.0 rad away from signal
-	#define AHRSmin -6.0
-	#define AHRSmax 6.0
+	#define AHRSOutliers 1.0 // remove outiliers 1.0 rad away from signal
+	#define AHRSmin -4.0
+	#define AHRSmax 4.0
 	RollAHRS.ABinit( NAHRS, AHRSOutliers, AHRSmin, AHRSmax );
-	PitchAHRS.ABinit( NAHRS, AHRSOutliers, AHRSmin, AHRSmax );
-	
-	// alpha beta _U/V/WiPrim parameters
-	#define _NIPRIM 6
-	#define IPrimOutliers 2.0
-	#define IPrimPrimmin -4.0
-	#define IPrimPrimmax 4.0
-	#define IPrimmin -10.0
-	#define IPrimmax 10.0
-	_UiPrim.ABinit( _NIPRIM, IPrimOutliers, IPrimmin, IPrimmax, IPrimPrimmin, IPrimPrimmax );
-	_ViPrim.ABinit( _NIPRIM, IPrimOutliers, IPrimmin, IPrimmax, IPrimPrimmin, IPrimPrimmax );	
-	_WiPrim.ABinit( _NIPRIM, IPrimOutliers, IPrimmin, IPrimmax, IPrimPrimmin, IPrimPrimmax );	
+	PitchAHRS.ABinit( NAHRS, AHRSOutliers, AHRSmin, AHRSmax );	
 	
 	// compute once the filter parameters in functions of values in FLASH
 	PeriodVelbi = velbi_period.get(); // period in second for baro/inertial velocity. period long enough to reduce effect of baro wind gradients
@@ -1202,12 +1186,9 @@ static void processIMU(void *pvParameters)
 			gyroDPS = mpud::gyroDegPerSec(gyroRaw, GYRO_FS); // For compatibility with Eckhard code only. Convert raw gyro to Gyro_FS full scale in degre per second 
 			gyroRPS = mpud::gyroRadPerSec(gyroRaw, GYRO_FS); // convert raw gyro to Gyro_FS full scale in radians per second
 			// update gyro filters
-			//gyroRPSx.ABupdate(dtGyr, gyroRPS.x );
-			//gyroRPSy.ABupdate(dtGyr, gyroRPS.y );			
-			//gyroRPSz.ABupdate(dtGyr, gyroRPS.z );
-			gyroRPSx.ABupdate(0.0, gyroRPS.x );
-			gyroRPSy.ABupdate(0.0, gyroRPS.y );			
-			gyroRPSz.ABupdate(0.0, gyroRPS.z );			
+			gyroRPSx.ABupdate(dtGyr, gyroRPS.x );
+			gyroRPSy.ABupdate(dtGyr, gyroRPS.y );			
+			gyroRPSz.ABupdate(dtGyr, gyroRPS.z );
 			// convert gyro coordinates to ISU : rad/s NED MPU and remove bias
 			xSemaphoreTake( dataMutex, 3/portTICK_PERIOD_MS ); // prevent data conflicts for 3ms max.			
 			gyroISUNEDMPU.x = -(gyroRPSz.ABfilt() - GroundGyroBias.z);
@@ -1240,8 +1221,11 @@ static void processIMU(void *pvParameters)
 			PrevgyroRPS.x = gyroCorr.x;
 			PrevgyroRPS.y = gyroCorr.y;
 			PrevgyroRPS.z = gyroCorr.z;
+				
+			//sprintf(str,"$Test gyr, time: %lld, dt: %.4f, RPS: %.4f, RPS Filt: %.4f, ISUNEDMPU: %.4f, ISUNEDBODY: %.4f, Corr: %.4f\r\n",
+			//			gyroTime, dtGyr, gyroRPS.x, gyroRPSx.ABfilt(), gyroISUNEDMPU.x, gyroISUNEDBODY.x, gyroCorr.x );					
+			//Router::sendXCV(str);				
 		}
-		
 		// get accel data
 		if( MPU.acceleration(&accelRaw) == ESP_OK ){ // read raw acceleration
 			accelG = mpud::accelGravity(accelRaw, mpud::ACCEL_FS_8G);  // For compatibility with Eckhard code only. Convert raw data to to 8G full scale
@@ -1250,13 +1234,9 @@ static void processIMU(void *pvParameters)
 			RawaccelISUNEDMPU.y = ((-accelG.y*9.807) - currentAccelBias.y ) * currentAccelGain.y;
 			RawaccelISUNEDMPU.z = ((-accelG.x*9.807) - currentAccelBias.z ) * currentAccelGain.z;
 			// update accels filters
-			accelISUNEDMPUx.ABupdate(0.0, RawaccelISUNEDMPU.x );
-			accelISUNEDMPUy.ABupdate(0.0, RawaccelISUNEDMPU.y );			
-			accelISUNEDMPUz.ABupdate(0.0, RawaccelISUNEDMPU.z );
-			// update accels filters
-			//accelISUNEDMPUx.ABupdate(dtGyr, RawaccelISUNEDMPU.x );
-			//accelISUNEDMPUy.ABupdate(dtGyr, RawaccelISUNEDMPU.y );			
-			//accelISUNEDMPUz.ABupdate(dtGyr, RawaccelISUNEDMPU.z );			
+			accelISUNEDMPUx.ABupdate(dtGyr, RawaccelISUNEDMPU.x );
+			accelISUNEDMPUy.ABupdate(dtGyr, RawaccelISUNEDMPU.y );			
+			accelISUNEDMPUz.ABupdate(dtGyr, RawaccelISUNEDMPU.z );
 			xSemaphoreTake( dataMutex, 3/portTICK_PERIOD_MS ); // prevent data conflicts for 3ms max.				
 			// convert from MPU to BODY
 			accelISUNEDBODY.x = C_T * accelISUNEDMPUx.ABfilt() + STmultSS * accelISUNEDMPUy.ABfilt() + STmultCS * accelISUNEDMPUz.ABfilt() + ( gyroCorr.y * gyroCorr.y + gyroCorr.z * gyroCorr.z ) * DistCGVario;
@@ -1332,15 +1312,33 @@ static void processIMU(void *pvParameters)
 				GravIMU.x = -GRAVITY * 2.0 * (q1 * q3 - q0 * q2);
 				GravIMU.y = -GRAVITY * 2.0 * (q2 * q3 + q0 * q1);
 				GravIMU.z = -GRAVITY * (q0 * q0 - q1 * q1 - q2 * q2 + q3 * q3);
-				
 				// compute kinetic accelerations using accelerations, corrected with gravity and centrifugal accels
 				xSemaphoreTake( dataMutex, 3/portTICK_PERIOD_MS ); // prevent data conflicts for 3ms max.
+				
 				UiPrim = accelISUNEDBODY.x - GravIMU.x - gyroCorr.y * TASbi * AoA + gyroCorr.z * TASbi * (+AoB); // MOD#1 Latest signs 
 				ViPrim = accelISUNEDBODY.y - GravIMU.y - gyroCorr.z * TASbi + gyroCorr.x * TASbi * AoA;			
 				WiPrim = accelISUNEDBODY.z - GravIMU.z + gyroCorr.y * TASbi - gyroCorr.x * TASbi * (+AoB); // MOD#1 Latest signs
-				xSemaphoreGive( dataMutex );
+				xSemaphoreGive( dataMutex );			
+				// UiPrim = accelISUNEDBODY.x - GravIMU.x - gyroCorr.y * Wbi + gyroCorr.z * Vbi;
+				// ViPrim = accelISUNEDBODY.y - GravIMU.y - gyroCorr.z * Ubi + gyroCorr.x * Wbi;			
+				// WiPrim = accelISUNEDBODY.z - GravIMU.z + gyroCorr.y * Ubi - gyroCorr.x * Vbi;			
 
-				// Compute dynamic period for baro inertiel filter to reduce bi period in high turbulence
+				// Kinectic accels alpha/beta short filter
+				#define NKinAccS 24.0 // accel kinetic alpha/beta filter coeff
+				#define alphaKinAccS (2.0 * (2.0 * NKinAccS - 1.0) / NKinAccS / (NKinAccS + 1.0))
+				#define betaKinAccS (6.0 / NKinAccS / (NKinAccS + 1.0) )			
+				deltaUiPrimS = UiPrim - UiPrimSF;
+				UiPrimPrimS = UiPrimPrimS + betaKinAccS * deltaUiPrimS / dtGyr;
+				UiPrimSF = UiPrimSF + alphaKinAccS * deltaUiPrimS + UiPrimPrimS * dtGyr;
+				deltaViPrimS = ViPrim - ViPrimSF;
+				ViPrimPrimS = ViPrimPrimS + betaKinAccS * deltaViPrimS / dtGyr;
+				ViPrimSF = ViPrimSF + alphaKinAccS * deltaViPrimS + ViPrimPrimS * dtGyr;
+				deltaWiPrimS = WiPrim - WiPrimSF;
+				WiPrimPrimS = WiPrimPrimS + betaKinAccS * deltaWiPrimS / dtGyr;
+				WiPrimSF = WiPrimSF + alphaKinAccS * deltaWiPrimS + WiPrimPrimS * dtGyr;
+
+				// Compute baro interial acceleration in body frame
+				// Compute dynamic period for baro inertiel filter
 				#define PeriodVelbiGain 2
 				#define GyrAmplitudeLimit 0.4
 				// Gyro x and z amplitude used to adjust Baro Inertial filter
@@ -1352,7 +1350,11 @@ static void processIMU(void *pvParameters)
 				}
 				fcVelbi1 = ( DynPeriodVelbi / ( DynPeriodVelbi + dtGyr ));
 				fcVelbi2 = ( 1.0 - fcVelbi1 );
-
+				xSemaphoreTake( dataMutex, 3/portTICK_PERIOD_MS ); // prevent data conflicts for 3ms max.			
+				UbiPrim = fcVelbi1 * ( UbiPrim + UiPrimPrimS * dtGyr ) + fcVelbi2 * UbPrimS;
+				VbiPrim = fcVelbi1 * ( VbiPrim + ViPrimPrimS * dtGyr ) + fcVelbi2 * VbPrimS;			
+				WbiPrim = fcVelbi1 * ( WbiPrim + WiPrimPrimS * dtGyr ) + fcVelbi2 * WbPrimS;
+				
 				// Compute baro interial velocity in body frame
 				Ubi = fcVelbi1 * ( Ubi + UbiPrim * dtGyr ) + fcVelbi2 * Ub;
 				Vbi = fcVelbi1 * ( Vbi + VbiPrim * dtGyr ) + fcVelbi2 * Vb;
@@ -1363,6 +1365,11 @@ static void processIMU(void *pvParameters)
 				TASbi = sqrt( TASbiSquare );
 				
 				xSemaphoreGive( dataMutex );
+				
+			// stream to test inertial values//sprintf(str,"$Test inertial, time: %lld, dt: %.4f, accx: %.4f, gravx: %.4f, accy: %.4f, gravy: %.4f, , accz: %.4f, gravz: %.4f,	Uip: %.4f, Uipp: %.4f, Vip: %.4f, Vipp: %.4f, Wip: %.4f, Wipp: %.4f, Pitch: %.4f, Roll: %.4f\r\n",
+			//gyroTime, dtGyr, accelISUNEDBODY.x, GravIMU.x, accelISUNEDBODY.y, GravIMU.y, accelISUNEDBODY.z, GravIMU.z,
+			//UiPrim, UiPrimPrimS, ViPrim, ViPrimPrimS, WiPrim, WiPrimPrimS, Pitch, Roll );					
+			//Router::sendXCV(str);					
 			}
 		}
 
@@ -1576,8 +1583,7 @@ static void processIMU(void *pvParameters)
 		
 		mtick++;
 		
-		//vTaskDelayUntil(&xLastWakeTime_mpu, 25/portTICK_PERIOD_MS);  // 25 ms = 40 Hz loop
-		vTaskDelayUntil(&xLastWakeTime_mpu, 10/portTICK_PERIOD_MS);  // 10 ms = 100 Hz loop
+		vTaskDelayUntil(&xLastWakeTime_mpu, 25/portTICK_PERIOD_MS);  // 25 ms = 40 Hz loop
 		if( (mtick % 40) == 0) {  // test stack every second
 			if( uxTaskGetStackHighWaterMark( mpid ) < 1024 )
 				 ESP_LOGW(FNAME,"Warning MPU and sensor task stack low: %d bytes", uxTaskGetStackHighWaterMark( mpid ) );
