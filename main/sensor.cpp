@@ -1887,44 +1887,15 @@ void readSensors(void *pvParameters){
 		} else {
 			Rho = RhoSLISA;
 		}
-		/* old CAS solution
-		#define NCAS 8.0 // CAS alpha/beta filter coeff
-		#define alphaCAS (2.0 * (2.0 * NCAS - 1.0) / NCAS / (NCAS + 1.0))
-		#define betaCAS (6.0 / NCAS / (NCAS + 1.0) )
-		CASraw = sqrt(2 * dynP / RhoSLISA);
-		deltaCAS = CASraw - CAS;
-		CASprim = CASprim + betaCAS * deltaCAS / dtdynP;
-		CAS = CAS + alphaCAS * deltaCAS + CASprim * dtdynP;
-		if (CAS < 0.0) CAS = 0.0;
-		*/
+
 		// update CAS filter
 		CAS.ABupdate( dtdynP, sqrt(2 * dynP / RhoSLISA) );
 		
+		// update TAS and TASprim
 		Rhocorr = sqrt(RhoSLISA/Rho);
 		TAS = Rhocorr * CAS.ABfilt();
 		TASprim = Rhocorr * CAS.ABprim();
-		/* old ALT
-		#define NALT 8.0 // ALT alpha/beta coeff
-		#define alphaALT (2.0 * (2.0 * NALT - 1.0) / NALT / (NALT + 1.0))
-		#define betaALT (6.0 / NALT / (NALT + 1.0) )	
-		ALTraw = (1.0 - pow( (statP-(QNH.get()-1013.25)) * 0.000986923 , 0.1902891634 ) ) * (273.15 + OAT.get()) * 153.846153846;
-		if ( FirsTimeSensor > 0 ) { // initialize Altitude and Energy filters
-			ALT = ALTraw;
-			ALTbi = ALT;
-			EnergyFilt = ALTbi+ TAS * TAS / 9.807 / 2.0;
-			dtStat = PERIOD10HZ;
-			FirsTimeSensor--;
-		}
-		deltaALT = ALTraw - ALT;
-		// filter to remove huge altitude variations when changing altitude/QNH
-		if ( abs(deltaALT) > 3.0 ) { // do not filter and compute altitude variation when difference between raw altitude and filtered altitude is more than 3.0 (30 m/s)
-			ALTPrim = 0.0;
-			ALT = ALTraw;
-		} else {
-			ALTPrim = ALTPrim + betaALT * deltaALT / dtStat;
-			ALT = ALT + alphaALT * deltaALT + ALTPrim * dtStat;
-		}
-		*/
+
 		// update altitude filter
 		ALT.ABupdate( dtStat, (1.0 - pow( (statP-(QNH.get()-1013.25)) * 0.000986923 , 0.1902891634 ) ) * (273.15 + OAT.get()) * 153.846153846 );
 	
@@ -2049,16 +2020,8 @@ void readSensors(void *pvParameters){
 		*/
 		
 		// option 2
-	
-		// kinetic energy calculation
-		#define NTE 8.0 // ALT alpha/beta coeff
-		#define alphaTE (2.0 * (2.0 * NTE - 1.0) / NTE / (NTE + 1.0))
-		#define betaTE (6.0 / NTE / (NTE + 1.0) )
-		deltaEnergy = ( TASbiSquare / GRAVITY / 2.0 ) - EnergyFilt;
-		EnergyPrim = EnergyPrim + betaTE * deltaEnergy / dtStat; // variation of total energy+
-		EnergyFilt = EnergyFilt + alphaTE * deltaEnergy + EnergyPrim * dtStat;
-	
-		// update energy filter
+
+		// update kinetic energy filter
 		Energy.ABupdate( dtStat, ( TASbiSquare / GRAVITY / 2.0 ) );
 
 		// filter total energy variation for display to pilot
