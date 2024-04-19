@@ -1185,10 +1185,14 @@ static void processIMU(void *pvParameters)
 			if (dtGyr == 0) dtGyr = PERIOD40HZ;
 			gyroDPS = mpud::gyroDegPerSec(gyroRaw, GYRO_FS); // For compatibility with Eckhard code only. Convert raw gyro to Gyro_FS full scale in degre per second 
 			gyroRPS = mpud::gyroRadPerSec(gyroRaw, GYRO_FS); // convert raw gyro to Gyro_FS full scale in radians per second
+			// update gyro filters with dt = 0.0 means no fitering
+			gyroRPSx.ABupdate(0.0, gyroRPS.x );
+			gyroRPSy.ABupdate(0.0, gyroRPS.y );			
+			gyroRPSz.ABupdate(0.0, gyroRPS.z );			
 			// update gyro filters
-			gyroRPSx.ABupdate(dtGyr, gyroRPS.x );
-			gyroRPSy.ABupdate(dtGyr, gyroRPS.y );			
-			gyroRPSz.ABupdate(dtGyr, gyroRPS.z );
+			//gyroRPSx.ABupdate(dtGyr, gyroRPS.x );
+			//gyroRPSy.ABupdate(dtGyr, gyroRPS.y );			
+			//gyroRPSz.ABupdate(dtGyr, gyroRPS.z );
 			// convert gyro coordinates to ISU : rad/s NED MPU and remove bias
 			xSemaphoreTake( dataMutex, 3/portTICK_PERIOD_MS ); // prevent data conflicts for 3ms max.			
 			gyroISUNEDMPU.x = -(gyroRPSz.ABfilt() - GroundGyroBias.z);
@@ -1211,10 +1215,14 @@ static void processIMU(void *pvParameters)
 			RawaccelISUNEDMPU.x = ((-accelG.z*9.807) - currentAccelBias.x ) * currentAccelGain.x;
 			RawaccelISUNEDMPU.y = ((-accelG.y*9.807) - currentAccelBias.y ) * currentAccelGain.y;
 			RawaccelISUNEDMPU.z = ((-accelG.x*9.807) - currentAccelBias.z ) * currentAccelGain.z;
+			// update accels filters with dt = 0.0 means no filtering
+			accelISUNEDMPUx.ABupdate(0.0, RawaccelISUNEDMPU.x );
+			accelISUNEDMPUy.ABupdate(0.0, RawaccelISUNEDMPU.y );			
+			accelISUNEDMPUz.ABupdate(0.0, RawaccelISUNEDMPU.z );
 			// update accels filters
-			accelISUNEDMPUx.ABupdate(dtGyr, RawaccelISUNEDMPU.x );
-			accelISUNEDMPUy.ABupdate(dtGyr, RawaccelISUNEDMPU.y );			
-			accelISUNEDMPUz.ABupdate(dtGyr, RawaccelISUNEDMPU.z );
+			//accelISUNEDMPUx.ABupdate(dtGyr, RawaccelISUNEDMPU.x );
+			//accelISUNEDMPUy.ABupdate(dtGyr, RawaccelISUNEDMPU.y );			
+			//accelISUNEDMPUz.ABupdate(dtGyr, RawaccelISUNEDMPU.z );
 			xSemaphoreTake( dataMutex, 3/portTICK_PERIOD_MS ); // prevent data conflicts for 3ms max.				
 			// convert from MPU to BODY
 			accelISUNEDBODY.x = C_T * accelISUNEDMPUx.ABfilt() + STmultSS * accelISUNEDMPUy.ABfilt() + STmultCS * accelISUNEDMPUz.ABfilt() + ( gyroCorr.y * gyroCorr.y + gyroCorr.z * gyroCorr.z ) * DistCGVario;
@@ -1297,6 +1305,7 @@ static void processIMU(void *pvParameters)
 				ViPrim = accelISUNEDBODY.y - GravIMU.y - gyroCorr.z * TASbi + gyroCorr.x * TASbi * AoA;			
 				WiPrim = accelISUNEDBODY.z - GravIMU.z + gyroCorr.y * TASbi - gyroCorr.x * TASbi * (+AoB); // MOD#1 Latest signs
 				xSemaphoreGive( dataMutex );			
+				
 				// UiPrim = accelISUNEDBODY.x - GravIMU.x - gyroCorr.y * Wbi + gyroCorr.z * Vbi;
 				// ViPrim = accelISUNEDBODY.y - GravIMU.y - gyroCorr.z * Ubi + gyroCorr.x * Wbi;			
 				// WiPrim = accelISUNEDBODY.z - GravIMU.z + gyroCorr.y * Ubi - gyroCorr.x * Vbi;			
