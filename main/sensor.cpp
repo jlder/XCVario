@@ -1203,28 +1203,6 @@ static void processIMU(void *pvParameters)
 			gyroCorr.y = gyroISUNEDBODY.y;// + BiasQuatGy;  // error on y should be added
 			gyroCorr.z = gyroISUNEDBODY.z;// + BiasQuatGz;  // error on z should be removed
 			xSemaphoreGive( dataMutex );
-			if ( abs(gyroCorr.x - PrevgyroRPS.x)*100000 < 1.0 && abs(gyroCorr.y - PrevgyroRPS.y)*100000 < 1.0 && abs(gyroCorr.z - PrevgyroRPS.z)*100000 < 1.0 ) {
-				Alarm++;
-				if ( Alarm > 10 ) {
-					if( !gflags.gload_alarm ) {
-						Audio::alarm( true );
-						gflags.gload_alarm = true;
-					}
-				}
-			} else {
-				Alarm=0;
-				if( gflags.gload_alarm ) {
-					Audio::alarm( false );
-					gflags.gload_alarm = false;
-				}					
-			}
-			PrevgyroRPS.x = gyroCorr.x;
-			PrevgyroRPS.y = gyroCorr.y;
-			PrevgyroRPS.z = gyroCorr.z;
-				
-			//sprintf(str,"$Test gyr, time: %lld, dt: %.4f, RPS: %.4f, RPS Filt: %.4f, ISUNEDMPU: %.4f, ISUNEDBODY: %.4f, Corr: %.4f\r\n",
-			//			gyroTime, dtGyr, gyroRPS.x, gyroRPSx.ABfilt(), gyroISUNEDMPU.x, gyroISUNEDBODY.x, gyroCorr.x );					
-			//Router::sendXCV(str);				
 		}
 		// get accel data
 		if( MPU.acceleration(&accelRaw) == ESP_OK ){ // read raw acceleration
