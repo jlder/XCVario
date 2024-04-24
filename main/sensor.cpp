@@ -1890,7 +1890,7 @@ void readSensors(void *pvParameters){
 		
 		// compute CAS, ALT and Vzbaro using alpha/beta filters.  TODO consider using atmospher.h functions
 		if (statP > 500.0) {
-			Rho = (100.0 * statP / 287.058 / (273.15 + OAT.get()));
+			Rho = (100.0 * statP / 287.058 / (273.15 + OATemp.ABfilt()));
 		} else {
 			Rho = RhoSLISA;
 		}
@@ -1904,15 +1904,11 @@ void readSensors(void *pvParameters){
 		TASprim = Rhocorr * CAS.ABprim();
 
 		// update altitude filter
-		ALT.ABupdate( dtStat, (1.0 - pow( (statP-(QNH.get()-1013.25)) * 0.000986923 , 0.1902891634 ) ) * (273.15 + OAT.get()) * 153.846153846 );
+		ALT.ABupdate( dtStat, (1.0 - pow( (statP-(QNH.get()-1013.25)) * 0.000986923 , 0.1902891634 ) ) * (273.15 + OATemp.ABfilt()) * 153.846153846 );
 	
 		// in glider operation, gaining altitude and energy is considered positive. However in NED representation vertical axis is positive pointing down.
 		// therefore Vzbaro in NED is the opposite of altitude variation.
 		Vzbaro = -ALT.ABprim();
-		
-		//sprintf(str,"$PB altitude, time : %lld, statP : %.4f, QNH.get() : %.4f, OAT.get() : %.4f, Sensor OAT.get() : %.4f, Altitude : %.4f, Vzbaro : %.4f\r\n",
-		//			statTime, statP, QNH.get(), OAT.get(), OAT.get(), ALT.ABfilt(), Vzbaro );					
-		//Router::sendXCV(str);		
 		
 		// compute AoA (Angle of attack) and AoB (Angle od slip)
 		#define FreqAlpha 0.7 // Hz
@@ -2430,7 +2426,7 @@ void readSensors(void *pvParameters){
 					(int32_t)(BiasAoB*1000),
 					(int32_t)(RTKNproj*1000),(int32_t)(RTKEproj*1000),(int32_t)(-RTKUproj*1000),(int32_t)(RTKheading*1000),
 					// $S2 stream
-					(int16_t)(OAT.get()*10.0), (int16_t)(OAT.get()*10.0), (int16_t)(MPUtempcel*10.0), chosenGnss->fix, chosenGnss->numSV,
+					(int16_t)(OATemp.ABfilt()*10.0), (int16_t)(OAT.get()*10.0), (int16_t)(MPUtempcel*10.0), chosenGnss->fix, chosenGnss->numSV,
 					(int32_t)(GroundGyroBias.x*100000.0), (int32_t)(GroundGyroBias.y*100000.0), (int32_t)(GroundGyroBias.z*100000.0),				
 					(int32_t)(BiasQuatGx*100000.0), (int32_t)(BiasQuatGy*100000.0), (int32_t)(BiasQuatGz*100000.0),
 					(int32_t)(GRAVITY*10000.0),(int16_t)BIAS_Init,(int16_t)(XCVTemp*10.0), (int16_t) NEnergy, (int16_t) (PeriodVelbi*10)
