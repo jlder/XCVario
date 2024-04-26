@@ -2037,8 +2037,8 @@ void readSensors(void *pvParameters){
 		#ifdef COMPUTEWIND
 		// TODO test and optimze wind calculation
 		// compute wind speed using GNSS and horizontal true airspeed
-		Vgx = 0.5 * Vgx + 0.5 * chosenGnss->speed.x; // GNSS x coordinate with short low pass to reduce noise
-		Vgy = 0.5 * Vgy + 0.5 * chosenGnss->speed.y; // GNSS y coordinate with short low pass to reduce noise
+		Vgx = 0.5 * Vgx + 0.5 * GnssVx.ABfilt(); // GNSS x coordinate with short low pass to reduce noise
+		Vgy = 0.5 * Vgy + 0.5 * GnssVy.ABfilt(); // GNSS y coordinate with short low pass to reduce noise
 		DeltaVgx = Vgx-VgxPrev; // Variation of x speed coordinate
 		DeltaVgy = Vgy-VgyPrev; // Variation of y speed coordinate
 		SegmentSquare = DeltaVgx*DeltaVgx+DeltaVgy*DeltaVgy; // squared module of segment between speed vectors extremities
@@ -2090,8 +2090,8 @@ void readSensors(void *pvParameters){
 		#define MINSEGMENT 0.75 // minimum segment size , i.e. minimu GNSS speed variation
 
 		// very short low pass filter on GNSS speed to reduce noise
-		Vgx = 0.5 * Vgx + 0.5 * chosenGnss->speed.x;
-		Vgy = 0.5 * Vgy + 0.5 * chosenGnss->speed.y;
+		Vgx = 0.5 * Vgx + 0.5 * GnssVx.ABfilt();
+		Vgy = 0.5 * Vgy + 0.5 * GnssVy.ABfilt();
 
 		// compute Vhbi baro inertial horizontal speed in earth frame
 		Vhbi = sqrt( Vxbi * Vxbi + Vybi * Vybi );
@@ -2407,7 +2407,7 @@ void readSensors(void *pvParameters){
 				sprintf(str,"$S1,%lld,%i,%i,%i,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$S3,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$S2,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",
 				// $S1 stream
 					statTime, (int32_t)(statP*100.0),(int32_t)(teP*100.0), (int16_t)(dynP*10), 
-					(int64_t)(chosenGnss->time*1000.0), (int16_t)(chosenGnss->speed.x*100), (int16_t)(chosenGnss->speed.y*100), (int16_t)(chosenGnss->speed.z*100), (int16_t)(GNSSRouteraw*1000),
+					(int64_t)(chosenGnss->time*1000.0), (int16_t)(GnssVx.ABfilt()*100), (int16_t)(GnssVy.ABfilt()*100), (int16_t)(GnssVz.ABfilt()*100), (int16_t)(GNSSRouteraw*1000),
 					(int32_t)(Pitch*1000.0), (int32_t)(Roll*1000.0), (int32_t)(Yaw*1000.0),
 					(int32_t)(CAS.ABfilt()*100), (int32_t)(TAS*100), (int32_t)(ALT.ABfilt()*100), (int32_t)(Vzbaro*100),
 					(int32_t)(AoA*1000), (int32_t)(AoB*1000),
@@ -2439,7 +2439,7 @@ void readSensors(void *pvParameters){
 				// send $S1 only every 100ms
 				sprintf(str,"$S1,%lld,%i,%i,%i,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$S3,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",
 					statTime, (int32_t)(statP*100.0),(int32_t)(teP*100.0), (int16_t)(dynP*10), 
-					(int64_t)(chosenGnss->time*1000.0), (int16_t)(chosenGnss->speed.x*100), (int16_t)(chosenGnss->speed.y*100), (int16_t)(chosenGnss->speed.z*100), (int16_t)(GNSSRouteraw*1000),
+					(int64_t)(chosenGnss->time*1000.0), (int16_t)(GnssVx.ABfilt()*100), (int16_t)(GnssVy.ABfilt()*100), (int16_t)(GnssVz.ABfilt()*100), (int16_t)(GNSSRouteraw*1000),
 					(int32_t)(Pitch*1000.0), (int32_t)(Roll*1000.0), (int32_t)(Yaw*1000.0),
 					(int32_t)(CAS.ABfilt()*100), (int32_t)(TAS*100), (int32_t)(ALT.ABfilt()*100), (int32_t)(Vzbaro*100),
 					(int32_t)(AoA*1000), (int32_t)(AoB*1000),
