@@ -934,7 +934,7 @@ float PseudoHeadingPrim;// MOD#4 gyro bias
 		GyroBiasx.LPupdate( GyroCutoffPeriod, dt, gxraw - RollAHRS.ABprim() );
 		GyroBiasy.LPupdate( GyroCutoffPeriod, dt, gyraw - PitchAHRS.ABprim() );		
 		// compute pseudo heading from GNSS
-		GnssTrack = atan2( GnssVx.ABfilt(), GnssVy.ABfilt() );
+		GnssTrack = atan2( GnssVy.ABfilt(), GnssVx.ABfilt() );
 		PseudoHeadingPrim = ( GnssVy.ABprim() * cos(GnssTrack) - GnssVx.ABprim() * sin(GnssTrack) ) / TAS;
 		// compute Gz - pseudo heading variation long term average.		
 		GyroBiasz.LPupdate( GyroCutoffPeriod, dt, gzraw - PseudoHeadingPrim );		
@@ -1347,7 +1347,8 @@ static void processIMU(void *pvParameters)
 				
 				// Compute baro interial velocity ( complementary filter between baro inertial acceleration and baro speed )
 				Ubi = fcVelbi1 * ( Ubi + UbiPrim * dtGyr ) + fcVelbi2 * Ub;
-				Vbi = fcVelbi1 * ( Vbi + VbiPrim * dtGyr ) + fcVelbi2 * Vb;
+				// Vbi = fcVelbi1 * ( Vbi + VbiPrim * dtGyr ) + fcVelbi2 * Vb;
+				Vbi = Vb;
 				Wbi = fcVelbi1 * ( Wbi + WbiPrim * dtGyr ) + fcVelbi2 * Wb;
 
 				// baro inertial TAS & TAS square in any frame
@@ -1854,7 +1855,7 @@ void readSensors(void *pvParameters){
 				GnssVy.ABupdate( dtRTKtime, chosenGnss->speed.y );		
 				GnssVz.ABupdate( dtRTKtime, chosenGnss->speed.z );
 			}
-			GNSSRouteraw = atan2(GnssVx.ABfilt(),GnssVy.ABfilt());			
+			GNSSRouteraw = atan2(GnssVy.ABfilt(),GnssVx.ABfilt());			
 		} else {
 			chosenGnss->fix = 0;
 		}
@@ -1874,7 +1875,7 @@ void readSensors(void *pvParameters){
 				GnssVy.ABupdate( dtAllytime, chosenGnss->speed.y );		
 				GnssVz.ABupdate( dtAllytime, chosenGnss->speed.z );
 			}
-			GNSSRouteraw = atan2(GnssVx.ABfilt(),GnssVy.ABfilt());
+			GNSSRouteraw = atan2(GnssVy.ABfilt(),GnssVx.ABfilt());
 		} else {
 			chosenGnss->fix = 8; // GNSS Allystar TAU1301 checksum error			
 			chosenGnss->time = -1;
@@ -1904,7 +1905,7 @@ void readSensors(void *pvParameters){
 		TASprim = Rhocorr * CAS.ABprim();
 
 		// update altitude filter
-		ALT.ABupdate( dtStat, (1.0 - pow( (statP-(QNH.get()-1013.25)) * 0.000986923 , 0.1902891634 ) ) * (273.15 + OATemp.ABfilt()) * 153.846153846 );
+		ALT.ABupdate( dtStat, (1.0 - pow( (statP-(QNH.get()-1013.25)) * 0.000986923 , 0.1902891634 ) ) * (273.15 + 15) * 153.846153846 );
 	
 		// in glider operation, gaining altitude and energy is considered positive. However in NED representation vertical axis is positive pointing down.
 		// therefore Vzbaro in NED is the opposite of altitude variation.
