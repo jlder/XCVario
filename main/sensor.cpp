@@ -1,8 +1,8 @@
 // compile options
 //
-#define LS6
+//#define LS6
 //#define TAURUS
-//#define VENTUS3
+#define VENTUS3
 //
 #define COMPUTEBIAS   // code to estimate gyro bias
 //
@@ -1028,7 +1028,7 @@ float PseudoHeadingPrim;// MOD#4 gyro bias
 		// apply integral feedback to gyros
 		gx = gx + integralFBx; 
 		gy = gy + integralFBy;
-		gz = gz + integralFBz;
+		// gz = gz + integralFBz; // do not integrate error on the z axis
 		// Apply proportional feedback to gyros
 		gx = gx + dynKp * halfex;
 		gy = gy + dynKp * halfey;
@@ -1346,10 +1346,10 @@ static void processIMU(void *pvParameters)
 				WbiPrim = fcVelbi1 * ( WbiPrim + WiPrimF.ABprim() * dtGyr ) + fcVelbi2 * WbPrimS;
 				
 				// Compute baro interial velocity ( complementary filter between baro inertial acceleration and baro speed )
-				Ubi = fcVelbi1 * ( Ubi + UbiPrim * dtGyr ) + fcVelbi2 * Ub;
+				Ubi = fcVelbi1 * ( Ubi + 1.2 * UbiPrim * dtGyr ) + fcVelbi2 * Ub;
 				// Vbi = fcVelbi1 * ( Vbi + VbiPrim * dtGyr ) + fcVelbi2 * Vb;
 				Vbi = Vb;
-				Wbi = fcVelbi1 * ( Wbi + WbiPrim * dtGyr ) + fcVelbi2 * Wb;
+				Wbi = fcVelbi1 * ( Wbi + 0.8 * WbiPrim * dtGyr ) + fcVelbi2 * Wb;
 
 				// baro inertial TAS & TAS square in any frame
 				TASbiSquare = Ubi * Ubi + Vbi * Vbi + Wbi * Wbi;
