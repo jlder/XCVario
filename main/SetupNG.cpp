@@ -59,6 +59,14 @@ void change_kiMahony(){
 		Mahonyki = ki_Mahony.get(); // unit for Mahony Ki adjustement
 }
 
+void change_UiPgain() {
+		UiPgain = UiP_gain.get();
+}
+
+void change_WiPgain() {
+		WiPgain = WiP_gain.get();
+}
+
 void change_ballast() {
 	Speed2Fly.change_ballast();
 }
@@ -244,7 +252,12 @@ SetupNG<int>  			vario_unit( "VARIO_UNIT", VARIO_UNIT_MS );
 SetupNG<int>  			temperature_unit( "TEMP_UNIT", T_CELCIUS );
 SetupNG<int>  			qnh_unit("QNH_UNIT", QNH_HPA );
 SetupNG<int>  			rot_default( "ROTARY_DEFAULT", 0 );
-SetupNG<int>  			serial1_speed( "SERIAL2_SPEED", 4 );   // tag will stay SERIAL2 from historical reason // 38400 bps for FLARM
+#ifdef VENTUS3
+SetupNG<int>  			serial1_speed( "SERIAL2_SPEED", 3 );   // tag will stay SERIAL2 from historical reason // 19200 bps for Ventus 3 FLARM
+#endif
+#ifdef LS6
+SetupNG<int>  			serial1_speed( "SERIAL2_SPEED", 4 );   // tag will stay SERIAL2 from historical reason // 38400 bps for LS6 FLARM
+#endif
 SetupNG<int>  			serial1_pins_twisted( "SERIAL2_PINS", 0 );
 SetupNG<int>  			serial1_rxloop( "SERIAL2_RXLOOP", 0 );
 SetupNG<int>            serial1_tx( "SERIAL2_TX", (1UL << RT_WIRELESS) );     //  Route FLARM to wireless
@@ -261,8 +274,14 @@ SetupNG<int>  			serial2_tx( "SERIAL1_TX", 0 );     //  BT device and XCVario, S
 SetupNG<int>  			rt_s2_xcv( "S1_TX_XCV", 1, false, SYNC_NONE, VOLATILE );
 SetupNG<int>  			rt_s2_wl( "S1_TX_WL", 0, false, SYNC_NONE, VOLATILE );
 SetupNG<int>  			rt_s2_can( "S1_TX_CAN", 0,false, SYNC_NONE, VOLATILE );
-SetupNG<int>  			serial2_tx_inverted( "SERIAL1_TX_INV", RS232_NORMAL ); // normal for Ublox GNSS TTL
-SetupNG<int>  			serial2_rx_inverted( "SERIAL1_RX_INV", RS232_NORMAL ); // normal for Ublox GNSS TTL
+#ifdef LS6
+SetupNG<int>  			serial2_tx_inverted( "SERIAL1_TX_INV", RS232_NORMAL ); // normal for LS6 Allystar & Ublox GNSS TTL
+SetupNG<int>  			serial2_rx_inverted( "SERIAL1_RX_INV", RS232_NORMAL ); // normal for LS6 AllUblox GNSS TTL
+#endif
+#ifdef VENTUS3
+SetupNG<int>  			serial2_tx_inverted( "SERIAL1_TX_INV", RS232_INVERTED ); // normal for LS6 RS232 RTK
+SetupNG<int>  			serial2_rx_inverted( "SERIAL1_RX_INV", RS232_INVERTED ); // normal for LS6 RS232 RTK
+#endif
 SetupNG<int>  			serial2_tx_enable( "SER2_TX_ENA", 1 );
 SetupNG<int>  			software_update( "SOFTWARE_UPDATE", 0 );
 SetupNG<int>  			battery_display( "BAT_DISPLAY", 0 );
@@ -409,3 +428,5 @@ SetupNG<float> 			te_filt( "TE FILTER",2.5, true, SYNC_FROM_MASTER, PERSISTENT, 
 SetupNG<float> 			velbi_period( "VELBI_PERIOD",6.0, true, SYNC_FROM_MASTER, PERSISTENT, change_bifilt );
 SetupNG<float>			kp_Mahony("KP Mahony", 0.1, true, SYNC_FROM_MASTER, PERSISTENT, change_kpMahony );
 SetupNG<float>			ki_Mahony("KI Mahony", 0.002, true, SYNC_FROM_MASTER, PERSISTENT, change_kiMahony );
+SetupNG<float>			UiP_gain("UIPGAIN",1.2, true, SYNC_FROM_MASTER, PERSISTENT, change_UiPgain );
+SetupNG<float>			WiP_gain("UIPGAIN",0.8, true, SYNC_FROM_MASTER, PERSISTENT, change_WiPgain );

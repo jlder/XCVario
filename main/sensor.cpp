@@ -1,14 +1,4 @@
-// compile options
-//
-#define LS6
-//#define TAURUS
-//#define VENTUS3
-//
-#define COMPUTEBIAS   // code to estimate gyro bias
-//
-#define COMPUTEWIND   // code to compute wind with GNSS
-//
-#define FILTERMPU  // code to filter MPU data at ~ 7 Hz
+
 
 
 #include "sensor.h"
@@ -403,6 +393,9 @@ float betaEnergy;
 float PeriodVelbi = 2.5;
 float fcVelbi1;
 float fcVelbi2;
+
+float UiPgain = 1.0;
+float WiPgain = 1.0;
 
 static float Ubi = 0.0;
 static float Vbi = 0.0;
@@ -1181,6 +1174,8 @@ static void processIMU(void *pvParameters)
 	PeriodVelbi = velbi_period.get(); // period in second for baro/inertial velocity. period long enough to reduce effect of baro wind gradients
 	Mahonykp = kp_Mahony.get(); // get last kp value from NV memory
 	Mahonyki = ki_Mahony.get(); // get last ki value from NV memory
+	UiPgain = UiP_gain.get(); // get last UiPrim gain for bi calc from NV memory
+	WiPgain = WiP_gain.get(); // get last WiPrim gain for bi calc from NV memory	
 	
 	while (1) {
 
@@ -1346,10 +1341,10 @@ static void processIMU(void *pvParameters)
 				WbiPrim = fcVelbi1 * ( WbiPrim + WiPrimF.ABprim() * dtGyr ) + fcVelbi2 * WbPrimS;
 				
 				// Compute baro interial velocity ( complementary filter between baro inertial acceleration and baro speed )
-				Ubi = fcVelbi1 * ( Ubi + 1.2 * UbiPrim * dtGyr ) + fcVelbi2 * Ub;
+				Ubi = fcVelbi1 * ( Ubi + UiPgain * UbiPrim * dtGyr ) + fcVelbi2 * Ub;
 				// Vbi = fcVelbi1 * ( Vbi + VbiPrim * dtGyr ) + fcVelbi2 * Vb;
 				Vbi = Vb;
-				Wbi = fcVelbi1 * ( Wbi + 0.8 * WbiPrim * dtGyr ) + fcVelbi2 * Wb;
+				Wbi = fcVelbi1 * ( Wbi + WiPgain * WbiPrim * dtGyr ) + fcVelbi2 * Wb;
 
 				// baro inertial TAS & TAS square in any frame
 				TASbiSquare = Ubi * Ubi + Vbi * Vbi + Wbi * Wbi;

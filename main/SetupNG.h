@@ -505,6 +505,8 @@ extern SetupNG<float>  		te_vario;
 extern SetupNG<float>  		velbi_period;
 extern SetupNG<float>		kp_Mahony;
 extern SetupNG<float>		ki_Mahony;
+extern SetupNG<float>		UiP_gain;
+extern SetupNG<float>		WiP_gain;
 
 extern SetupNG<int>  		display_type;
 extern SetupNG<int>  		display_orientation;

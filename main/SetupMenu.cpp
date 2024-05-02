@@ -2027,6 +2027,17 @@ int ki_adj( SetupMenuValFloat * p ){
 	return 0;
 }
 
+int UiP_gain_adj( SetupMenuValFloat * p ){
+		UiPgain = UiP_gain.get(); // gain on UiPrim for baro inertial calculation
+	return 0;
+}
+
+int WiP_gain_adj( SetupMenuValFloat * p ){
+		WiPgain = WiP_gain.get(); // gain on UiPrim for baro inertial calculation
+	return 0;
+}
+
+
 void SetupMenu::flighttest_menu_create( MenuEntry *top ){
 	
 	SetupMenuValFloat * tefilt = new SetupMenuValFloat( "TE period", "S",	0.5, 5.9, 0.1, tefilt_adj, true, &te_filt );
@@ -2049,6 +2060,15 @@ void SetupMenu::flighttest_menu_create( MenuEntry *top ){
 	kiMahony->setPrecision(4);
 	top->addEntry( kiMahony );
 	
+	SetupMenuValFloat * gainUiP = new SetupMenuValFloat( "UiP bi gain.", "unit",	0.6, 1.4, 0.05, UiP_gain_adj, true, &UiP_gain );
+	gainUiP->setHelp(PROGMEM"UiPrim gain value");
+	gainUiP->setPrecision(3);
+	top->addEntry( gainUiP );	
+	
+	SetupMenuValFloat * gainWiP = new SetupMenuValFloat( "WiP bi gain.", "unit",	0.6, 1.4, 0.05, WiP_gain_adj, true, &WiP_gain );
+	gainWiP->setHelp(PROGMEM"WiPrim gain value");
+	gainWiP->setPrecision(3);
+	top->addEntry( gainWiP );	
 }
 
 void SetupMenu::setup_create_root(MenuEntry *top ){
@@ -2064,31 +2084,6 @@ void SetupMenu::setup_create_root(MenuEntry *top ){
 		vol->setHelp(PROGMEM"Audio volume level for variometer tone on internal and external speaker");
 		top->addEntry( vol );
 	}
-
-	/*	SetupMenu * va = new SetupMenu( "Vario and Speed 2 Fly" );
-		top->addEntry( va );
-		va->addCreator( vario_menu_create ); */
-
-	/*
-	SetupMenuValFloat * mc = new SetupMenuValFloat( "MC", "",	0.0, 9.9, 0.1, 0, true, &MC );
-	mc->setHelp(PROGMEM"Mac Cready value for optimum cruise speed, or average climb rate to be provided in same unit as the variometer");
-	mc->setPrecision(1);
-	top->addEntry( mc );
-		
-	SetupMenuValFloat * bgs = new SetupMenuValFloat( "Bugs", "%", 0.0, 50, 1, bug_adj, true, &bugs  );
-	bgs->setHelp(PROGMEM"Percent of bugs contamination to indicate degradation of gliding performance");
-	top->addEntry( bgs );
-
-	SetupMenuValFloat * bal = new SetupMenuValFloat( "Ballast", "litre", 0.0, 500, 1, water_adj, true, &ballast_kg  );
-	bal->setHelp(PROGMEM"Amount of water ballast added to the over all weight");
-	bal->setPrecision(0);
-	top->addEntry( bal );
-
-	SetupMenuValFloat * crewball = new SetupMenuValFloat( "Crew Weight", "kg", 0, 300, 1, crew_weight_adj, false, &crew_weight );
-	crewball->setPrecision(0);
-	crewball->setHelp(PROGMEM"Weight of the pilot(s) including parachute (everything on top of the empty weight apart from ballast)");
-	top->addEntry( crewball );
-	*/
 
 	SetupMenu * flightparam = new SetupMenu( "Glider/Flight parameters" );
 	top->addEntry( flightparam );

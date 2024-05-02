@@ -1,6 +1,19 @@
 #ifndef _SENSOR_H_
 #define _SENSOR_H_
 
+// compile options
+//
+#define LS6
+//#define TAURUS
+//#define VENTUS3
+//
+#define COMPUTEBIAS   // code to estimate gyro bias
+//
+#define COMPUTEWIND   // code to compute wind with GNSS
+//
+#define FILTERMPU  // code to filter MPU data at ~ 7 Hz
+
+
 #include "MPU.hpp"        // main file, provides the class itself
 #include "AnalogInput.h"
 #include "Protocols.h"
@@ -128,6 +141,8 @@ extern float betaEnergy;
 extern float PeriodVelbi;
 extern float Mahonykp;
 extern float Mahonyki;
+extern float UiPgain;
+extern float WiPgain;
 
 extern float RTKtime;
 extern float RTKEvel;
