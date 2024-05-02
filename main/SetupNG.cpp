@@ -413,20 +413,38 @@ SetupNG<int> 			gear_warning("GEARWA", 0 );
 SetupNG<t_wireless_id>  custom_wireless_id("WLID", t_wireless_id("") );
 SetupNG<int> 			drawing_prio("DRAWP", DP_NEEDLE );
 
-mpud::float_axes_t zero_bias;
-mpud::float_axes_t imu_gains;
-SetupNG<mpud::float_axes_t>	gyro_bias("GYRO_BIAS", zero_bias );
-SetupNG<mpud::float_axes_t>	accl_bias("ACCL_BIAS", zero_bias );
-SetupNG<mpud::float_axes_t>	gyro_gain("GYRO_GAIN", imu_gains );
-SetupNG<mpud::float_axes_t>	accl_gain("ACCL_GAIN", imu_gains );
+mpud::float_axes_t load_float_axes_t( float x, float y, float z) {
+	mpud::float_axes_t temp;
+	temp.x = x;
+	temp.y = y;
+	temp.z = z;
+	return temp;
+}
+
+#ifdef LS6
+SetupNG<mpud::float_axes_t>	accl_bias("ACCL_BIAS", load_float_axes_t(-0.128, 0.021, -0.163) );
+SetupNG<mpud::float_axes_t>	accl_gain("ACCL_GAIN", load_float_axes_t(0.968, 0.985, 0.990 ) );
+SetupNG<float>			tilt("XCV_TILT", -0.223);
+SetupNG<float>			sway("XCV_SWAY", 0.024);
+SetupNG<float>			distCG("DIST_CG_XCVARIO", 1.42);
+#endif	
+
+#ifdef VENTUS3
+SetupNG<mpud::float_axes_t>	accl_bias("ACCL_BIAS", load_float_axes_t(1.0162, -0.0747, -0.53) );
+SetupNG<mpud::float_axes_t>	accl_gain("ACCL_GAIN", load_float_axes_t(0.9786, 0.9932, 0.9958) );
 SetupNG<float>			tilt("XCV_TILT", 0.0);
 SetupNG<float>			sway("XCV_SWAY", 0.0);
-SetupNG<float>			distCG("DIST_CG_XCVARIO", 0.0);
-SetupNG<float>			gravity("LOCAL_GRAVITY", 9.807);
+SetupNG<float>			distCG("DIST_CG_XCVARIO", 1.3);
+#endif
+
+SetupNG<mpud::float_axes_t>	gyro_bias("GYRO_BIAS", load_float_axes_t( 0.0, 0.0, 0.0) );
+SetupNG<mpud::float_axes_t>	gyro_gain("GYRO_GAIN", load_float_axes_t( 0.0, 0.0, 0.0) );
+
+SetupNG<float>			gravity("LOCAL_GRAVITY", 9.804);
 SetupNG<float>          mpu_temperature("MPUTEMP", 45.0, true, SYNC_FROM_MASTER, PERSISTENT, chg_mpu_target );    // default for AHRS chip temperature (XCV 2023)
-SetupNG<float> 			te_filt( "TE FILTER",2.5, true, SYNC_FROM_MASTER, PERSISTENT, change_tefilter );
-SetupNG<float> 			velbi_period( "VELBI_PERIOD",6.0, true, SYNC_FROM_MASTER, PERSISTENT, change_bifilt );
+SetupNG<float> 			te_filt( "TE FILTER",1.0, true, SYNC_FROM_MASTER, PERSISTENT, change_tefilter );
+SetupNG<float> 			velbi_period( "VELBI_PERIOD",7.0, true, SYNC_FROM_MASTER, PERSISTENT, change_bifilt );
 SetupNG<float>			kp_Mahony("KP Mahony", 0.1, true, SYNC_FROM_MASTER, PERSISTENT, change_kpMahony );
 SetupNG<float>			ki_Mahony("KI Mahony", 0.002, true, SYNC_FROM_MASTER, PERSISTENT, change_kiMahony );
 SetupNG<float>			UiP_gain("UIPGAIN",1.2, true, SYNC_FROM_MASTER, PERSISTENT, change_UiPgain );
-SetupNG<float>			WiP_gain("UIPGAIN",0.8, true, SYNC_FROM_MASTER, PERSISTENT, change_WiPgain );
+SetupNG<float>			WiP_gain("WIPGAIN",0.8, true, SYNC_FROM_MASTER, PERSISTENT, change_WiPgain );

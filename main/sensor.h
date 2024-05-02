@@ -1,11 +1,11 @@
 #ifndef _SENSOR_H_
 #define _SENSOR_H_
 
+//!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+//
 // compile options
 //
-//#define LS6
-//#define TAURUS
-#define VENTUS3
+//!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 //
 #define COMPUTEBIAS   // code to estimate gyro bias
 //
@@ -13,6 +13,16 @@
 //
 #define FILTERMPU  // code to filter MPU data at ~ 7 Hz
 
+
+//!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+//
+// glider specific parameters
+//
+//!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+//
+//#define LS6
+//#define TAURUS
+#define VENTUS3
 
 #include "MPU.hpp"        // main file, provides the class itself
 #include "AnalogInput.h"

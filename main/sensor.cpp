@@ -79,6 +79,45 @@
 #include "CenterAid.h"
 #include "MPU.hpp"
 
+
+//!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+//
+// glider specific parameters
+//
+//!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+//
+#ifdef LS6
+	float CLA = 5.75;
+	float KAoB = -3.5; // MOD#1 Latest signs
+	float KGx = 4.1;
+ 	float SURFACE = 10.53;
+	float WEIGHT = 353;
+	float WINGLOAD = WEIGHT / SURFACE;
+	float SPEED1 = 90;
+	float SINK1 = -0.6;
+	float SPEED2 = 145;
+	float SINK2 = -1.21;
+	float SPEED3 = 180;
+	float SINK3 = -1.91;
+	float MAXBALLAST = 120.0;
+#endif
+
+#ifdef VENTUS3
+	float CLA = 5.98;
+	float KAoB = -2.97; // MOD#1 Latest signs
+	float KGx = 12.0;
+ 	float SURFACE = 10.5;
+	float WEIGHT = 488;
+	float WINGLOAD = WEIGHT / SURFACE;
+	float SPEED1 = 27.2 * 3.6;
+	float SINK1 = -0.52;
+	float SPEED2 = 38.3 * 3.6;
+	float SINK2 = -0.75;
+	float SPEED3 = 55.0 * 3.6;
+	float SINK3 = -2.0;
+	float MAXBALLAST = 120.0;
+#endif
+
 // #include "sound.h"
 
 /*
@@ -150,27 +189,6 @@ mpud::float_axes_t accelG;
 mpud::float_axes_t gyroDPS;
 mpud::float_axes_t accelG_Prev;
 mpud::float_axes_t gyroDPS_Prev; 
-
-//!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-//
-// glider specific parameters
-//
-//!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-#ifdef LS6
-	float CLA = 5.75;
-	float KAoB = -3.5; // MOD#1 Latest signs
-	float KGx = 4.1;
-#endif
-#ifdef TAURUS
-	float CLA = 5.67;
-	float KAoB = -3.0; // MOD#1 Latest signs
-	float KGx = 4.0;
-#endif
-#ifdef VENTUS3
-	float CLA = 5.98;
-	float KAoB = -2.97; // MOD#1 Latest signs
-	float KGx = 12.0;
-#endif
 
 #define MaxGyroVariation 1.0 // TDB if need to change for other gliders, in particular for motor gliders
 #define MaxAccelVariation 10.0 // TDB if need to change for other gliders, in particular for motor gliders
@@ -2373,8 +2391,12 @@ void readSensors(void *pvParameters){
 			Local Gravity in tenth of milli m/s²,
 			Number of ground bias estimations,
 			XCVtemp (temperature inside vario) in tenth of °C,
-			NEnergy in units (NEnergy is multiplied by sampling period to get filter period in seconds),
-			PeriodVelbi (Baro Inertial period in tenth of seconds)
+			PeriodVelbi (Baro Inertial period in tenth of seconds),
+			te_filt (Total Energy low pass filter period) in tenth of second,
+			Mahonykp in tenthousandth of unit,
+			Mahonyki in tenthousandth of unit,
+			UiPgain in hundredth of unit,
+			WiPgain in hunderdth of unit			
 		*/	
 		/* 
 			$S3,
@@ -2399,7 +2421,7 @@ void readSensors(void *pvParameters){
 
 			if ( !(count % 50) ) { 
 				// send $S1 and $S2 every 50 cycles = 5 seconds
-				sprintf(str,"$S1,%lld,%i,%i,%i,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$S3,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$S2,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",
+				sprintf(str,"$S1,%lld,%i,%i,%i,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$S3,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$S2,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",
 				// $S1 stream
 					statTime, (int32_t)(statP*100.0),(int32_t)(teP*100.0), (int16_t)(dynP*10), 
 					(int64_t)(chosenGnss->time*1000.0), (int16_t)(GnssVx.ABfilt()*100), (int16_t)(GnssVy.ABfilt()*100), (int16_t)(GnssVz.ABfilt()*100), (int16_t)(GNSSRouteraw*1000),
@@ -2425,7 +2447,8 @@ void readSensors(void *pvParameters){
 					(int16_t)(OATemp.ABfilt()*10.0), (int16_t)(OAT.get()*10.0), (int16_t)(MPUtempcel*10.0), chosenGnss->fix, chosenGnss->numSV,
 					(int32_t)(GroundGyroBias.x*100000.0), (int32_t)(GroundGyroBias.y*100000.0), (int32_t)(GroundGyroBias.z*100000.0),				
 					(int32_t)(BiasQuatGx*100000.0), (int32_t)(BiasQuatGy*100000.0), (int32_t)(BiasQuatGz*100000.0),
-					(int32_t)(GRAVITY*10000.0),(int16_t)BIAS_Init,(int16_t)(XCVTemp*10.0), (int16_t) NEnergy, (int16_t) (PeriodVelbi*10)
+					(int32_t)(GRAVITY*10000.0),(int16_t)BIAS_Init,(int16_t)(XCVTemp*10.0), (int16_t) (PeriodVelbi*10),
+					(int32_t)(te_filt.get()*10),(int32_t)(Mahonykp*10000),(int32_t)(Mahonyki*10000), (int32_t)(UiPgain*100), (int32_t)(WiPgain*100)
 					);
 				xSemaphoreTake( BTMutex, 2/portTICK_PERIOD_MS );				
 				Router::sendXCV(str);
@@ -2702,6 +2725,17 @@ void system_startup(void *args){
 	
 		mpud::raw_axes_t accelRaw;
 		delay( 50 );
+		
+		// TODO set data for Flight Test gliders only. To be removed later in final code using XCVario setup
+		polar_wingload.set( WINGLOAD );
+		polar_speed1.set( SPEED1 );
+		polar_sink1.set( SINK1 );
+		polar_speed2.set( SPEED2 );
+		polar_sink2.set( SINK2 );
+		polar_speed3.set( SPEED3 );
+		polar_sink3.set( SINK3 );
+		polar_max_ballast.set( MAXBALLAST );
+		polar_wingarea.set( SURFACE );
 
 		// check GRAVITY and accels offset/gain 
 		GRAVITY = gravity.get();
