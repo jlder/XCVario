@@ -2736,6 +2736,7 @@ void system_startup(void *args){
 		polar_sink3.set( SINK3 );
 		polar_max_ballast.set( MAXBALLAST );
 		polar_wingarea.set( SURFACE );
+		empty_weight.set( WEIGHT );
 
 		// check GRAVITY and accels offset/gain 
 		GRAVITY = gravity.get();
