@@ -20,9 +20,9 @@
 //
 //!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 //
-//#define LS6
+#define LS6
 //#define TAURUS
-#define VENTUS3
+//#define VENTUS3
 
 #include "MPU.hpp"        // main file, provides the class itself
 #include "AnalogInput.h"
