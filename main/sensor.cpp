@@ -1851,6 +1851,7 @@ void readSensors(void *pvParameters){
 		GNSSRouteraw = chosenGnss->route;
 		
 		// MOD#2 add RTK begin
+		#ifdef RTK
 		if ( RTKmode != 'N' ) {
 			if (RTKmode == 'A' ) chosenGnss->fix = 3; // GNSS 3D
 			if (RTKmode == 'D' ) chosenGnss->fix = 4; // GNSS 3D diff
@@ -1872,9 +1873,12 @@ void readSensors(void *pvParameters){
 		} else {
 			chosenGnss->fix = 0;
 		}
+		#endif
 		// MOD#2 add RTK end
+
 		
 		// MOD#5 add Allystar TAU1201 begin
+		#ifdef ALLYSTAR
 		if ( Allytime >= 0 ) {
 			chosenGnss->fix = 7; // GNSS Allystar TAU1301 fix	
 			chosenGnss->time = Allytime;
@@ -1896,7 +1900,8 @@ void readSensors(void *pvParameters){
 			chosenGnss->speed.y = 0.0;
 			chosenGnss->speed.z = 0.0;
 			GNSSRouteraw = 0.0;
-		}				
+		}
+		#endif
 		// MOD#5 add Allystar TAU1201 end	
 		
 		// MOD#4 gyro bias

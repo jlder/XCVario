@@ -12,6 +12,10 @@
 #define COMPUTEWIND   // code to compute wind with GNSS
 //
 #define FILTERMPU  // code to filter MPU data at ~ 7 Hz
+//
+#define RTK // code for RTK
+//
+//#define ALLYSTAR // code for Allystar
 
 
 //!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
