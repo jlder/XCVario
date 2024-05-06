@@ -12,10 +12,6 @@
 #define COMPUTEWIND   // code to compute wind with GNSS
 //
 #define FILTERMPU  // code to filter MPU data at ~ 7 Hz
-//
-#define RTK // code for RTK
-//
-//#define ALLYSTAR // code for Allystar
 
 
 //!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -25,8 +21,16 @@
 //!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 //
 #define LS6
-//#define TAURUS
 //#define VENTUS3
+
+
+#ifdef LS6
+#define ALLYSTAR // code for Allystar
+#endif
+
+#ifdef VENTUS3
+#define RTK // code for RTK
+#endif
 
 #include "MPU.hpp"        // main file, provides the class itself
 #include "AnalogInput.h"

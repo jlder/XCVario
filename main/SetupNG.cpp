@@ -260,7 +260,12 @@ SetupNG<int>  			serial1_speed( "SERIAL2_SPEED", 4 );   // tag will stay SERIAL2
 #endif
 SetupNG<int>  			serial1_pins_twisted( "SERIAL2_PINS", 0 );
 SetupNG<int>  			serial1_rxloop( "SERIAL2_RXLOOP", 0 );
+#ifdef VENTUS3
+SetupNG<int>            serial1_tx( "SERIAL2_TX", 0 );     //  don't Route FLARM to wireless
+#endif
+#ifdef LS6
 SetupNG<int>            serial1_tx( "SERIAL2_TX", (1UL << RT_WIRELESS) );     //  Route FLARM to wireless
+#endif
 SetupNG<int>  			rt_s1_xcv( "S2_TX_XCV", 1, false, SYNC_NONE, VOLATILE  );
 SetupNG<int>  			rt_s1_wl( "S2_TX_WL", 1, false, SYNC_NONE, VOLATILE );
 SetupNG<int>  			rt_s1_s2( "S2_TX_S2", 0, false, SYNC_NONE, VOLATILE );
@@ -444,7 +449,7 @@ SetupNG<float>			gravity("LOCAL_GRAVITY", 9.804);
 SetupNG<float>          mpu_temperature("MPUTEMP", 45.0, true, SYNC_FROM_MASTER, PERSISTENT, chg_mpu_target );    // default for AHRS chip temperature (XCV 2023)
 SetupNG<float> 			te_filt( "TE FILTER",1.0, true, SYNC_FROM_MASTER, PERSISTENT, change_tefilter );
 SetupNG<float> 			velbi_period( "VELBI_PERIOD",7.0, true, SYNC_FROM_MASTER, PERSISTENT, change_bifilt );
-SetupNG<float>			kp_Mahony("KP Mahony", 0.1, true, SYNC_FROM_MASTER, PERSISTENT, change_kpMahony );
-SetupNG<float>			ki_Mahony("KI Mahony", 0.002, true, SYNC_FROM_MASTER, PERSISTENT, change_kiMahony );
+SetupNG<float>			kp_Mahony("KP Mahony", 0.05, true, SYNC_FROM_MASTER, PERSISTENT, change_kpMahony );
+SetupNG<float>			ki_Mahony("KI Mahony", 0.001, true, SYNC_FROM_MASTER, PERSISTENT, change_kiMahony );
 SetupNG<float>			UiP_gain("UIPGAIN",1.2, true, SYNC_FROM_MASTER, PERSISTENT, change_UiPgain );
-SetupNG<float>			WiP_gain("WIPGAIN",0.8, true, SYNC_FROM_MASTER, PERSISTENT, change_WiPgain );
+SetupNG<float>			WiP_gain("WIPGAIN",0.9, true, SYNC_FROM_MASTER, PERSISTENT, change_WiPgain );
