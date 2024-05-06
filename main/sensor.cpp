@@ -408,7 +408,8 @@ static float Vzbaro = 0.0;
 float NEnergy = 10.0;
 float alphaEnergy;
 float betaEnergy;
-float PeriodVelbi = 2.5;
+float PeriodVelbi = 7.0;
+float TempPeriodVelbi = 7.0;
 float fcVelbi1;
 float fcVelbi2;
 
@@ -1194,7 +1195,7 @@ static void processIMU(void *pvParameters)
 	
 	// compute once the filter parameters in functions of values in FLASH
 	PeriodVelbi = velbi_period.get(); // period in second for baro/inertial velocity. period long enough to reduce effect of baro wind gradients
-	float TempPeriodVelbi = PeriodVelbi;
+	TempPeriodVelbi = PeriodVelbi;
 	Mahonykp = kp_Mahony.get(); // get last kp value from NV memory
 	Mahonyki = ki_Mahony.get(); // get last ki value from NV memory
 	UiPgain = UiP_gain.get(); // get last UiPrim gain for bi calc from NV memory
@@ -1253,6 +1254,13 @@ static void processIMU(void *pvParameters)
 			//accelISUNEDMPUy.ABupdate(dtGyr, RawaccelISUNEDMPU.y );			
 			//accelISUNEDMPUz.ABupdate(dtGyr, RawaccelISUNEDMPU.z );
 
+			xSemaphoreTake( dataMutex, 3/portTICK_PERIOD_MS ); // prevent data conflicts for 3ms max.				
+			// convert from MPU to BODY
+			accelISUNEDBODY.x = C_T * accelISUNEDMPUx.ABfilt() + STmultSS * accelISUNEDMPUy.ABfilt() + STmultCS * accelISUNEDMPUz.ABfilt() + ( gyroCorr.y * gyroCorr.y + gyroCorr.z * gyroCorr.z ) * DistCGVario;
+			accelISUNEDBODY.y = C_S * accelISUNEDMPUy.ABfilt() - S_S * accelISUNEDMPUz.ABfilt();
+			accelISUNEDBODY.z = -S_T * accelISUNEDMPUx.ABfilt() + SSmultCT * accelISUNEDMPUy.ABfilt() + CTmultCS * accelISUNEDMPUz.ABfilt();
+			xSemaphoreGive( dataMutex );
+			
 			// motor glider protection
 			AccelMotor1.LPupdate( 1.5, dtGyr, accelISUNEDMPUx.ABfilt() ); // filter to remove noise from acc x with low pass
 			AccelMotor2.LPupdate( 15, dtGyr, abs(accelISUNEDMPUx.ABfilt() - AccelMotor1.LowPass1()) ); // average amplitude around filtered signal
@@ -1261,14 +1269,7 @@ static void processIMU(void *pvParameters)
 				PeriodVelbi = 0.0; // baro inertiel period at zero to discard inertial when engine is running
 			} else {
 				PeriodVelbi = PeriodVelbi * 0.98 + TempPeriodVelbi * 0.02; // restore last baro inertial period progressively when engine is stopped
-			}
-
-			xSemaphoreTake( dataMutex, 3/portTICK_PERIOD_MS ); // prevent data conflicts for 3ms max.				
-			// convert from MPU to BODY
-			accelISUNEDBODY.x = C_T * accelISUNEDMPUx.ABfilt() + STmultSS * accelISUNEDMPUy.ABfilt() + STmultCS * accelISUNEDMPUz.ABfilt() + ( gyroCorr.y * gyroCorr.y + gyroCorr.z * gyroCorr.z ) * DistCGVario;
-			accelISUNEDBODY.y = C_S * accelISUNEDMPUy.ABfilt() - S_S * accelISUNEDMPUz.ABfilt();
-			accelISUNEDBODY.z = -S_T * accelISUNEDMPUx.ABfilt() + SSmultCT * accelISUNEDMPUy.ABfilt() + CTmultCS * accelISUNEDMPUz.ABfilt();
-			xSemaphoreGive( dataMutex );
+			}			
 		}
 		
 		// attitude initialization when XCVario starts during first 10 iterations 
@@ -2539,7 +2540,7 @@ void readTemp(void *pvParameters){
 				OATemp.ABupdate( 1.0, t );
 				temperature =  OATemp.ABfilt();
 				if( temperature > 65.0 )
-					temperature = 20 - ALT.ABfilt() * .00625;  // if temperature error, switch to standard ISA + 5
+					temperature = 20 - ALT.ABfilt() * .0065;  // if temperature error, switch to standard ISA + 5
 				temperatureLP.LPupdate( 4.0, 1.0, temperature);
 				if( abs(temperatureLP.LowPass1() - temp_prev) > 0.1 ){
 					OAT.set( std::round(temperatureLP.LowPass1()*10)/10 );

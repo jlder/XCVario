@@ -20,16 +20,16 @@
 //
 //!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 //
-#define LS6
-//#define VENTUS3
+//#define LS6
+#define VENTUS3
 
 
 #ifdef LS6
-#define ALLYSTAR // code for Allystar
+#define ALLYSTAR // code for Allystar GNSS
 #endif
 
 #ifdef VENTUS3
-#define RTK // code for RTK
+#define RTK // code for RTK PX1122R GNSS
 #endif
 
 #include "MPU.hpp"        // main file, provides the class itself
@@ -157,6 +157,7 @@ extern float NEnergy;
 extern float alphaEnergy;
 extern float betaEnergy;
 extern float PeriodVelbi;
+extern float TempPeriodVelbi;
 extern float Mahonykp;
 extern float Mahonyki;
 extern float UiPgain;

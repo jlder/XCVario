@@ -2014,6 +2014,7 @@ int tefilt_adj( SetupMenuValFloat * p ){
 
 int bifilt_adj( SetupMenuValFloat * p ){
 		PeriodVelbi = velbi_period.get(); // period in second for baro/inertial velocity. period long enough to reduce effect of baro wind gradients
+		TempPeriodVelbi = PeriodVelbi;
 	return 0;
 }
 
