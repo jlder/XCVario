@@ -663,6 +663,9 @@ static LowPassFilter GyroBiasx, GyroBiasy, GyroBiasz;
 // declare low pass filters for motor glider
 static LowPassFilter AccelMotor1, AccelMotor2;
 
+// declare low pass for outside temperature
+static LowPassFilter temperatureLP;
+
 
 #define GYRO_FS (mpud::GYRO_FS_250DPS)
 
@@ -1922,7 +1925,7 @@ void readSensors(void *pvParameters){
 		
 		// compute CAS, ALT and Vzbaro using alpha/beta filters.  TODO consider using atmospher.h functions
 		if (statP > 500.0) {
-			Rho = (100.0 * statP / 287.058 / (273.15 + OATemp.ABfilt()));
+			Rho = (100.0 * statP / 287.058 / (273.15 + temperatureLP.LowPass1()));
 		} else {
 			Rho = RhoSLISA;
 		}
@@ -2462,7 +2465,7 @@ void readSensors(void *pvParameters){
 					(int32_t)(BiasAoB*1000),
 					(int32_t)(RTKNproj*1000),(int32_t)(RTKEproj*1000),(int32_t)(-RTKUproj*1000),(int32_t)(RTKheading*1000),
 					// $S2 stream
-					(int16_t)(OATemp.ABfilt()*10.0), (int16_t)(OAT.get()*10.0), (int16_t)(MPUtempcel*10.0), chosenGnss->fix, chosenGnss->numSV,
+					(int16_t)(temperatureLP.LowPass1()*10.0), (int16_t)(OATemp.ABfilt()*10.0), (int16_t)(MPUtempcel*10.0), chosenGnss->fix, chosenGnss->numSV,
 					(int32_t)(GroundGyroBias.x*100000.0), (int32_t)(GroundGyroBias.y*100000.0), (int32_t)(GroundGyroBias.z*100000.0),				
 					(int32_t)(BiasQuatGx*100000.0), (int32_t)(BiasQuatGy*100000.0), (int32_t)(BiasQuatGz*100000.0),
 					(int32_t)(GRAVITY*10000.0),(int16_t)BIAS_Init,(int16_t)(XCVTemp*10.0), (int16_t) (PeriodVelbi*10),
@@ -2535,10 +2538,13 @@ void readTemp(void *pvParameters){
 				// ESP_LOGI(FNAME,"temperature=%2.1f", temperature );
 				OATemp.ABupdate( 1.0, t );
 				temperature =  OATemp.ABfilt();
-				if( abs(temperature - temp_prev) > 0.1 ){
-					OAT.set( std::round(temperature*10)/10 );
-					ESP_LOGI(FNAME,"NEW temperature=%2.1f, prev T=%2.1f", temperature, temp_prev );
-					temp_prev = temperature;
+				if( temperature > 65.0 )
+					temperature = 20 - ALT.ABfilt() * .00625;  // if temperature error, switch to standard ISA + 5
+				temperatureLP.LPupdate( 4.0, 1.0, temperature);
+				if( abs(temperatureLP.LowPass1() - temp_prev) > 0.1 ){
+					OAT.set( std::round(temperatureLP.LowPass1()*10)/10 );
+					ESP_LOGI(FNAME,"NEW temperature=%2.1f, prev T=%2.1f", temperatureLP.LowPass1(), temp_prev );
+					temp_prev = temperatureLP.LowPass1();
 				}
 			}
 			//ESP_LOGV(FNAME,"temperature=%f", temperature );
