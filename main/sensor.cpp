@@ -1881,11 +1881,16 @@ void readSensors(void *pvParameters){
 			chosenGnss->speed.z = -RTKUvel;
 			dtRTKtime = RTKtime - prevRTKtime;
 			prevRTKtime = RTKtime;
-			if ( dtRTKtime > 0.05 ) {
+			if ( dtRTKtime > 0.05 && dtRTKtime < 0.3 ) {
 				GnssVx.ABupdate( dtRTKtime, chosenGnss->speed.x );
 				GnssVy.ABupdate( dtRTKtime, chosenGnss->speed.y );		
 				GnssVz.ABupdate( dtRTKtime, chosenGnss->speed.z );
+			} else {
+				GnssVx.ABupdate( 0.125, chosenGnss->speed.x );
+				GnssVy.ABupdate( 0.125, chosenGnss->speed.y );		
+				GnssVz.ABupdate( 0.125, chosenGnss->speed.z );
 			}
+				
 			GNSSRouteraw = atan2(GnssVy.ABfilt(),GnssVx.ABfilt());			
 		} else {
 			chosenGnss->fix = 0;
@@ -1904,10 +1909,14 @@ void readSensors(void *pvParameters){
 			chosenGnss->speed.x = AllyvelN;
 			chosenGnss->speed.y = AllyvelE;
 			chosenGnss->speed.z = -AllyvelU;
-			if ( dtAllytime > 0.05 ) {
+			if ( dtAllytime > 0.05 && dtAllytime < 0.3 ) {
 				GnssVx.ABupdate( dtAllytime, chosenGnss->speed.x );
 				GnssVy.ABupdate( dtAllytime, chosenGnss->speed.y );		
 				GnssVz.ABupdate( dtAllytime, chosenGnss->speed.z );
+			} else {
+				GnssVx.ABupdate( 0.1, chosenGnss->speed.x );
+				GnssVy.ABupdate( 0.1, chosenGnss->speed.y );		
+				GnssVz.ABupdate( 0.1, chosenGnss->speed.z );
 			}
 			GNSSRouteraw = atan2(GnssVy.ABfilt(),GnssVx.ABfilt());
 		} else {
@@ -1973,8 +1982,8 @@ void readSensors(void *pvParameters){
 		}
 		xSemaphoreGive( dataMutex );
 		
-		// if TAS > 130 km/h and bank is less than 5°, long term average of AoB to detect bias
-		if (  (TAS > 36.0) && (BankFilt < 0.05) ) {
+		// if TAS > 130 km/h and bank is less than ~5°, long term average of AoB to detect bias
+		if (  (TAS > 36.0) && ( abs(RollAHRS.ABfilt()) < 0.1) ) {
 			#define NAoBBias 1000
 			#define alphaBiasAoB (2.0 * (2.0 * NAoBBias - 1.0) / NAoBBias / (NAoBBias + 1.0))
 			#define betaBiasAoB (6.0 / NAoBBias / (NAoBBias + 1.0) )
@@ -2438,7 +2447,7 @@ void readSensors(void *pvParameters){
 			RTKNproj in thousandths of meter;
 			RTKEproj in thousandths of meter;
 			RTKDproj in thousandths of meter;
-			RTKheading in tousandth of rad;
+			RTKheading in tenth of degre;
 		*/		
 
 			if ( !(count % 50) ) { 
@@ -2464,7 +2473,7 @@ void readSensors(void *pvParameters){
 					(int32_t)(UiPrimPrimS*100), (int32_t)(ViPrimPrimS*100),(int32_t)(WiPrimPrimS*100),	
 					(int32_t)(UbiPrim*100), (int32_t)(VbiPrim*100),(int32_t)(WbiPrim*100),
 					(int32_t)(BiasAoB*1000),
-					(int32_t)(RTKNproj*1000),(int32_t)(RTKEproj*1000),(int32_t)(-RTKUproj*1000),(int32_t)(RTKheading*1000),
+					(int32_t)(RTKNproj*1000),(int32_t)(RTKEproj*1000),(int32_t)(-RTKUproj*1000),(int32_t)(RTKheading*10),
 					// $S2 stream
 					(int16_t)(temperatureLP.LowPass1()*10.0), (int16_t)(OATemp.ABfilt()*10.0), (int16_t)(MPUtempcel*10.0), chosenGnss->fix, chosenGnss->numSV,
 					(int32_t)(GroundGyroBias.x*100000.0), (int32_t)(GroundGyroBias.y*100000.0), (int32_t)(GroundGyroBias.z*100000.0),				
@@ -2497,7 +2506,7 @@ void readSensors(void *pvParameters){
 					(int32_t)(UiPrimPrimS*100), (int32_t)(ViPrimPrimS*100),(int32_t)(WiPrimPrimS*100),	
 					(int32_t)(UbiPrim*100), (int32_t)(VbiPrim*100),(int32_t)(WbiPrim*100),
 					(int32_t)(BiasAoB*1000),
-					(int32_t)(RTKNproj*1000),(int32_t)(RTKEproj*1000),(int32_t)(-RTKUproj*1000),(int32_t)(RTKheading*1000)
+					(int32_t)(RTKNproj*1000),(int32_t)(RTKEproj*1000),(int32_t)(-RTKUproj*1000),(int32_t)(RTKheading*10)
 				);
 				xSemaphoreTake( BTMutex, 2/portTICK_PERIOD_MS );				
 				Router::sendXCV(str);
