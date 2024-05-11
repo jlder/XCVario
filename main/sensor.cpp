@@ -1761,7 +1761,7 @@ void readSensors(void *pvParameters){
 	float VhHeading = 0.0;
 	
 	// alpha beta GNSS parameters
-	#define NGNSS 6 //  Filter parameter 
+	#define NGNSS 5 //  Filter parameter 
 	#define GNSSOutliers 30.0 // 30 m/s maximum variation sample to sample
 	#define Vgnssmin -100.0
 	#define Vgnssmax 100.0
@@ -1770,21 +1770,21 @@ void readSensors(void *pvParameters){
 	GnssVz.ABinit( NGNSS, GNSSOutliers, Vgnssmin, Vgnssmax );
 
 	// alpha beta filters paramegters for Energy and average Energy
-	#define NTOTENR 6 // Energy alpha/beta coeff
+	#define NTOTENR 5 // Energy alpha/beta coeff
 	#define EnergyOutliers 10.0 // 10 m/s maximum variation sample to sample
 	#define EnergyPrimMin -30.0
 	#define EnergyPrimMax 30.0
 	Energy.ABinit(  NTOTENR,  EnergyOutliers, 0.0, 0.0, EnergyPrimMin, EnergyPrimMax );
 
 	// alpha beta parameters for CAS and TAS
-	#define NCAS 6 // CAS alpha/beta filter coeff
+	#define NCAS 5 // CAS alpha/beta filter coeff
 	#define SpeedOutliers 30.0 // 30 m/s maximum variation sample to sample
 	#define CASmin 0.0
 	#define CASmax 100.0
 	#define CASPrimmin -30.0
 	#define CASPrimmax 30.0
 	CAS.ABinit( NCAS, SpeedOutliers, CASmin, CASmax, CASPrimmin, CASPrimmax );
-	#define NALT 6 // ALT alpha/beta coeff
+	#define NALT 5 // ALT alpha/beta coeff
 	#define AltitudeOutliers 30.0 // 30 m maximum variation sample to sample
 	#define Altmin -500.0
 	#define Altmax 12000
