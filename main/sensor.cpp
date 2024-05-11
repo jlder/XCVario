@@ -202,7 +202,8 @@ float deltaAccelModule = 0.0;	// accel module alfa/beta filter for gyro stabilit
 float AccelModulePrimFilt = 0.0;
 float AccelModuleFilt = 0.0;
 float AccelModulePrimLevel = 0.0;
-float dynKp = 0.1;
+float dynKp = 0.15;
+float dynKi = 0.0002;
 float DynPeriodVelbi = 4.0;
 
 
@@ -910,8 +911,6 @@ void MahonyUpdateIMU(float dt, float gxraw, float gyraw, float gzraw,
 					float &Bias_Gx, float &Bias_Gy, float &Bias_Gz ) {
 
 #define Nlimit 0.15 // stability criteria for gravity estimation from accels in m/s²
-#define Kp 0.7 // proportional feedback to sync quaternion
-
 #define Gyroprimlimit 0.3
 
 float gx, gy, gz;
@@ -923,7 +922,6 @@ float halfex = 0.0;
 float halfey = 0.0;
 float halfez = 0.0;
 float qa, qb, qc;
-float dynKi = Kp/10;
 float deltaGx;
 float deltaGy;
 float deltaGz;
@@ -1357,14 +1355,14 @@ static void processIMU(void *pvParameters)
 
 				// Compute baro interial acceleration in body frame
 				// Compute dynamic period for baro inertiel filter
-				#define PeriodVelbiGain 2
+				#define PeriodVelbiGain 1.5
 				#define GyrAmplitudeLimit 0.4
 				// Gyro x and z amplitude used to adjust Baro Inertial filter
-				GyrxzAmplitudeBIdyn = abs(gyroCorr.x) + abs(gyroCorr.z / 3.0);			
+				GyrxzAmplitudeBIdyn = abs(gyroCorr.x) * 0.9 + abs(gyroCorr.z) * 0.4;			
 				if ( GyrxzAmplitudeBIdyn < GyrAmplitudeLimit ) {
-					DynPeriodVelbi = 0.9 * DynPeriodVelbi + 0.1 * PeriodVelbi / ( 1 + GyrxzAmplitudeBIdyn / (GyrAmplitudeLimit/PeriodVelbiGain) );
+					DynPeriodVelbi = 0.98 * DynPeriodVelbi + 0.02 * PeriodVelbi / ( 1 + GyrxzAmplitudeBIdyn / (GyrAmplitudeLimit/PeriodVelbiGain) );
 				} else {
-					DynPeriodVelbi = 0.9 * DynPeriodVelbi + 0.1 * PeriodVelbi / PeriodVelbiGain;
+					DynPeriodVelbi = 0.98 * DynPeriodVelbi + 0.02 * PeriodVelbi / PeriodVelbiGain;
 				}
 				fcVelbi1 = ( DynPeriodVelbi / ( DynPeriodVelbi + dtGyr ));
 				fcVelbi2 = ( 1.0 - fcVelbi1 );
