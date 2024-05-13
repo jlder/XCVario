@@ -202,8 +202,7 @@ float deltaAccelModule = 0.0;	// accel module alfa/beta filter for gyro stabilit
 float AccelModulePrimFilt = 0.0;
 float AccelModuleFilt = 0.0;
 float AccelModulePrimLevel = 0.0;
-float dynKp = 0.15;
-float dynKi = 0.0002;
+float dynKp = 0.1;
 float DynPeriodVelbi = 4.0;
 
 
@@ -911,6 +910,8 @@ void MahonyUpdateIMU(float dt, float gxraw, float gyraw, float gzraw,
 					float &Bias_Gx, float &Bias_Gy, float &Bias_Gz ) {
 
 #define Nlimit 0.15 // stability criteria for gravity estimation from accels in m/s²
+#define Kp 0.7 // proportional feedback to sync quaternion
+
 #define Gyroprimlimit 0.3
 
 float gx, gy, gz;
@@ -922,6 +923,7 @@ float halfex = 0.0;
 float halfey = 0.0;
 float halfez = 0.0;
 float qa, qb, qc;
+float dynKi = Kp/10;
 float deltaGx;
 float deltaGy;
 float deltaGz;
@@ -1355,14 +1357,14 @@ static void processIMU(void *pvParameters)
 
 				// Compute baro interial acceleration in body frame
 				// Compute dynamic period for baro inertiel filter
-				#define PeriodVelbiGain 1.5
+				#define PeriodVelbiGain 2
 				#define GyrAmplitudeLimit 0.4
 				// Gyro x and z amplitude used to adjust Baro Inertial filter
-				GyrxzAmplitudeBIdyn = abs(gyroCorr.x) * 0.9 + abs(gyroCorr.z) * 0.4;			
+				GyrxzAmplitudeBIdyn = abs(gyroCorr.x) + abs(gyroCorr.z / 3.0);			
 				if ( GyrxzAmplitudeBIdyn < GyrAmplitudeLimit ) {
-					DynPeriodVelbi = 0.98 * DynPeriodVelbi + 0.02 * PeriodVelbi / ( 1 + GyrxzAmplitudeBIdyn / (GyrAmplitudeLimit/PeriodVelbiGain) );
+					DynPeriodVelbi = 0.9 * DynPeriodVelbi + 0.1 * PeriodVelbi / ( 1 + GyrxzAmplitudeBIdyn / (GyrAmplitudeLimit/PeriodVelbiGain) );
 				} else {
-					DynPeriodVelbi = 0.98 * DynPeriodVelbi + 0.02 * PeriodVelbi / PeriodVelbiGain;
+					DynPeriodVelbi = 0.9 * DynPeriodVelbi + 0.1 * PeriodVelbi / PeriodVelbiGain;
 				}
 				fcVelbi1 = ( DynPeriodVelbi / ( DynPeriodVelbi + dtGyr ));
 				fcVelbi2 = ( 1.0 - fcVelbi1 );
@@ -1761,7 +1763,7 @@ void readSensors(void *pvParameters){
 	float VhHeading = 0.0;
 	
 	// alpha beta GNSS parameters
-	#define NGNSS 5 //  Filter parameter 
+	#define NGNSS 6 //  Filter parameter 
 	#define GNSSOutliers 30.0 // 30 m/s maximum variation sample to sample
 	#define Vgnssmin -100.0
 	#define Vgnssmax 100.0
@@ -1770,21 +1772,21 @@ void readSensors(void *pvParameters){
 	GnssVz.ABinit( NGNSS, GNSSOutliers, Vgnssmin, Vgnssmax );
 
 	// alpha beta filters paramegters for Energy and average Energy
-	#define NTOTENR 5 // Energy alpha/beta coeff
+	#define NTOTENR 6 // Energy alpha/beta coeff
 	#define EnergyOutliers 10.0 // 10 m/s maximum variation sample to sample
 	#define EnergyPrimMin -30.0
 	#define EnergyPrimMax 30.0
 	Energy.ABinit(  NTOTENR,  EnergyOutliers, 0.0, 0.0, EnergyPrimMin, EnergyPrimMax );
 
 	// alpha beta parameters for CAS and TAS
-	#define NCAS 5 // CAS alpha/beta filter coeff
+	#define NCAS 6 // CAS alpha/beta filter coeff
 	#define SpeedOutliers 30.0 // 30 m/s maximum variation sample to sample
 	#define CASmin 0.0
 	#define CASmax 100.0
 	#define CASPrimmin -30.0
 	#define CASPrimmax 30.0
 	CAS.ABinit( NCAS, SpeedOutliers, CASmin, CASmax, CASPrimmin, CASPrimmax );
-	#define NALT 5 // ALT alpha/beta coeff
+	#define NALT 6 // ALT alpha/beta coeff
 	#define AltitudeOutliers 30.0 // 30 m maximum variation sample to sample
 	#define Altmin -500.0
 	#define Altmax 12000
