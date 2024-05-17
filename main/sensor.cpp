@@ -336,8 +336,8 @@ static float UbiPrim = 0.0;
 static float VbiPrim = 0.0;
 static float WbiPrim = 0.0;
 
-float Mahonykp = 0.1;
-float Mahonyki = 0.002;
+float Mahonykp = 0.05;
+float Mahonyki = 0.001;
 
 static int32_t cur_gyro_bias[3];
 
@@ -1357,14 +1357,14 @@ static void processIMU(void *pvParameters)
 
 				// Compute baro interial acceleration in body frame
 				// Compute dynamic period for baro inertiel filter
-				#define PeriodVelbiGain 2
+				#define PeriodVelbiGain 1.5
 				#define GyrAmplitudeLimit 0.4
 				// Gyro x and z amplitude used to adjust Baro Inertial filter
-				GyrxzAmplitudeBIdyn = abs(gyroCorr.x) + abs(gyroCorr.z / 3.0);			
+				GyrxzAmplitudeBIdyn = abs(gyroCorr.x)*0.9 + abs(gyroCorr.z)*0.4;			
 				if ( GyrxzAmplitudeBIdyn < GyrAmplitudeLimit ) {
-					DynPeriodVelbi = 0.9 * DynPeriodVelbi + 0.1 * PeriodVelbi / ( 1 + GyrxzAmplitudeBIdyn / (GyrAmplitudeLimit/PeriodVelbiGain) );
+					DynPeriodVelbi = 0.95 * DynPeriodVelbi + 0.05 * PeriodVelbi / ( 1 + GyrxzAmplitudeBIdyn / (GyrAmplitudeLimit/PeriodVelbiGain) );
 				} else {
-					DynPeriodVelbi = 0.9 * DynPeriodVelbi + 0.1 * PeriodVelbi / PeriodVelbiGain;
+					DynPeriodVelbi = 0.95 * DynPeriodVelbi + 0.05 * PeriodVelbi / PeriodVelbiGain;
 				}
 				fcVelbi1 = ( DynPeriodVelbi / ( DynPeriodVelbi + dtGyr ));
 				fcVelbi2 = ( 1.0 - fcVelbi1 );
@@ -2376,7 +2376,7 @@ void readSensors(void *pvParameters){
 			$S1,			
 			static time in milli second,
 			static pressure in Pa,
-			TE pressure in deci Pa,
+			TE pressure in Pa,
 			Dynamic pressure in tenth of Pa,
 			GNSS time in milli second,
 			GNSS speed x or north in centimeters/s,
