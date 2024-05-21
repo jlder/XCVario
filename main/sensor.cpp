@@ -1262,14 +1262,15 @@ static void processIMU(void *pvParameters)
 			xSemaphoreGive( dataMutex );
 			
 			// motor glider protection
-			AccelMotor1.LPupdate( 1.5, dtGyr, accelISUNEDMPUx.ABfilt() ); // filter to remove noise from acc x with low pass
-			AccelMotor2.LPupdate( 15, dtGyr, abs(accelISUNEDMPUx.ABfilt() - AccelMotor1.LowPass1()) ); // average amplitude around filtered signal
-			if ( AccelMotor2.LowPass1() > 0.5 ) {
-				TempPeriodVelbi = PeriodVelbi;
-				PeriodVelbi = 0.0; // baro inertiel period at zero to discard inertial when engine is running
-			} else {
-				PeriodVelbi = PeriodVelbi * 0.98 + TempPeriodVelbi * 0.02; // restore last baro inertial period progressively when engine is stopped
-			}			
+			//AccelMotor1.LPupdate( 1.5, dtGyr, accelISUNEDMPUx.ABfilt() ); // filter to remove noise from acc x with low pass
+			//AccelMotor2.LPupdate( 15, dtGyr, abs(accelISUNEDMPUx.ABfilt() - AccelMotor1.LowPass1()) ); // average amplitude around filtered signal
+			// TODO correct bug identified during LS6 flgihts
+			//if ( AccelMotor2.LowPass1() > 0.5 ) {
+			//	TempPeriodVelbi = PeriodVelbi;
+			//	PeriodVelbi = 0.0; // baro inertiel period at zero to discard inertial when engine is running
+			//} else {
+			//	PeriodVelbi = PeriodVelbi * 0.98 + TempPeriodVelbi * 0.02; // restore last baro inertial period progressively when engine is stopped
+			//}			
 		}
 		
 		// attitude initialization when XCVario starts during first 10 iterations 
