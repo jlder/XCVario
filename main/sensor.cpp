@@ -647,7 +647,7 @@ static AlphaBeta UiPrimF, ViPrimF, WiPrimF;
 static AlphaBeta GnssVx, GnssVy, GnssVz;
 
 // alpha beta filters for Energy and average Energy calculations
-static AlphaBeta Energy;
+static AlphaBeta KinEnergy;
 
 // declare alpha beta for CAS and TAS
 static AlphaBeta CAS, ALT;
@@ -1216,9 +1216,9 @@ static void processIMU(void *pvParameters)
 			gyroDPS = mpud::gyroDegPerSec(gyroRaw, GYRO_FS); // For compatibility with Eckhard code only. Convert raw gyro to Gyro_FS full scale in degre per second 
 			gyroRPS = mpud::gyroRadPerSec(gyroRaw, GYRO_FS); // convert raw gyro to Gyro_FS full scale in radians per second
 			// update gyro filters with dt = 0.0 means no fitering
-			gyroRPSx.ABupdate(0.0, gyroRPS.x );
-			gyroRPSy.ABupdate(0.0, gyroRPS.y );			
-			gyroRPSz.ABupdate(0.0, gyroRPS.z );			
+			gyroRPSx.ABupdate(dtGyr, gyroRPS.x );
+			gyroRPSy.ABupdate(dtGyr, gyroRPS.y );			
+			gyroRPSz.ABupdate(dtGyr, gyroRPS.z );			
 			// update gyro filters
 			//gyroRPSx.ABupdate(dtGyr, gyroRPS.x );
 			//gyroRPSy.ABupdate(dtGyr, gyroRPS.y );			
@@ -1246,9 +1246,9 @@ static void processIMU(void *pvParameters)
 			RawaccelISUNEDMPU.y = ((-accelG.y*9.807) - currentAccelBias.y ) * currentAccelGain.y;
 			RawaccelISUNEDMPU.z = ((-accelG.x*9.807) - currentAccelBias.z ) * currentAccelGain.z;
 			// step to consider accels filtering (when dt = 0.0 there is no filtering)
-			accelISUNEDMPUx.ABupdate(0.0, RawaccelISUNEDMPU.x );
-			accelISUNEDMPUy.ABupdate(0.0, RawaccelISUNEDMPU.y );			
-			accelISUNEDMPUz.ABupdate(0.0, RawaccelISUNEDMPU.z );
+			accelISUNEDMPUx.ABupdate(dtGyr, RawaccelISUNEDMPU.x );
+			accelISUNEDMPUy.ABupdate(dtGyr, RawaccelISUNEDMPU.y );			
+			accelISUNEDMPUz.ABupdate(dtGyr, RawaccelISUNEDMPU.z );
 			// update accels filters
 			//accelISUNEDMPUx.ABupdate(dtGyr, RawaccelISUNEDMPU.x );
 			//accelISUNEDMPUy.ABupdate(dtGyr, RawaccelISUNEDMPU.y );			
@@ -1265,7 +1265,6 @@ static void processIMU(void *pvParameters)
 			AccelMotor1.LPupdate( 1.5, dtGyr, accelISUNEDMPUx.ABfilt() ); // filter to remove noise from acc x with low pass
 			AccelMotor2.LPupdate( 15, dtGyr, abs(accelISUNEDMPUx.ABfilt() - AccelMotor1.LowPass1()) ); // average amplitude around filtered signal
 			if ( AccelMotor2.LowPass1() > 0.5 ) {
-				LastPeriodVelbi = PeriodVelbi;
 				PeriodVelbi = 0.0; // baro inertiel period at zero to discard inertial when engine is running
 			} else {
 				PeriodVelbi = PeriodVelbi * 0.98 + LastPeriodVelbi * 0.02; // restore last baro inertial period progressively when engine is stopped
@@ -1776,7 +1775,7 @@ void readSensors(void *pvParameters){
 	#define EnergyOutliers 10.0 // 10 m/s maximum variation sample to sample
 	#define EnergyPrimMin -30.0
 	#define EnergyPrimMax 30.0
-	Energy.ABinit(  NTOTENR,  EnergyOutliers, 0.0, 0.0, EnergyPrimMin, EnergyPrimMax );
+	KinEnergy.ABinit(  NTOTENR,  EnergyOutliers, 0.0, 0.0, EnergyPrimMin, EnergyPrimMax );
 
 	// alpha beta parameters for CAS and TAS
 	#define NCAS 6 // CAS alpha/beta filter coeff
@@ -2070,10 +2069,10 @@ void readSensors(void *pvParameters){
 		// option 2
 
 		// update kinetic energy filter
-		Energy.ABupdate( dtStat, ( TASbiSquare / GRAVITY / 2.0 ) );
+		KinEnergy.ABupdate( dtStat, ( TASbiSquare / GRAVITY / 2.0 ) );
 
 		// filter total energy variation for display to pilot
-		TotalEnergy.LPupdate( te_filt.get(), dtStat, (-Vzbi + Energy.ABprim()) );
+		TotalEnergy.LPupdate( te_filt.get(), dtStat, (-Vzbi + KinEnergy.ABprim()) );
 		
 		// filter average total energy 
 		AverageTotalEnergy.LPupdate( 30, 0.1, TotalEnergy.LowPass1() );
