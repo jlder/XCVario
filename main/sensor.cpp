@@ -409,7 +409,7 @@ float NEnergy = 10.0;
 float alphaEnergy;
 float betaEnergy;
 float PeriodVelbi = 7.0;
-float TempPeriodVelbi = 7.0;
+float LastPeriodVelbi = 7.0;
 float fcVelbi1;
 float fcVelbi2;
 
@@ -1157,7 +1157,7 @@ static void processIMU(void *pvParameters)
 	PrevaccelISUNEDMPU.z = -9.807;
 	
 	// alpha beta gyros parameters
-	#define NGyro 6 //  AB Filter parameter
+	#define NGyro 5 //  AB Filter parameter
 	#define GyroOutlier 1.0 // 1 rad/s maximum variation sample to sample
 	#define Gyromin -4.0
 	#define Gyromax 4.0
@@ -1166,7 +1166,7 @@ static void processIMU(void *pvParameters)
 	gyroRPSz.ABinit( NGyro, GyroOutlier, Gyromin, Gyromax );	
 
 	// alpha beta accels parameters
-	#define NAccel 6 //  AB Filter parameter
+	#define NAccel 5 //  AB Filter parameter
 	#define AccelOutlier 10.0 // 10 m/s² maximum variation sample to sample
 	#define Accelmin -60.0
 	#define Accelmax 60.0
@@ -1195,7 +1195,7 @@ static void processIMU(void *pvParameters)
 	
 	// compute once the filter parameters in functions of values in FLASH
 	PeriodVelbi = velbi_period.get(); // period in second for baro/inertial velocity. period long enough to reduce effect of baro wind gradients
-	TempPeriodVelbi = PeriodVelbi;
+	LastPeriodVelbi = PeriodVelbi;
 	Mahonykp = kp_Mahony.get(); // get last kp value from NV memory
 	Mahonyki = ki_Mahony.get(); // get last ki value from NV memory
 	UiPgain = UiP_gain.get(); // get last UiPrim gain for bi calc from NV memory
@@ -1262,15 +1262,14 @@ static void processIMU(void *pvParameters)
 			xSemaphoreGive( dataMutex );
 			
 			// motor glider protection
-			//AccelMotor1.LPupdate( 1.5, dtGyr, accelISUNEDMPUx.ABfilt() ); // filter to remove noise from acc x with low pass
-			//AccelMotor2.LPupdate( 15, dtGyr, abs(accelISUNEDMPUx.ABfilt() - AccelMotor1.LowPass1()) ); // average amplitude around filtered signal
-			// TODO correct bug identified during LS6 flgihts
-			//if ( AccelMotor2.LowPass1() > 0.5 ) {
-			//	TempPeriodVelbi = PeriodVelbi;
-			//	PeriodVelbi = 0.0; // baro inertiel period at zero to discard inertial when engine is running
-			//} else {
-			//	PeriodVelbi = PeriodVelbi * 0.98 + TempPeriodVelbi * 0.02; // restore last baro inertial period progressively when engine is stopped
-			//}			
+			AccelMotor1.LPupdate( 1.5, dtGyr, accelISUNEDMPUx.ABfilt() ); // filter to remove noise from acc x with low pass
+			AccelMotor2.LPupdate( 15, dtGyr, abs(accelISUNEDMPUx.ABfilt() - AccelMotor1.LowPass1()) ); // average amplitude around filtered signal
+			if ( AccelMotor2.LowPass1() > 0.5 ) {
+				LastPeriodVelbi = PeriodVelbi;
+				PeriodVelbi = 0.0; // baro inertiel period at zero to discard inertial when engine is running
+			} else {
+				PeriodVelbi = PeriodVelbi * 0.98 + LastPeriodVelbi * 0.02; // restore last baro inertial period progressively when engine is stopped
+			}			
 		}
 		
 		// attitude initialization when XCVario starts during first 10 iterations 

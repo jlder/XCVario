@@ -157,7 +157,7 @@ extern float NEnergy;
 extern float alphaEnergy;
 extern float betaEnergy;
 extern float PeriodVelbi;
-extern float TempPeriodVelbi;
+extern float LastPeriodVelbi;
 extern float Mahonykp;
 extern float Mahonyki;
 extern float UiPgain;
