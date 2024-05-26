@@ -1760,6 +1760,7 @@ void readSensors(void *pvParameters){
 	float VhPrev = 0.0;
 	float VhAvg = 0.0;
 	float VhHeading = 0.0;
+	bool ALTbiFirstPass = true;
 	
 	// alpha beta GNSS parameters
 	#define NGNSS 6 //  Filter parameter 
@@ -1949,7 +1950,10 @@ void readSensors(void *pvParameters){
 
 		// update altitude filter
 		ALT.ABupdate( dtStat, (1.0 - pow( (statP-(QNH.get()-1013.25)) * 0.000986923 , 0.1902891634 ) ) * (273.15 + 15) * 153.846153846 );
-	
+		if (ALTbiFirstPass) {
+			ALTbi = ALT.ABfilt();
+			ALTbiFirstPass = false;
+		}	
 		// in glider operation, gaining altitude and energy is considered positive. However in NED representation vertical axis is positive pointing down.
 		// therefore Vzbaro in NED is the opposite of altitude variation.
 		Vzbaro = -ALT.ABprim();
@@ -2066,7 +2070,7 @@ void readSensors(void *pvParameters){
 		TEFilt = TEFilt + alphaEnergy * deltaTE + TEPrim * dtStat;
 		*/
 		
-		// option 2
+		/* // option 2
 
 		// update kinetic energy filter
 		KinEnergy.ABupdate( dtStat, ( TASbiSquare / GRAVITY / 2.0 ) );
@@ -2076,6 +2080,17 @@ void readSensors(void *pvParameters){
 		
 		// filter average total energy 
 		AverageTotalEnergy.LPupdate( 30, 0.1, TotalEnergy.LowPass1() );
+		*/
+		
+		// option 3
+		// baro inertial altitude
+		#define PeriodAltbi 0.5 // period in second for baro/inertial altitude. Baro/inertial velocity improves baro sensor response
+		#define fcAltbi1 ( PeriodAltbi / ( PeriodAltbi + PERIOD10HZ ))
+		#define fcAltbi2 ( 1.0 - fcAltbi1 )		
+		ALTbi = fcAltbi1 * ( ALTbi - Vzbi * dtStat ) + fcAltbi2	* ALT.ABfilt();
+		KinEnergy.ABupdate( dtStat, ( ALTbi + TASbiSquare / GRAVITY / 2.0 ) );		
+		TotalEnergy.LPupdate( te_filt.get(), dtStat, KinEnergy.ABprim() );
+		AverageTotalEnergy.LPupdate( 30, 0.1, TotalEnergy.LowPass1() );		
 
 		#ifdef COMPUTEWIND
 		// TODO test and optimze wind calculation
