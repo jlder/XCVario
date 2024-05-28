@@ -577,6 +577,7 @@ extern SetupNG<float>		distCG;
 extern SetupNG<float>		gravity;
 extern SetupNG<float>       mpu_temperature;
 extern SetupNG<float>		te_filt;
+extern SetupNG<float>		te_opt;
 extern SetupNG<float>		kpMahony;
 extern SetupNG<int>		    hardwareRevision;
 extern SetupNG<int>		    ahrs_licence_dig1;

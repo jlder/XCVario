@@ -2005,6 +2005,11 @@ void SetupMenu::flight_menu_create( MenuEntry *top ){
 	top->addEntry( crewball );
 }
 
+int teopt_adj( SetupMenuValFloat * p ){
+		opt_TE = te_opt.get(); // option for d(TE)/dt calculation
+	return 0;
+}
+
 int tefilt_adj( SetupMenuValFloat * p ){
 		NEnergy = te_filt.get() / PERIOD10HZ; // Total Energy alpha/beta filter coeff (period ~ delay * 10)
 		alphaEnergy = (2.0 * (2.0 * NEnergy - 1.0) / NEnergy / (NEnergy + 1.0));
@@ -2041,6 +2046,11 @@ int WiP_gain_adj( SetupMenuValFloat * p ){
 
 void SetupMenu::flighttest_menu_create( MenuEntry *top ){
 	
+	SetupMenuValFloat * teopt = new SetupMenuValFloat( "TE option", "",	1, 2, 1, teopt_adj, true, &te_opt );
+	teopt->setHelp(PROGMEM"TE option");
+	teopt->setPrecision(1);
+	top->addEntry( teopt );
+
 	SetupMenuValFloat * tefilt = new SetupMenuValFloat( "TE period", "S",	0.5, 5.9, 0.1, tefilt_adj, true, &te_filt );
 	tefilt->setHelp(PROGMEM"TE filter time");
 	tefilt->setPrecision(1);

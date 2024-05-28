@@ -20,8 +20,8 @@
 //
 //!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 //
-#define LS6
-//#define VENTUS3
+//#define LS6
+#define VENTUS3
 
 
 #ifdef LS6
@@ -162,6 +162,7 @@ extern float Mahonykp;
 extern float Mahonyki;
 extern float UiPgain;
 extern float WiPgain;
+extern float opt_TE;
 
 extern float RTKtime;
 extern float RTKEvel;
