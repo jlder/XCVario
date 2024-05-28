@@ -1824,7 +1824,7 @@ void readSensors(void *pvParameters){
 		float p = 0;
 		Prevp = statP;
 		p = baroSensor->readPressure(ok);
-		// if ( ok && ((abs(p-Prevp) < 10 ) || Prevp == 0.0) ) {
+		//if ( ok && ((abs(p-Prevp) < 10 ) || Prevp == 0.0) ) {
 		if ( ok ) {			
 			prevstatTime = statTime;
 			statTime = esp_timer_get_time()/1000; // record static time in milli second
@@ -2816,7 +2816,9 @@ void system_startup(void *args){
 		// create mutex for BT synchronization
 		BTMutex = xSemaphoreCreateMutex();	
 		// create mutex for data synchronization between processIMU and readSensors
-		dataMutex = xSemaphoreCreateMutex();	
+		dataMutex = xSemaphoreCreateMutex();
+		// create mutex for I2C
+		I2CMutex = xSemaphoreCreateMutex();
 	
 		char ahrs[50];
 		float accel = 0;
