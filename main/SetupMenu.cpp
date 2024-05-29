@@ -2051,7 +2051,7 @@ void SetupMenu::flighttest_menu_create( MenuEntry *top ){
 	teopt->setPrecision(1);
 	top->addEntry( teopt );
 
-	SetupMenuValFloat * tefilt = new SetupMenuValFloat( "TE period", "S",	0.5, 5.9, 0.1, tefilt_adj, true, &te_filt );
+	SetupMenuValFloat * tefilt = new SetupMenuValFloat( "TE period", "S",	0.2, 2.9, 0.1, tefilt_adj, true, &te_filt );
 	tefilt->setHelp(PROGMEM"TE filter time");
 	tefilt->setPrecision(1);
 	top->addEntry( tefilt );

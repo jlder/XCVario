@@ -604,7 +604,6 @@ class LowPassFilter {
 private:
 	float output1 = 0.0;
 	float output2 = 0.0;
-    float RC = 0.0;
 	float alpha = 1.0; // Filter coefficients
 	float beta = 0.0; 
 	bool firstpass = true; // bool to initialize parameters at first pass
@@ -612,8 +611,7 @@ public:
     void LPupdate(float cutoffperiod, float dt, float input ) {
         if ( dt!= 0.0 ) {
 			if ( firstpass == true ) {
-				RC = cutoffperiod / 6.28;
-				alpha = RC / (RC + dt);
+				alpha = cutoffperiod / (cutoffperiod + dt);
 				beta = 1.0 - alpha;
 				firstpass = false;
 			}
@@ -1269,8 +1267,8 @@ static void processIMU(void *pvParameters)
 			xSemaphoreGive( dataMutex );
 			
 			// motor glider protection
-			AccelMotor1.LPupdate( 1.5, dtGyr, accelNEDBODYx.ABfilt() ); // filter to remove noise from acc x with low pass
-			AccelMotor2.LPupdate( 15, dtGyr, abs(accelNEDBODYx.ABfilt() - AccelMotor1.LowPass1()) ); // average amplitude around filtered signal
+			AccelMotor1.LPupdate( 0.3, dtGyr, accelNEDBODYx.ABfilt() ); // filter to remove noise from acc x with low pass
+			AccelMotor2.LPupdate( 3, dtGyr, abs(accelNEDBODYx.ABfilt() - AccelMotor1.LowPass1()) ); // average amplitude around filtered signal
 			if ( AccelMotor2.LowPass1() > 0.5 ) {
 				PeriodVelbi = 0.0; // baro inertiel period at zero to discard inertial when engine is running
 			} else {
@@ -2069,7 +2067,7 @@ void readSensors(void *pvParameters){
 			TotalEnergy.LPupdate( te_filt.get(), dtStat, KinEnergy.ABprim() );
 		}		
 		// long term average filter
-		AverageTotalEnergy.LPupdate( 30, 0.1, TotalEnergy.LowPass1() );		
+		AverageTotalEnergy.LPupdate( 20, 0.1, TotalEnergy.LowPass1() );		
 
 		#ifdef COMPUTEWIND
 		// TODO test and optimze wind calculation

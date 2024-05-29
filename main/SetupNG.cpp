@@ -452,7 +452,7 @@ SetupNG<mpud::float_axes_t>	gyro_gain("GYRO_GAIN", load_float_axes_t( 0.0, 0.0, 
 
 SetupNG<float>			gravity("LOCAL_GRAVITY", 9.804);
 SetupNG<float>          mpu_temperature("MPUTEMP", 45.0, true, SYNC_FROM_MASTER, PERSISTENT, chg_mpu_target );    // default for AHRS chip temperature (XCV 2023)
-SetupNG<float> 			te_filt( "TE FILTER",1.5, true, SYNC_FROM_MASTER, PERSISTENT, change_tefilter );
+SetupNG<float> 			te_filt( "TE FILTER",0.5, true, SYNC_FROM_MASTER, PERSISTENT, change_tefilter );
 SetupNG<float>			te_opt( "TE OPTION",2, true, SYNC_FROM_MASTER, PERSISTENT, change_teopt );
 SetupNG<float> 			velbi_period( "VELBI_PERIOD",7.0, true, SYNC_FROM_MASTER, PERSISTENT, change_bifilt );
 SetupNG<float>			kp_Mahony("KP Mahony", 0.05, true, SYNC_FROM_MASTER, PERSISTENT, change_kpMahony );
