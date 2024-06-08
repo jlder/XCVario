@@ -464,6 +464,8 @@ float as2f = 0;
 float s2f_delta = 0;
 float polar_sink = 0;
 
+float GNSSstatus=0.0;
+
 float      stall_alarm_off_kmh=0;
 uint16_t   stall_alarm_off_holddown=0;
 
@@ -1887,12 +1889,14 @@ void readSensors(void *pvParameters){
 			if (RTKmode == 'D' ) chosenGnss->fix = 4; // GNSS 3D diff
 			if (RTKmode == 'F' ) chosenGnss->fix = 5; // GNSS RTK float
 			if (RTKmode == 'R' ) chosenGnss->fix = 6; // GNSS RTK Real Time Kinematic
+			GNSSstatus = chosenGnss->fix;
 			chosenGnss->numSV = RTKratio * 10;
 			chosenGnss->time = RTKtime;
 			chosenGnss->speed.x = RTKNvel;
 			chosenGnss->speed.y = RTKEvel;
 			chosenGnss->speed.z = -RTKUvel;
-			dtRTKtime = RTKtime - prevRTKtime;
+			// dtRTKtime = RTKtime - prevRTKtime;
+			dtRTKtime = 0.25; // need to convert RTKtime to seconds to calculate dt time.
 			prevRTKtime = RTKtime;
 			if ( dtRTKtime > 0.05 && dtRTKtime < 0.3 ) {
 				GnssVx.ABupdate( dtRTKtime, chosenGnss->speed.x );
