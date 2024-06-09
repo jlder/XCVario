@@ -956,11 +956,15 @@ float PseudoHeadingPrim;// MOD#4 gyro bias
 		GnssTrack = atan2( GnssVy.ABfilt(), GnssVx.ABfilt() );
 		PseudoHeadingPrim = ( GnssVy.ABprim() * cos(GnssTrack) - GnssVx.ABprim() * sin(GnssTrack) ) / TAS;
 		// compute Gz - pseudo heading variation long term average.		
-		GyroBiasz.LPupdate( GyroCutoffPeriod, dt, gzraw - PseudoHeadingPrim );		
+		GyroBiasz.LPupdate( GyroCutoffPeriod, dt, gzraw - PseudoHeadingPrim );
+		// update gyros biases variables
+		Bias_Gx = GyroBiasx.LowPass2();
+		Bias_Gy = GyroBiasy.LowPass2();
+		Bias_Gz = GyroBiasz.LowPass2();
 		// limit bias estimation	
-		if ( abs(GyroBiasx.LowPass2()) > GMaxBias ) Bias_Gx = copysign( GMaxBias, GyroBiasx.LowPass2()) ;
-		if ( abs(GyroBiasy.LowPass2()) > GMaxBias ) Bias_Gy = copysign( GMaxBias, GyroBiasy.LowPass2()) ;		
-		if ( abs(GyroBiasz.LowPass2()) > GMaxBias ) Bias_Gz = copysign( GMaxBias, GyroBiasz.LowPass2()) ;		
+		if ( abs(Bias_Gx) > GMaxBias ) Bias_Gx = copysign( GMaxBias, Bias_Gx) ;
+		if ( abs(Bias_Gy) > GMaxBias ) Bias_Gy = copysign( GMaxBias, Bias_Gy) ;		
+		if ( abs(Bias_Gz) > GMaxBias ) Bias_Gz = copysign( GMaxBias, Bias_Gz) ;		
 	}
 	// MOD#4 gyro bias end
 	#endif
@@ -1224,14 +1228,10 @@ static void processIMU(void *pvParameters)
 			if (dtGyr == 0) dtGyr = PERIOD40HZ;
 			gyroDPS = mpud::gyroDegPerSec(gyroRaw, GYRO_FS); // For compatibility with Eckhard code only. Convert raw gyro to Gyro_FS full scale in degre per second 
 			gyroRPS = mpud::gyroRadPerSec(gyroRaw, GYRO_FS); // convert raw gyro to Gyro_FS full scale in radians per second
-			// update gyro filters with dt = 0.0 means no fitering
+			// update gyro filters
 			gyroRPSx.ABupdate(dtGyr, gyroRPS.x );
 			gyroRPSy.ABupdate(dtGyr, gyroRPS.y );			
 			gyroRPSz.ABupdate(dtGyr, gyroRPS.z );			
-			// update gyro filters
-			//gyroRPSx.ABupdate(dtGyr, gyroRPS.x );
-			//gyroRPSy.ABupdate(dtGyr, gyroRPS.y );			
-			//gyroRPSz.ABupdate(dtGyr, gyroRPS.z );
 			// convert gyro coordinates to ISU : rad/s NED MPU and remove bias
 			xSemaphoreTake( dataMutex, 3/portTICK_PERIOD_MS ); // prevent data conflicts for 3ms max.			
 			gyroISUNEDMPU.x = -(gyroRPSz.ABfilt() - GroundGyroBias.z);
@@ -1257,6 +1257,7 @@ static void processIMU(void *pvParameters)
 			RawaccelISUNEDMPU.x = ((-accelG.z*9.807) - currentAccelBias.x ) * currentAccelGain.x;
 			RawaccelISUNEDMPU.y = ((-accelG.y*9.807) - currentAccelBias.y ) * currentAccelGain.y;
 			RawaccelISUNEDMPU.z = ((-accelG.x*9.807) - currentAccelBias.z ) * currentAccelGain.z;
+			
 
 			// convert from MPU to BODY and filter with A/B
 			xSemaphoreTake( dataMutex, 3/portTICK_PERIOD_MS ); // prevent data conflicts for 3ms max.				
