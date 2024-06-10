@@ -488,9 +488,11 @@ extern UbloxGnssDecoder s2UbloxGnssDecoder;
 // alpha beta filter class
 class AlphaBeta {
 private:
+	float _dt = 0.0;
 	float delta = 0.0;
 	float prim = 0.0;
 	float filt = 0.0;
+	float filt_1 = 0.0;
 	float _delta = 0.0;
 	float _prim = 0.0;
 	float _filt = 0.0;	
@@ -530,8 +532,10 @@ public:
 	void ABupdate(float dt, float RawData ) {
 		#define MaxZicket 2 // maximum number of concecuitives zickets to let the filter track the signal. If zicket is higher a step change in signal is suspected
 		if ( dt != 0.0 ) {
+			_dt = dt;
 			if ( firstpass ) { // initialize filter variables when first called
 				filt = RawData;
+				filt_1 = RawData;
 				_filt = RawData;
 				prim = 0.0;
 				_prim = 0.0;
@@ -553,6 +557,7 @@ public:
 							if ( filt < filtMin ) filt = filtMin;
 							if ( filt > filtMax ) filt = filtMax;
 						}
+						filt_1 = filt;
 						zicket = 0;
 					} else {
 						// new data above threshold, additional zicket
@@ -576,6 +581,7 @@ public:
 						// if number of zicket below stability criteria, arm and switch to primary filter
 						prim = _prim;
 						filt = _filt;
+						filt_1 = _filt;
 						zicket = 0;
 					}						
 				}
@@ -591,7 +597,7 @@ public:
 	}
 	
 	float ABprim(void) {
-		return prim;
+		return (filt-filt_1)/_dt;
 	}
 	
 	bool Stable(void) {
@@ -625,6 +631,41 @@ public:
 		return output1;
 	}
 	float LowPass2(void) {
+		return output2;
+	}
+	
+ };
+
+
+class CFilter {
+private:
+	float output1 = 0.0;
+	float output2 = 0.0;
+	float alpha = 1.0; // Filter coefficients
+	float beta = 0.0;
+	float _cutoffperiod = 0.0;
+	bool firstpass = true; // bool to initialize parameters at first pass
+public:
+    void CFupdate(float cutoffperiod, float dt, float input1, float input2 ) {
+        if ( dt!= 0.0 ) {
+			if ( firstpass || cutoffperiod != _cutoffperiod ) {
+				alpha = cutoffperiod / (cutoffperiod + dt);
+				beta = 1.0 - alpha;
+				_cutoffperiod = cutoffperiod;
+				if ( firstpass ) {
+					output1 = input2;
+					output2 = input2;
+					firstpass = false;
+				}
+			}
+			output1 = alpha * ( output1 + input1 * dt ) + beta * input2;
+			output2 = alpha * ( output2 + input1 * dt ) + beta * output1;
+		}
+    }
+	float CF1(void) {
+		return output1;
+	}
+	float CF2(void) {
 		return output2;
 	}
 	
@@ -673,6 +714,8 @@ static LowPassFilter temperatureLP;
 // declare low pass for AoB bias
 static LowPassFilter BiasAoB;
 
+// declare Complementary Filter for baro inertial acceleration
+static CFilter UbiPrimF, VbiPrimF, WbiPrimF, UbiF, VbiF, WbiF;
 
 #define GYRO_FS (mpud::GYRO_FS_250DPS)
 
@@ -1275,7 +1318,7 @@ static void processIMU(void *pvParameters)
 			// motor glider protection
 			AccelMotor1.LPupdate( 0.3, dtGyr, accelNEDBODYx.ABfilt() ); // filter to remove noise from acc x with low pass
 			AccelMotor2.LPupdate( 3, dtGyr, abs(accelNEDBODYx.ABfilt() - AccelMotor1.LowPass1()) ); // average amplitude around filtered signal
-			if ( AccelMotor2.LowPass1() > 0.5 ) {
+			if ( AccelMotor2.LowPass1() > 0.3 ) {
 				PeriodVelbi = 0.0; // baro inertiel period at zero to discard inertial when engine is running
 			} else {
 				PeriodVelbi = PeriodVelbi * 0.98 + LastPeriodVelbi * 0.02; // restore last baro inertial period progressively when engine is stopped
@@ -1376,20 +1419,27 @@ static void processIMU(void *pvParameters)
 				} else {
 					DynPeriodVelbi = 0.95 * DynPeriodVelbi + 0.05 * PeriodVelbi / PeriodVelbiGain;
 				}
-				fcVelbi1 = ( DynPeriodVelbi / ( DynPeriodVelbi + dtGyr ));
-				fcVelbi2 = ( 1.0 - fcVelbi1 );
+				//fcVelbi1 = ( DynPeriodVelbi / ( DynPeriodVelbi + dtGyr ));
+				//fcVelbi2 = ( 1.0 - fcVelbi1 );
 				
 				// Compute baro interial acceleration ( complementary filter between inertial accel derivatives and baro accels )
-				xSemaphoreTake( dataMutex, 3/portTICK_PERIOD_MS ); // prevent data conflicts for 3ms max.			
-				UbiPrim = fcVelbi1 * ( UbiPrim + UiPrimF.ABprim() * dtGyr ) + fcVelbi2 * UbPrimS;
-				VbiPrim = fcVelbi1 * ( VbiPrim + ViPrimF.ABprim() * dtGyr ) + fcVelbi2 * VbPrimS;			
-				WbiPrim = fcVelbi1 * ( WbiPrim + WiPrimF.ABprim() * dtGyr ) + fcVelbi2 * WbPrimS;
+				xSemaphoreTake( dataMutex, 3/portTICK_PERIOD_MS ); // prevent data conflicts for 3ms max.
+				UbiPrimF.CFupdate( DynPeriodVelbi, dtGyr, UiPrimF.ABprim(), UbPrimS );
+				//UbiPrim = fcVelbi1 * ( UbiPrim + UiPrimF.ABprim() * dtGyr ) + fcVelbi2 * UbPrimS;
+				VbiPrimF.CFupdate( DynPeriodVelbi, dtGyr, ViPrimF.ABprim(), VbPrimS );
+				//VbiPrim = fcVelbi1 * ( VbiPrim + ViPrimF.ABprim() * dtGyr ) + fcVelbi2 * VbPrimS;			
+				WbiPrimF.CFupdate( DynPeriodVelbi, dtGyr, WiPrimF.ABprim(), WbPrimS );
+				//WbiPrim = fcVelbi1 * ( WbiPrim + WiPrimF.ABprim() * dtGyr ) + fcVelbi2 * WbPrimS;
 				
 				// Compute baro interial velocity ( complementary filter between baro inertial acceleration and baro speed )
-				Ubi = fcVelbi1 * ( Ubi + UiPgain * UbiPrim * dtGyr ) + fcVelbi2 * Ub;
+				UbiF.CFupdate( DynPeriodVelbi, dtGyr, UbiPrimF.CF2(), Ub );
+				Ubi = UbiF.CF2();
+				//Ubi = fcVelbi1 * ( Ubi + UiPgain * UbiPrim * dtGyr ) + fcVelbi2 * Ub;
 				// Vbi = fcVelbi1 * ( Vbi + VbiPrim * dtGyr ) + fcVelbi2 * Vb;
 				Vbi = Vb;
-				Wbi = fcVelbi1 * ( Wbi + WiPgain * WbiPrim * dtGyr ) + fcVelbi2 * Wb;
+				WbiF.CFupdate( DynPeriodVelbi, dtGyr, WbiPrimF.CF2(), Wb );
+				Wbi = WbiF.CF2();
+				//Wbi = fcVelbi1 * ( Wbi + WiPgain * WbiPrim * dtGyr ) + fcVelbi2 * Wb;
 
 				// baro inertial TAS & TAS square in any frame
 				TASbiSquare = Ubi * Ubi + Vbi * Vbi + Wbi * Wbi;
