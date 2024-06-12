@@ -488,14 +488,18 @@ extern UbloxGnssDecoder s2UbloxGnssDecoder;
 // alpha beta filter class
 class AlphaBeta {
 private:
-	float _dt = 0.0;
+	float derivative = 0.0;
+	float derivative_1 = 0.0;
+	float _derivative = 0.0;
 	float delta = 0.0;
 	float prim = 0.0;
+	float prim_1 = 0.0;
 	float filt = 0.0;
 	float filt_1 = 0.0;
 	float _delta = 0.0;
 	float _prim = 0.0;
-	float _filt = 0.0;	
+	float _filt = 0.0;
+	float _filt_1 = 0.0;
 	float alpha = 0.0;
 	float beta = 0.0;
 	float Threshold = 0.0;
@@ -532,32 +536,34 @@ public:
 	void ABupdate(float dt, float RawData ) {
 		#define MaxZicket 2 // maximum number of concecuitives zickets to let the filter track the signal. If zicket is higher a step change in signal is suspected
 		if ( dt != 0.0 ) {
-			_dt = dt;
 			if ( firstpass ) { // initialize filter variables when first called
 				filt = RawData;
 				filt_1 = RawData;
 				_filt = RawData;
 				prim = 0.0;
+				prim_1 = 0.0;
 				_prim = 0.0;
 				firstpass = false;
 				zicket = 4*MaxZicket;
 			} else {
-				if ( zicket <= MaxZicket ) { 
+				if ( zicket <= MaxZicket ) {
 					// if filter stable
 					delta = RawData - filt;
 					if ( (abs(delta) < Threshold ) || (Threshold == 0.0) ) {
 						// new data below threshold
 						prim = prim + beta * delta / dt;
-						if ( primMin != 0.0 || primMax != 0.0 ) {
-							if ( prim < primMin ) prim = primMin;
-							if ( prim > primMax ) prim = primMax;
-						}
 						filt = filt + alpha * delta + prim * dt;
-						if ( filtMin != 0.0 || filtMax != 0.0 ) {
-							if ( filt < filtMin ) filt = filtMin;
-							if ( filt > filtMax ) filt = filtMax;
+						derivative_1 = derivative;
+						derivative = (filt-filt_1)/dt;
+						if ( ( (primMin != 0.0 || primMax != 0.0) && ( prim < primMin || prim > primMax || derivative < primMin  || derivative > primMax ) )
+						||	( (filtMin != 0.0 || filtMax != 0.0) && ( filt < filtMin || filt > filtMax ) ) ) {
+							filt = filt_1;
+							prim = prim_1;
+							derivative = derivative_1;
+						} else {
+							filt_1 = filt;
+							prim_1 = prim;
 						}
-						filt_1 = filt;
 						zicket = 0;
 					} else {
 						// new data above threshold, additional zicket
@@ -566,6 +572,7 @@ public:
 							// if new zicket makes filter unstable (step change), arm and switch to alternate AB filter
 							_prim = prim;
 							_filt = filt;
+							_filt_1 = filt;
 							zicket = 4*MaxZicket;
 						}
 					}
@@ -575,13 +582,18 @@ public:
 					_delta = RawData - _filt;
 					_prim = _prim + beta * _delta / dt;
 					_filt = _filt + alpha * _delta + _prim * dt;
+					_derivative = (_filt-_filt_1)/dt;
+					_filt_1 = _filt;
 					// if new data below threshold, reduce number of zicket
 					if ( abs(_delta) < Threshold || (Threshold == 0.0) ) zicket--; else zicket = 4*MaxZicket;
 					if ( zicket <= MaxZicket ) {
 						// if number of zicket below stability criteria, arm and switch to primary filter
 						prim = _prim;
+						prim_1 = _prim;
 						filt = _filt;
-						filt_1 = _filt;
+						filt_1 = _filt_1;
+						derivative = _derivative;
+						derivative_1 = _derivative;
 						zicket = 0;
 					}						
 				}
@@ -597,7 +609,7 @@ public:
 	}
 	
 	float ABprim(void) {
-		return (filt-filt_1)/_dt;
+		return (derivative+derivative_1)/2.0;
 	}
 	
 	bool Stable(void) {
@@ -672,7 +684,7 @@ public:
  };
 
 // alpha beta class for gyros
-static AlphaBeta gyroRPSx, gyroRPSy, gyroRPSz;
+static AlphaBeta gyroNEDx, gyroNEDy, gyroNEDz;
 
 // alpha beta class for accels
 static AlphaBeta accelISUNEDMPUx, accelISUNEDMPUy, accelISUNEDMPUz;
@@ -1214,9 +1226,9 @@ static void processIMU(void *pvParameters)
 	#define GyroOutlier 1.0 // 1 rad/s maximum variation sample to sample
 	#define Gyromin -4.0
 	#define Gyromax 4.0
-	gyroRPSx.ABinit( NGyro, GyroOutlier, Gyromin, Gyromax );
-	gyroRPSy.ABinit( NGyro, GyroOutlier, Gyromin, Gyromax );
-	gyroRPSz.ABinit( NGyro, GyroOutlier, Gyromin, Gyromax );	
+	gyroNEDx.ABinit( NGyro, GyroOutlier, Gyromin, Gyromax );
+	gyroNEDy.ABinit( NGyro, GyroOutlier, Gyromin, Gyromax );
+	gyroNEDz.ABinit( NGyro, GyroOutlier, Gyromin, Gyromax );	
 
 	// alpha beta accels parameters
 	#define NAccel 4 //  AB Filter parameter
@@ -1274,23 +1286,23 @@ static void processIMU(void *pvParameters)
 			if (dtGyr == 0) dtGyr = PERIOD40HZ;
 			gyroDPS = mpud::gyroDegPerSec(gyroRaw, GYRO_FS); // For compatibility with Eckhard code only. Convert raw gyro to Gyro_FS full scale in degre per second 
 			gyroRPS = mpud::gyroRadPerSec(gyroRaw, GYRO_FS); // convert raw gyro to Gyro_FS full scale in radians per second
-			// update gyro filters
-			gyroRPSx.ABupdate(dtGyr, gyroRPS.x );
-			gyroRPSy.ABupdate(dtGyr, gyroRPS.y );			
-			gyroRPSz.ABupdate(dtGyr, gyroRPS.z );			
 			// convert gyro coordinates to ISU : rad/s NED MPU and remove bias
 			xSemaphoreTake( dataMutex, 3/portTICK_PERIOD_MS ); // prevent data conflicts for 3ms max.			
-			gyroISUNEDMPU.x = -(gyroRPSz.ABfilt() - GroundGyroBias.z);
-			gyroISUNEDMPU.y = -(gyroRPSy.ABfilt() - GroundGyroBias.y);
-			gyroISUNEDMPU.z = -(gyroRPSx.ABfilt() - GroundGyroBias.x);
+			gyroISUNEDMPU.x = -(gyroRPS.z - GroundGyroBias.z);
+			gyroISUNEDMPU.y = -(gyroRPS.y - GroundGyroBias.y);
+			gyroISUNEDMPU.z = -(gyroRPS.x - GroundGyroBias.x);
 			// convert NEDMPU to NEDBODY			
 			gyroISUNEDBODY.x = C_T * gyroISUNEDMPU.x + STmultSS * gyroISUNEDMPU.y + STmultCS * gyroISUNEDMPU.z;
 			gyroISUNEDBODY.y = C_S * gyroISUNEDMPU.y - S_S * gyroISUNEDMPU.z;
 			gyroISUNEDBODY.z = -S_T * gyroISUNEDMPU.x + SSmultCT  * gyroISUNEDMPU.y + CTmultCS * gyroISUNEDMPU.z;
+			// update gyro filters
+			gyroNEDx.ABupdate(dtGyr, gyroISUNEDBODY.x );
+			gyroNEDy.ABupdate(dtGyr, gyroISUNEDBODY.y );			
+			gyroNEDz.ABupdate(dtGyr, gyroISUNEDBODY.z );			
 			// correct gyro with flight gyro estimation
-			gyroCorr.x = gyroISUNEDBODY.x;// + BiasQuatGx;  // error on x should be added
-			gyroCorr.y = gyroISUNEDBODY.y;// + BiasQuatGy;  // error on y should be added
-			gyroCorr.z = gyroISUNEDBODY.z;// + BiasQuatGz;  // error on z should be removed
+			gyroCorr.x = gyroNEDx.ABfilt();// + BiasQuatGx;  // error on x should be added
+			gyroCorr.y = gyroNEDy.ABfilt();// + BiasQuatGy;  // error on y should be added
+			gyroCorr.z = gyroNEDz.ABfilt();// + BiasQuatGz;  // error on z should be removed
 			xSemaphoreGive( dataMutex );
 		}
 		// get accel data
@@ -1303,8 +1315,6 @@ static void processIMU(void *pvParameters)
 			RawaccelISUNEDMPU.x = ((-accelG.z*9.807) - currentAccelBias.x ) * currentAccelGain.x;
 			RawaccelISUNEDMPU.y = ((-accelG.y*9.807) - currentAccelBias.y ) * currentAccelGain.y;
 			RawaccelISUNEDMPU.z = ((-accelG.x*9.807) - currentAccelBias.z ) * currentAccelGain.z;
-			
-
 			// convert from MPU to BODY and filter with A/B
 			xSemaphoreTake( dataMutex, 3/portTICK_PERIOD_MS ); // prevent data conflicts for 3ms max.				
 			accelISUNEDBODY.x = C_T * RawaccelISUNEDMPU.x + STmultSS * RawaccelISUNEDMPU.y + STmultCS * RawaccelISUNEDMPU.z + ( gyroCorr.y * gyroCorr.y + gyroCorr.z * gyroCorr.z ) * DistCGVario ;
@@ -1314,15 +1324,14 @@ static void processIMU(void *pvParameters)
 			accelISUNEDBODY.z = -S_T * RawaccelISUNEDMPU.x + SSmultCT * RawaccelISUNEDMPU.y + CTmultCS * RawaccelISUNEDMPU.z ;
 			accelNEDBODYz.ABupdate( dtGyr, accelISUNEDBODY.z );
 			xSemaphoreGive( dataMutex );
-			
 			// motor glider protection
-			AccelMotor1.LPupdate( 0.3, dtGyr, accelNEDBODYx.ABfilt() ); // filter to remove noise from acc x with low pass
-			AccelMotor2.LPupdate( 3, dtGyr, abs(accelNEDBODYx.ABfilt() - AccelMotor1.LowPass1()) ); // average amplitude around filtered signal
-			if ( AccelMotor2.LowPass1() > 0.3 ) {
-				PeriodVelbi = 0.0; // baro inertiel period at zero to discard inertial when engine is running
-			} else {
-				PeriodVelbi = PeriodVelbi * 0.98 + LastPeriodVelbi * 0.02; // restore last baro inertial period progressively when engine is stopped
-			}			
+			//AccelMotor1.LPupdate( 0.3, dtGyr, accelNEDBODYx.ABfilt() ); // filter to remove noise from acc x with low pass
+			//AccelMotor2.LPupdate( 3, dtGyr, abs(accelNEDBODYx.ABfilt() - AccelMotor1.LowPass1()) ); // average amplitude around filtered signal
+			//if ( AccelMotor2.LowPass1() > 0.3 ) {
+			//	PeriodVelbi = 0.0; // baro inertiel period at zero to discard inertial when engine is running
+			//} else {
+			//	PeriodVelbi = PeriodVelbi * 0.98 + LastPeriodVelbi * 0.02; // restore last baro inertial period progressively when engine is stopped
+			//}			
 		}
 		
 		// attitude initialization when XCVario starts during first 10 iterations 
@@ -1361,7 +1370,7 @@ static void processIMU(void *pvParameters)
 
 				// Update quaternions
 				// gyroISUNEDBODY corresponds to raw gyro and BiasQuatGx,y,z to the gyros bias
-				MahonyUpdateIMU( dtGyr, gyroISUNEDBODY.x, gyroISUNEDBODY.y, gyroISUNEDBODY.z, -gravISUNEDBODY.x, -gravISUNEDBODY.y, -gravISUNEDBODY.z, BiasQuatGx, BiasQuatGy, BiasQuatGz );
+				MahonyUpdateIMU( dtGyr, gyroCorr.x, gyroCorr.y, gyroCorr.z, -gravISUNEDBODY.x, -gravISUNEDBODY.y, -gravISUNEDBODY.z, BiasQuatGx, BiasQuatGy, BiasQuatGz );
 								
 				// Compute Euler angles from IMU quaternion
 				if ( abs(q1 * q3 - q0 * q2) < 0.5 ) {
@@ -1415,7 +1424,7 @@ static void processIMU(void *pvParameters)
 				// Gyro x and z amplitude used to adjust Baro Inertial filter
 				GyrxzAmplitudeBIdyn = abs(gyroCorr.x)*0.9 + abs(gyroCorr.z)*0.4;			
 				if ( GyrxzAmplitudeBIdyn < GyrAmplitudeLimit ) {
-					DynPeriodVelbi = 0.95 * DynPeriodVelbi + 0.05 * PeriodVelbi / ( 1 + GyrxzAmplitudeBIdyn / (GyrAmplitudeLimit/PeriodVelbiGain) );
+					DynPeriodVelbi = 0.95 * DynPeriodVelbi + 0.05 * PeriodVelbi / ( 1 + GyrxzAmplitudeBIdyn * (PeriodVelbiGain - 1.0) / GyrAmplitudeLimit );
 				} else {
 					DynPeriodVelbi = 0.95 * DynPeriodVelbi + 0.05 * PeriodVelbi / PeriodVelbiGain;
 				}
@@ -1466,7 +1475,7 @@ static void processIMU(void *pvParameters)
 			}
 			// compute gyro module variation
 			// update gyro module filter
-			GyroModule.ABupdate( dtGyr, sqrt(gyroRPSx.ABfilt() * gyroRPSx.ABfilt() + gyroRPSy.ABfilt() * gyroRPSy.ABfilt() + gyroRPSz.ABfilt() * gyroRPSz.ABfilt()) );
+			GyroModule.ABupdate( dtGyr, sqrt(gyroRPS.x * gyroRPS.x + gyroRPS.y * gyroRPS.y + gyroRPS.z * gyroRPS.z) );
 			// asymetric filter with fast raise and slow decay
 			#define fcGyroLevel 3.0 // 3Hz low pass to filter 
 			#define fcGL1 (40.0/(40.0+fcGyroLevel))
@@ -1489,9 +1498,9 @@ static void processIMU(void *pvParameters)
 						gyrostable++;
 						// during first 2.5 seconds, initialize gyro and gravity data
 						if ( gyrostable < 100 ) {
-							GxBias = gyroRPSx.ABfilt();
-							GyBias = gyroRPSy.ABfilt();
-							GzBias = gyroRPSz.ABfilt();
+							GxBias = gyroRPS.x;
+							GyBias = gyroRPS.y;
+							GzBias = gyroRPS.z;
 							Gravx = RawaccelISUNEDMPU.x;
 							Gravy = RawaccelISUNEDMPU.y;
 							Gravz = RawaccelISUNEDMPU.z;
@@ -1500,9 +1509,9 @@ static void processIMU(void *pvParameters)
 							// between 2.5 seconds and 22.5 seconds, accumulate gyro and gravity data
 							if ( gyrostable <900 ) {
 								averagecount++;
-								GxBias += gyroRPSx.ABfilt();
-								GyBias += gyroRPSy.ABfilt();
-								GzBias += gyroRPSz.ABfilt();
+								GxBias += gyroRPS.x;
+								GyBias += gyroRPS.y;
+								GzBias += gyroRPS.z;
 								Gravx += RawaccelISUNEDMPU.x;
 								Gravy += RawaccelISUNEDMPU.y;
 								Gravz += RawaccelISUNEDMPU.z;
@@ -1851,7 +1860,9 @@ void readSensors(void *pvParameters){
 	#define AltitudeOutliers 30.0 // 30 m maximum variation sample to sample
 	#define Altmin -500.0
 	#define Altmax 12000
-	ALT.ABinit( NALT, AltitudeOutliers, Altmin, Altmax );	
+	#define AltPrimmin -30.0
+	#define AltPrimmax 30.0
+	ALT.ABinit( NALT, AltitudeOutliers, Altmin, Altmax, AltPrimmin, AltPrimmax );	
 
 	#define DSR 15 // maximum number of samples spacing to compute wind.
 	int16_t tickDSR = 1;
@@ -2483,9 +2494,9 @@ void readSensors(void *pvParameters){
 			UbPrimS in hubdred of m/s²,
 			VbPrimS,
 			WbPrimS,
-			UiPrimPrimS in hundred of m/s3,
-			ViPrimPrimS,
-			WiPrimPrimS,			
+			UiPrimF.ABprim() in hundred of m/s3,
+			ViPrimF.ABprim(),
+			WiPrimF.ABprim(),			
 			UbiPrim in hundred of m/s²,
 			VbiPrim,
 			WbiPrim,
@@ -2517,7 +2528,7 @@ void readSensors(void *pvParameters){
 					// $S3 stream
 					(int32_t)(UiPrim*100),(int32_t)(ViPrim*100),(int32_t)(WiPrim*100),
 					(int32_t)(UbPrimS*100), (int32_t)(VbPrimS*100),(int32_t)(WbPrimS*100),
-					(int32_t)(UiPrimPrimS*100), (int32_t)(ViPrimPrimS*100),(int32_t)(WiPrimPrimS*100),	
+					(int32_t)(UiPrimF.ABprim()*100), (int32_t)(ViPrimF.ABprim()*100),(int32_t)(WiPrimF.ABprim()*100),	
 					(int32_t)(UbiPrim*100), (int32_t)(VbiPrim*100),(int32_t)(WbiPrim*100),
 					(int32_t)(Bias_AoB*1000),
 					(int32_t)(RTKNproj*1000),(int32_t)(RTKEproj*1000),(int32_t)(-RTKUproj*1000),(int32_t)(RTKheading*10),(int32_t)(ALTbi*100),
