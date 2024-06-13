@@ -488,9 +488,6 @@ extern UbloxGnssDecoder s2UbloxGnssDecoder;
 // alpha beta filter class
 class AlphaBeta {
 private:
-	float derivative = 0.0;
-	float derivative_1 = 0.0;
-	float _derivative = 0.0;
 	float delta = 0.0;
 	float prim = 0.0;
 	float prim_1 = 0.0;
@@ -553,13 +550,10 @@ public:
 						// new data below threshold
 						prim = prim + beta * delta / dt;
 						filt = filt + alpha * delta + prim * dt;
-						derivative_1 = derivative;
-						derivative = (filt-filt_1)/dt;
-						if ( ( (primMin != 0.0 || primMax != 0.0) && ( prim < primMin || prim > primMax || derivative < primMin  || derivative > primMax ) )
+						if ( ( (primMin != 0.0 || primMax != 0.0) && ( prim < primMin || prim > primMax ) )
 						||	( (filtMin != 0.0 || filtMax != 0.0) && ( filt < filtMin || filt > filtMax ) ) ) {
 							filt = filt_1;
 							prim = prim_1;
-							derivative = derivative_1;
 						} else {
 							filt_1 = filt;
 							prim_1 = prim;
@@ -582,7 +576,6 @@ public:
 					_delta = RawData - _filt;
 					_prim = _prim + beta * _delta / dt;
 					_filt = _filt + alpha * _delta + _prim * dt;
-					_derivative = (_filt-_filt_1)/dt;
 					_filt_1 = _filt;
 					// if new data below threshold, reduce number of zicket
 					if ( abs(_delta) < Threshold || (Threshold == 0.0) ) zicket--; else zicket = 4*MaxZicket;
@@ -592,8 +585,6 @@ public:
 						prim_1 = _prim;
 						filt = _filt;
 						filt_1 = _filt_1;
-						derivative = _derivative;
-						derivative_1 = _derivative;
 						zicket = 0;
 					}						
 				}
@@ -609,7 +600,7 @@ public:
 	}
 	
 	float ABprim(void) {
-		return (derivative+derivative_1)/2.0;
+		return prim;
 	}
 	
 	bool Stable(void) {
@@ -1252,7 +1243,7 @@ static void processIMU(void *pvParameters)
 	PitchAHRS.ABinit( NAHRS, AHRSOutliers, AHRSmin, AHRSmax );
 	
 	// alpha beta parameters for kinetic accels
-	#define NIPRIM 6
+	#define NIPRIM 5
 	UiPrimF.ABinit( NIPRIM );
 	ViPrimF.ABinit( NIPRIM );
 	WiPrimF.ABinit( NIPRIM );
