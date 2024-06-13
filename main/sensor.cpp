@@ -687,7 +687,6 @@ public:
 static AlphaBeta gyroNEDx, gyroNEDy, gyroNEDz;
 
 // alpha beta class for accels
-static AlphaBeta accelISUNEDMPUx, accelISUNEDMPUy, accelISUNEDMPUz;
 static AlphaBeta accelNEDBODYx, accelNEDBODYy, accelNEDBODYz;
 
 // alpha beta class for gyro and accel module
@@ -1235,9 +1234,6 @@ static void processIMU(void *pvParameters)
 	#define AccelOutlier 10.0 // 10 m/s² maximum variation sample to sample
 	#define Accelmin -60.0
 	#define Accelmax 60.0
-	accelISUNEDMPUx.ABinit( NAccel, AccelOutlier, Accelmin, Accelmax );
-	accelISUNEDMPUy.ABinit( NAccel, AccelOutlier, Accelmin, Accelmax );
-	accelISUNEDMPUz.ABinit( NAccel, AccelOutlier, Accelmin, Accelmax );
 	accelNEDBODYx.ABinit( NAccel, AccelOutlier, Accelmin, Accelmax );
 	accelNEDBODYy.ABinit( NAccel, AccelOutlier, Accelmin, Accelmax );	
 	accelNEDBODYz.ABinit( NAccel, AccelOutlier, Accelmin, Accelmax );	
@@ -1284,22 +1280,25 @@ static void processIMU(void *pvParameters)
 			dtGyr = (gyroTime - prevgyroTime) / 1000.0; // period between last two valid samples in second
 			// use theoritical dt @ 40Hz in case computed dt is zero
 			if (dtGyr == 0) dtGyr = PERIOD40HZ;
+			// convert raw gyro data to degre per second. Requried for legacy code from Eckhard
 			gyroDPS = mpud::gyroDegPerSec(gyroRaw, GYRO_FS); // For compatibility with Eckhard code only. Convert raw gyro to Gyro_FS full scale in degre per second 
+			// convert raw gyro data to radian per second
 			gyroRPS = mpud::gyroRadPerSec(gyroRaw, GYRO_FS); // convert raw gyro to Gyro_FS full scale in radians per second
 			// convert gyro coordinates to ISU : rad/s NED MPU and remove bias
-			xSemaphoreTake( dataMutex, 3/portTICK_PERIOD_MS ); // prevent data conflicts for 3ms max.			
+			xSemaphoreTake( dataMutex, 3/portTICK_PERIOD_MS ); // prevent data conflicts for 3ms max.
+			// Apply gyro bias correction from startup and on ground process
 			gyroISUNEDMPU.x = -(gyroRPS.z - GroundGyroBias.z);
 			gyroISUNEDMPU.y = -(gyroRPS.y - GroundGyroBias.y);
 			gyroISUNEDMPU.z = -(gyroRPS.x - GroundGyroBias.x);
-			// convert NEDMPU to NEDBODY			
+			// convert from NEDMPU to NEDBODY coodinates			
 			gyroISUNEDBODY.x = C_T * gyroISUNEDMPU.x + STmultSS * gyroISUNEDMPU.y + STmultCS * gyroISUNEDMPU.z;
 			gyroISUNEDBODY.y = C_S * gyroISUNEDMPU.y - S_S * gyroISUNEDMPU.z;
 			gyroISUNEDBODY.z = -S_T * gyroISUNEDMPU.x + SSmultCT  * gyroISUNEDMPU.y + CTmultCS * gyroISUNEDMPU.z;
-			// update gyro filters
+			// update gyro Alpha Beta filters
 			gyroNEDx.ABupdate(dtGyr, gyroISUNEDBODY.x );
 			gyroNEDy.ABupdate(dtGyr, gyroISUNEDBODY.y );			
 			gyroNEDz.ABupdate(dtGyr, gyroISUNEDBODY.z );			
-			// correct gyro with flight gyro estimation
+			// Apply bias estimates from flight gyro estimation
 			gyroCorr.x = gyroNEDx.ABfilt();// + BiasQuatGx;  // error on x should be added
 			gyroCorr.y = gyroNEDy.ABfilt();// + BiasQuatGy;  // error on y should be added
 			gyroCorr.z = gyroNEDz.ABfilt();// + BiasQuatGz;  // error on z should be removed
@@ -1311,17 +1310,18 @@ static void processIMU(void *pvParameters)
 		xSemaphoreGive( I2CMutex );			
 		if( errMPU == ESP_OK ){ // read raw acceleration
 			accelG = mpud::accelGravity(accelRaw, mpud::ACCEL_FS_8G);  // For compatibility with Eckhard code only. Convert raw data to to 8G full scale
-			// convert accels coordinates to ISU : m/s² NED MPU
+			// Correct raw accel data to m/s² with bias and gains estimated during calibration process
 			RawaccelISUNEDMPU.x = ((-accelG.z*9.807) - currentAccelBias.x ) * currentAccelGain.x;
 			RawaccelISUNEDMPU.y = ((-accelG.y*9.807) - currentAccelBias.y ) * currentAccelGain.y;
 			RawaccelISUNEDMPU.z = ((-accelG.x*9.807) - currentAccelBias.z ) * currentAccelGain.z;
-			// convert from MPU to BODY and filter with A/B
+			// convert from MPU to BODY
 			xSemaphoreTake( dataMutex, 3/portTICK_PERIOD_MS ); // prevent data conflicts for 3ms max.				
 			accelISUNEDBODY.x = C_T * RawaccelISUNEDMPU.x + STmultSS * RawaccelISUNEDMPU.y + STmultCS * RawaccelISUNEDMPU.z + ( gyroCorr.y * gyroCorr.y + gyroCorr.z * gyroCorr.z ) * DistCGVario ;
-			accelNEDBODYx.ABupdate( dtGyr, accelISUNEDBODY.x );
 			accelISUNEDBODY.y = C_S * RawaccelISUNEDMPU.y - S_S * RawaccelISUNEDMPU.z;
+			accelISUNEDBODY.z = -S_T * RawaccelISUNEDMPU.x + SSmultCT * RawaccelISUNEDMPU.y + CTmultCS * RawaccelISUNEDMPU.z;
+			// filter with Alpha Beta filter
+			accelNEDBODYx.ABupdate( dtGyr, accelISUNEDBODY.x );
 			accelNEDBODYy.ABupdate( dtGyr, accelISUNEDBODY.y  );
-			accelISUNEDBODY.z = -S_T * RawaccelISUNEDMPU.x + SSmultCT * RawaccelISUNEDMPU.y + CTmultCS * RawaccelISUNEDMPU.z ;
 			accelNEDBODYz.ABupdate( dtGyr, accelISUNEDBODY.z );
 			xSemaphoreGive( dataMutex );
 			// motor glider protection
@@ -1412,7 +1412,7 @@ static void processIMU(void *pvParameters)
 				// ViPrim = accelNEDBODYy.ABfilt()- GravIMU.y - gyroCorr.z * Ubi + gyroCorr.x * Wbi;			
 				// WiPrim = accelNEDBODYz.ABfilt()- GravIMU.z + gyroCorr.y * Ubi - gyroCorr.x * Vbi;			
 
-				// Kinectic accels alpha/beta short filter
+				// Kinectic accels alpha/beta filter
 				UiPrimF.ABupdate( dtGyr, UiPrim );
 				ViPrimF.ABupdate( dtGyr, ViPrim );
 				WiPrimF.ABupdate( dtGyr, WiPrim);
