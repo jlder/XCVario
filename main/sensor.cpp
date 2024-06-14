@@ -644,6 +644,7 @@ class CFilter {
 private:
 	float output1 = 0.0;
 	float output2 = 0.0;
+	float input2LP = 0.0;
 	float alpha = 1.0; // Filter coefficients
 	float beta = 0.0;
 	float _cutoffperiod = 0.0;
@@ -658,11 +659,13 @@ public:
 				if ( firstpass ) {
 					output1 = input2;
 					output2 = input2;
+					input2LP = input2;
 					firstpass = false;
 				}
 			}
 			output1 = alpha * ( output1 + input1 * dt ) + beta * input2;
-			output2 = alpha * ( output2 + input1 * dt ) + beta * output1;
+			input2LP = alpha * input2LP + beta * input2; 
+			output2 = alpha * ( output2 + input1 * dt ) + beta * input2LP;
 		}
     }
 	float CF1(void) {
@@ -2857,6 +2860,12 @@ void system_startup(void *args){
 			Sway = 0.0;
 			Tilt = 0.0;
 		}
+		
+		#ifdef VENTUS3
+		Sway = 0.022;
+		Tilt = -0.237;
+		DistCGVario = 1.3;
+		#endif
 		// compute trigonometry
 		S_S = sin(Sway);
 		C_S = cos(Sway);
