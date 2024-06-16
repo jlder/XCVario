@@ -1447,39 +1447,39 @@ static void processIMU(void *pvParameters)
 				// baro inertial TAS & TAS square in any frame
 				TASbiSquare = Ubi * Ubi + Vbi * Vbi + Wbi * Wbi;
 				TASbi = sqrt( TASbiSquare );
-				
 				xSemaphoreGive( dataMutex );
+				
+				// compute acceleration module variation
+				// update accel module filter
+				AccelModule.ABupdate(dtGyr, sqrt(accelNEDBODYx.ABfilt()* accelNEDBODYx.ABfilt()+ accelNEDBODYy.ABfilt()* accelNEDBODYy.ABfilt()+ accelNEDBODYz.ABfilt()* accelNEDBODYz.ABfilt() ) );
+				// asysmetric filter with fast raise and slow decay
+				#define fcAccelLevel 3.0 // 3Hz low pass to filter 
+				#define fcAL1 (40.0/(40.0+fcAccelLevel))
+				#define fcAL2 (1.0-fcAL1)		
+				if ( AccelModulePrimLevel < abs(AccelModule.ABprim()) ) {
+					AccelModulePrimLevel = abs(AccelModule.ABprim());
+				} else {
+					AccelModulePrimLevel = fcAL1 * AccelModulePrimLevel +  fcAL2 * abs(AccelModule.ABprim());
+				}
+				// compute gyro module variation
+				// update gyro module filter
+				GyroModule.ABupdate( dtGyr, sqrt(gyroRPS.x * gyroRPS.x + gyroRPS.y * gyroRPS.y + gyroRPS.z * gyroRPS.z) );
+				// asymetric filter with fast raise and slow decay
+				#define fcGyroLevel 3.0 // 3Hz low pass to filter 
+				#define fcGL1 (40.0/(40.0+fcGyroLevel))
+				#define fcGL2 (1.0-fcGL1)		
+				if ( GyroModulePrimLevel < abs(GyroModule.ABprim()) ) {
+					GyroModulePrimLevel = abs(GyroModule.ABprim());
+				} else {
+					GyroModulePrimLevel = fcGL1 * GyroModulePrimLevel +  fcGL2 * abs(GyroModule.ABprim());
+				}				
+
 			}
 		}
 
 		// When TAS < 15 m/s the vario is considered potentially stable on ground
 		// This is when bias and local gravity are estimated
 		if ( TAS < 15.0 ) {
-			// compute acceleration module variation
-			// update accel module filter
-			AccelModule.ABupdate(dtGyr, sqrt(accelNEDBODYx.ABfilt()* accelNEDBODYx.ABfilt()+ accelNEDBODYy.ABfilt()* accelNEDBODYy.ABfilt()+ accelNEDBODYz.ABfilt()* accelNEDBODYz.ABfilt() ) );
-			// asysmetric filter with fast raise and slow decay
-			#define fcAccelLevel 3.0 // 3Hz low pass to filter 
-			#define fcAL1 (40.0/(40.0+fcAccelLevel))
-			#define fcAL2 (1.0-fcAL1)		
-			if ( AccelModulePrimLevel < abs(AccelModule.ABprim()) ) {
-				AccelModulePrimLevel = abs(AccelModule.ABprim());
-			} else {
-				AccelModulePrimLevel = fcAL1 * AccelModulePrimLevel +  fcAL2 * abs(AccelModule.ABprim());
-			}
-			// compute gyro module variation
-			// update gyro module filter
-			GyroModule.ABupdate( dtGyr, sqrt(gyroRPS.x * gyroRPS.x + gyroRPS.y * gyroRPS.y + gyroRPS.z * gyroRPS.z) );
-			// asymetric filter with fast raise and slow decay
-			#define fcGyroLevel 3.0 // 3Hz low pass to filter 
-			#define fcGL1 (40.0/(40.0+fcGyroLevel))
-			#define fcGL2 (1.0-fcGL1)		
-			if ( GyroModulePrimLevel < abs(GyroModule.ABprim()) ) {
-				GyroModulePrimLevel = abs(GyroModule.ABprim());
-			} else {
-				GyroModulePrimLevel = fcGL1 * GyroModulePrimLevel +  fcGL2 * abs(GyroModule.ABprim());
-			}	
-			
 			// Estimate gyro bias and gravity up to 100 times, except if doing Lab test then only one estimation is performed
 			if ( (BIAS_Init < 100 && !LABtest) || BIAS_Init < 1 ) {
 				// When MPU temperature is controled and temperature is locked   or   when there is no temperature control
@@ -2473,16 +2473,16 @@ void readSensors(void *pvParameters){
 		*/	
 		/* 
 			$S3,
-			UiPrim in hundred of m/s²,
+			UiPrim in hundredth of m/s²,
 			ViPrim,
 			Wiprim,
-			UbPrimS in hubdred of m/s²,
+			UbPrimS in hubdredth of m/s3,
 			VbPrimS,
 			WbPrimS,
-			UiPrimF.ABprim() in hundred of m/s3,
+			UiPrimF.ABprim() in hundredth of m/s3,
 			ViPrimF.ABprim(),
 			WiPrimF.ABprim(),			
-			UbiPrim in hundred of m/s²,
+			UbiPrim in hundredth of m/s²,
 			VbiPrim,
 			WbiPrim,
 			Bias_AoB in mrad
@@ -2496,12 +2496,14 @@ void readSensors(void *pvParameters){
 			UbFS in cm/s,
 			VbFS in cm/s,
 			WbFS in cm/s,
+			AccelModulePrimLevel in in hundredth of m/s3,
+			GyroModulePrimLevel  in in hundredth of m/s3
 			
 		*/		
 
 			if ( !(count % 50) ) { 
 				// send $S1 and $S2 and $S3 every 50 cycles = 5 seconds
-				sprintf(str,"$S1,%lld,%i,%i,%i,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$S3,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$S2,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",
+				sprintf(str,"$S1,%lld,%i,%i,%i,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$S3,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$S2,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",
 				// $S1 stream
 					statTime, (int32_t)(statP*100.0),(int32_t)(teP*100.0), (int16_t)(dynP*10), 
 					(int64_t)(chosenGnss->time*1000.0), (int16_t)(GnssVx.ABfilt()*100), (int16_t)(GnssVy.ABfilt()*100), (int16_t)(GnssVz.ABfilt()*100), (int16_t)(GNSSRouteraw*1000),
@@ -2524,6 +2526,7 @@ void readSensors(void *pvParameters){
 					(int32_t)(Bias_AoB*1000),
 					(int32_t)(RTKNproj*1000),(int32_t)(RTKEproj*1000),(int32_t)(-RTKUproj*1000),(int32_t)(RTKheading*10),(int32_t)(ALTbi*100),
 					(int32_t)(Vh*100),(int32_t)(DHeading*1000),(int32_t)(UbFS*100),(int32_t)(VbFS*100),(int32_t)(WbFS*100),
+					(int32_t)(AccelModulePrimLevel*100),(int32_t)(GyroModulePrimLevel*100),
 					// $S2 stream
 					(int16_t)(temperatureLP.LowPass1()*10.0), (int16_t)(OATemp.ABfilt()*10.0), (int16_t)(MPUtempcel*10.0), chosenGnss->fix, chosenGnss->numSV,
 					(int32_t)(GroundGyroBias.x*100000.0), (int32_t)(GroundGyroBias.y*100000.0), (int32_t)(GroundGyroBias.z*100000.0),				
@@ -2536,7 +2539,7 @@ void readSensors(void *pvParameters){
 				xSemaphoreGive( BTMutex );				
 			} else {
 				// send $S1 & $S3 @ 100 ms
-				sprintf(str,"$S1,%lld,%i,%i,%i,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$S3,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",
+				sprintf(str,"$S1,%lld,%i,%i,%i,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$S3,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",
 					statTime, (int32_t)(statP*100.0),(int32_t)(teP*100.0), (int16_t)(dynP*10), 
 					(int64_t)(chosenGnss->time*1000.0), (int16_t)(GnssVx.ABfilt()*100), (int16_t)(GnssVy.ABfilt()*100), (int16_t)(GnssVz.ABfilt()*100), (int16_t)(GNSSRouteraw*1000),
 					(int32_t)(Pitch*1000.0), (int32_t)(Roll*1000.0), (int32_t)(Yaw*1000.0),
@@ -2557,7 +2560,8 @@ void readSensors(void *pvParameters){
 					(int32_t)(UbiPrim*100), (int32_t)(VbiPrim*100),(int32_t)(WbiPrim*100),
 					(int32_t)(Bias_AoB*1000),
 					(int32_t)(RTKNproj*1000),(int32_t)(RTKEproj*1000),(int32_t)(-RTKUproj*1000),(int32_t)(RTKheading*10),(int32_t)(ALTbi*100),
-					(int32_t)(Vh*100),(int32_t)(DHeading*1000),(int32_t)(UbFS*100),(int32_t)(VbFS*100),(int32_t)(WbFS*100)			
+					(int32_t)(Vh*100),(int32_t)(DHeading*1000),(int32_t)(UbFS*100),(int32_t)(VbFS*100),(int32_t)(WbFS*100),
+					(int32_t)(AccelModulePrimLevel*100),(int32_t)(GyroModulePrimLevel*100)				
 				);
 				xSemaphoreTake( BTMutex, 2/portTICK_PERIOD_MS );				
 				Router::sendXCV(str);
