@@ -995,11 +995,11 @@ float PseudoHeadingPrim;// MOD#4 gyro bias
 	// When TAS below 15 m/s and roll and pitch are below respective thresholds, 
 	// x and y gyros biases are computed by long term average of the gyro values minus corresponding axis attitude variation
 	// z gyro bias is computed by long term average of gyro value minus heading variation estimation
-	#define RollLimit 0.175 // max lateral gravity acceleration (normalized acceleration) for 10° roll
-	#define PitchLimit 0.175 // max longitudinal gravity acceleration (normalized acceleration) for 10° pitch
+	#define RollLimit 0.2 // max lateral gravity acceleration (normalized acceleration) for 11.5° roll
+	#define PitchLimit 0.2 // max longitudinal gravity acceleration (normalized acceleration) for 11.5° pitch
 	#define GMaxBias 0.005 // limit biais correction to 5 mrad/s
-	#define GyroCutoffPeriod 700 //  very long term average ~ 700 seconds
-	if ( TAS > 15.0 && RollLimit < abs(halfvy) && PitchLimit < abs(halfvx) ) {
+	#define GyroCutoffPeriod 150 //  very long term average ~ 150 seconds
+	if ( (TAS > 15.0) && (abs(halfvy)< RollLimit) && (abs(halfvx)  <PitchLimit)  ) {
 		// compute Gx - d(roll)/dt and Gy - d(pitch)/dt long term average.
 		GyroBiasx.LPupdate( GyroCutoffPeriod, dt, gxraw - RollAHRS.ABprim() );
 		GyroBiasy.LPupdate( GyroCutoffPeriod, dt, gyraw - PitchAHRS.ABprim() );		

@@ -442,9 +442,9 @@ SetupNG<float>			distCG("DIST_CG_XCVARIO", 1.42);
 #ifdef VENTUS3
 SetupNG<mpud::float_axes_t>	accl_bias("ACCL_BIAS", load_float_axes_t(1.0162, -0.0747, -0.53) );
 SetupNG<mpud::float_axes_t>	accl_gain("ACCL_GAIN", load_float_axes_t(0.9786, 0.9932, 0.9958) );
-SetupNG<float>			tilt("XCV_TILT", 0.0);
-SetupNG<float>			sway("XCV_SWAY", 0.0);
-SetupNG<float>			distCG("DIST_CG_XCVARIO", 1.3);
+SetupNG<float>			tilt("XCV_TILT", -0.063);
+SetupNG<float>			sway("XCV_SWAY", 0.024);
+SetupNG<float>			distCG("DIST_CG_XCVARIO", 1.4);
 #endif
 
 SetupNG<mpud::float_axes_t>	gyro_bias("GYRO_BIAS", load_float_axes_t( 0.0, 0.0, 0.0) );
