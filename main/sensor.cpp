@@ -2523,7 +2523,7 @@ void readSensors(void *pvParameters){
 					(int32_t)(UbiPrim*100), (int32_t)(VbiPrim*100),(int32_t)(WbiPrim*100),
 					(int32_t)(Bias_AoB*1000),
 					(int32_t)(RTKNproj*1000),(int32_t)(RTKEproj*1000),(int32_t)(-RTKUproj*1000),(int32_t)(RTKheading*10),(int32_t)(ALTbi*100),
-					(int32_t)(Vh*100),(int32_t)(DHeading*1000),(int32_t)(UbFS*100),(int32_t)(UbFS*100),(int32_t)(UbFS*100),
+					(int32_t)(Vh*100),(int32_t)(DHeading*1000),(int32_t)(UbFS*100),(int32_t)(VbFS*100),(int32_t)(WbFS*100),
 					// $S2 stream
 					(int16_t)(temperatureLP.LowPass1()*10.0), (int16_t)(OATemp.ABfilt()*10.0), (int16_t)(MPUtempcel*10.0), chosenGnss->fix, chosenGnss->numSV,
 					(int32_t)(GroundGyroBias.x*100000.0), (int32_t)(GroundGyroBias.y*100000.0), (int32_t)(GroundGyroBias.z*100000.0),				
@@ -2553,11 +2553,11 @@ void readSensors(void *pvParameters){
 					// $S3 stream
 					(int32_t)(UiPrim*100),(int32_t)(ViPrim*100),(int32_t)(WiPrim*100),
 					(int32_t)(UbPrimS*100), (int32_t)(VbPrimS*100),(int32_t)(WbPrimS*100),
-					(int32_t)(UiPrimPrimS*100), (int32_t)(ViPrimPrimS*100),(int32_t)(WiPrimPrimS*100),	
+					(int32_t)(UiPrimF.ABprim()*100), (int32_t)(ViPrimF.ABprim()*100),(int32_t)(WiPrimF.ABprim()*100),					
 					(int32_t)(UbiPrim*100), (int32_t)(VbiPrim*100),(int32_t)(WbiPrim*100),
 					(int32_t)(Bias_AoB*1000),
 					(int32_t)(RTKNproj*1000),(int32_t)(RTKEproj*1000),(int32_t)(-RTKUproj*1000),(int32_t)(RTKheading*10),(int32_t)(ALTbi*100),
-					(int32_t)(Vh*100),(int32_t)(DHeading*1000),(int32_t)(UbFS*100),(int32_t)(UbFS*100),(int32_t)(UbFS*100)			
+					(int32_t)(Vh*100),(int32_t)(DHeading*1000),(int32_t)(UbFS*100),(int32_t)(VbFS*100),(int32_t)(WbFS*100)			
 				);
 				xSemaphoreTake( BTMutex, 2/portTICK_PERIOD_MS );				
 				Router::sendXCV(str);
