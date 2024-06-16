@@ -564,6 +564,9 @@ void Protocols::parseNMEA( const char *str ){
 		//ex: $PSTI,030,033010.000,A,2447.0895508,N,12100.5234656,E,94.615,0.00,-0.01,0.04,111219,R,0.999,3.724*1A<CR><LF>
 		sscanf( str,"$PSTI,030,%f,%c,%f,%c,%f,%c,%f,%f,%f,%f,%d,%c,%f,%f*%x",&RTKtime,&RTKdummyc,&RTKdummyf,&RTKdummyc,&RTKdummyf,&RTKdummyc,&RTKdummyf,&RTKEvel,&RTKNvel,&RTKUvel,
 				&RTKdummyd,&RTKmode,&RTKage,&RTKratio,&RTKcs);
+		int32_t RTKhours = (int32_t)(RTKtime/10000);
+		int32_t RTKminutes = (int32_t)(RTKtime/100-RTKhours*100);
+		RTKtime = (float)(RTKhours*3600) + (float)(RTKminutes*60) + RTKtime - RTKhours*10000 - RTKminutes*100;
 	}else if( !strncmp( str, "$PSTI,032", 9 ) ) {
 		// STI,032– RTK Baseline Data
 		// Time, date, status and baseline related data provided by a GNSS navigation receiver.
@@ -577,6 +580,9 @@ void Protocols::parseNMEA( const char *str ){
 		// $GNRMV,s.sss,x.xxx,x.xxx,x.xxx,x.xxx,x.xxx*hh<CR><LF>
 		//ex: $GNRMV,124951.800,-0.000,0.000,0.000,0.000,0.000*5F
 		sscanf( str,"$GNRMV,%f,%f,%f,%f,%f,%f*%x",&Allytime,&AllyvelE,&AllyvelN,&AllyvelU,&Allyvel3D,&Allyvel2D,&Allycs);
+		int32_t Allyhours = (int32_t)(Allytime/10000);
+		int32_t Allyminutes = (int32_t)(Allytime/100-Allyhours*100);
+		Allytime = (float)(Allyhours*3600) + (float)(Allyminutes*60) + Allytime - Allyhours*10000 - Allyminutes*100;
 		int calc_cs=calcNMEACheckSum( str );
 		if( calc_cs != Allycs ){
 			Allytime = -1.0; // if checksum error, set time to -1	
