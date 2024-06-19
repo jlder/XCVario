@@ -631,10 +631,9 @@ public:
  };
 
 // alpha beta class for gyros
-static AlphaBeta gyroRPSx, gyroRPSy, gyroRPSz;
+static AlphaBeta gyroNEDx, gyroNEDy, gyroNEDz;
 
 // alpha beta class for accels
-static AlphaBeta accelISUNEDMPUx, accelISUNEDMPUy, accelISUNEDMPUz;
 static AlphaBeta accelNEDBODYx, accelNEDBODYy, accelNEDBODYz;
 
 // alpha beta class for gyro and accel module
@@ -1170,18 +1169,18 @@ static void processIMU(void *pvParameters)
 	#define GyroOutlier 1.0 // 1 rad/s maximum variation sample to sample
 	#define Gyromin -4.0
 	#define Gyromax 4.0
-	gyroRPSx.ABinit( NGyro, GyroOutlier, Gyromin, Gyromax );
-	gyroRPSy.ABinit( NGyro, GyroOutlier, Gyromin, Gyromax );
-	gyroRPSz.ABinit( NGyro, GyroOutlier, Gyromin, Gyromax );	
+	//gyroRPSx.ABinit( NGyro, GyroOutlier, Gyromin, Gyromax );
+	//gyroRPSy.ABinit( NGyro, GyroOutlier, Gyromin, Gyromax );
+	//gyroRPSz.ABinit( NGyro, GyroOutlier, Gyromin, Gyromax );
+	gyroNEDx.ABinit( NGyro, GyroOutlier, Gyromin, Gyromax );
+	gyroNEDy.ABinit( NGyro, GyroOutlier, Gyromin, Gyromax );
+	gyroNEDz.ABinit( NGyro, GyroOutlier, Gyromin, Gyromax );	
 
 	// alpha beta accels parameters
 	#define NAccel 4 //  AB Filter parameter
 	#define AccelOutlier 10.0 // 10 m/s² maximum variation sample to sample
 	#define Accelmin -60.0
 	#define Accelmax 60.0
-	accelISUNEDMPUx.ABinit( NAccel, AccelOutlier, Accelmin, Accelmax );
-	accelISUNEDMPUy.ABinit( NAccel, AccelOutlier, Accelmin, Accelmax );
-	accelISUNEDMPUz.ABinit( NAccel, AccelOutlier, Accelmin, Accelmax );
 	accelNEDBODYx.ABinit( NAccel, AccelOutlier, Accelmin, Accelmax );
 	accelNEDBODYy.ABinit( NAccel, AccelOutlier, Accelmin, Accelmax );	
 	accelNEDBODYz.ABinit( NAccel, AccelOutlier, Accelmin, Accelmax );	
@@ -1230,27 +1229,23 @@ static void processIMU(void *pvParameters)
 			if (dtGyr == 0) dtGyr = PERIOD40HZ;
 			gyroDPS = mpud::gyroDegPerSec(gyroRaw, GYRO_FS); // For compatibility with Eckhard code only. Convert raw gyro to Gyro_FS full scale in degre per second 
 			gyroRPS = mpud::gyroRadPerSec(gyroRaw, GYRO_FS); // convert raw gyro to Gyro_FS full scale in radians per second
-			// update gyro filters with dt = 0.0 means no fitering
-			gyroRPSx.ABupdate(dtGyr, gyroRPS.x );
-			gyroRPSy.ABupdate(dtGyr, gyroRPS.y );			
-			gyroRPSz.ABupdate(dtGyr, gyroRPS.z );			
-			// update gyro filters
-			//gyroRPSx.ABupdate(dtGyr, gyroRPS.x );
-			//gyroRPSy.ABupdate(dtGyr, gyroRPS.y );			
-			//gyroRPSz.ABupdate(dtGyr, gyroRPS.z );
 			// convert gyro coordinates to ISU : rad/s NED MPU and remove bias
 			xSemaphoreTake( dataMutex, 3/portTICK_PERIOD_MS ); // prevent data conflicts for 3ms max.			
-			gyroISUNEDMPU.x = -(gyroRPSz.ABfilt() - GroundGyroBias.z);
-			gyroISUNEDMPU.y = -(gyroRPSy.ABfilt() - GroundGyroBias.y);
-			gyroISUNEDMPU.z = -(gyroRPSx.ABfilt() - GroundGyroBias.x);
+			gyroISUNEDMPU.x = -(gyroRPS.z - GroundGyroBias.z);
+			gyroISUNEDMPU.y = -(gyroRPS.y - GroundGyroBias.y);
+			gyroISUNEDMPU.z = -(gyroRPS.x - GroundGyroBias.x);
 			// convert NEDMPU to NEDBODY			
 			gyroISUNEDBODY.x = C_T * gyroISUNEDMPU.x + STmultSS * gyroISUNEDMPU.y + STmultCS * gyroISUNEDMPU.z;
 			gyroISUNEDBODY.y = C_S * gyroISUNEDMPU.y - S_S * gyroISUNEDMPU.z;
 			gyroISUNEDBODY.z = -S_T * gyroISUNEDMPU.x + SSmultCT  * gyroISUNEDMPU.y + CTmultCS * gyroISUNEDMPU.z;
+			// update gyro filters
+			gyroNEDx.ABupdate(dtGyr, gyroISUNEDBODY.x );
+			gyroNEDy.ABupdate(dtGyr, gyroISUNEDBODY.y );			
+			gyroNEDz.ABupdate(dtGyr, gyroISUNEDBODY.z );			
 			// correct gyro with flight gyro estimation
-			gyroCorr.x = gyroISUNEDBODY.x;// + BiasQuatGx;  // error on x should be added
-			gyroCorr.y = gyroISUNEDBODY.y;// + BiasQuatGy;  // error on y should be added
-			gyroCorr.z = gyroISUNEDBODY.z;// + BiasQuatGz;  // error on z should be removed
+			gyroCorr.x = gyroNEDx.ABfilt();// + BiasQuatGx;
+			gyroCorr.y = gyroNEDy.ABfilt();// + BiasQuatGy;
+			gyroCorr.z = gyroNEDz.ABfilt();// + BiasQuatGz;
 			xSemaphoreGive( dataMutex );
 		}
 		// get accel data
@@ -1319,9 +1314,7 @@ static void processIMU(void *pvParameters)
 				}
 
 				// Update quaternions
-				// gyroISUNEDBODY corresponds to raw gyro and BiasQuatGx,y,z to the gyros bias
-				MahonyUpdateIMU( dtGyr, gyroISUNEDBODY.x, gyroISUNEDBODY.y, gyroISUNEDBODY.z, -gravISUNEDBODY.x, -gravISUNEDBODY.y, -gravISUNEDBODY.z, BiasQuatGx, BiasQuatGy, BiasQuatGz );
-								
+				MahonyUpdateIMU( dtGyr, gyroCorr.x, gyroCorr.y, gyroCorr.z, -gravISUNEDBODY.x, -gravISUNEDBODY.y, -gravISUNEDBODY.z, BiasQuatGx, BiasQuatGy, BiasQuatGz );								
 				// Compute Euler angles from IMU quaternion
 				if ( abs(q1 * q3 - q0 * q2) < 0.5 ) {
 					Pitch = asin(-2.0 * (q1 * q3 - q0 * q2));
@@ -1414,7 +1407,7 @@ static void processIMU(void *pvParameters)
 				}
 				// compute gyro module variation
 				// update gyro module filter
-				GyroModule.ABupdate( dtGyr, sqrt(gyroRPSx.ABfilt() * gyroRPSx.ABfilt() + gyroRPSy.ABfilt() * gyroRPSy.ABfilt() + gyroRPSz.ABfilt() * gyroRPSz.ABfilt()) );
+				GyroModule.ABupdate( dtGyr, sqrt(gyroRPS.x * gyroRPS.x + gyroRPS.y * gyroRPS.y + gyroRPS.z * gyroRPS.z) );
 				// asymetric filter with fast raise and slow decay
 				#define fcGyroLevel 3.0 // 3Hz low pass to filter 
 				#define fcGL1 (40.0/(40.0+fcGyroLevel))
@@ -1442,9 +1435,9 @@ static void processIMU(void *pvParameters)
 						gyrostable++;
 						// during first 2.5 seconds, initialize gyro and gravity data
 						if ( gyrostable < 100 ) {
-							GxBias = gyroRPSx.ABfilt();
-							GyBias = gyroRPSy.ABfilt();
-							GzBias = gyroRPSz.ABfilt();
+							GxBias = gyroRPS.x;
+							GyBias = gyroRPS.y;
+							GzBias = gyroRPS.z;							
 							Gravx = RawaccelISUNEDMPU.x;
 							Gravy = RawaccelISUNEDMPU.y;
 							Gravz = RawaccelISUNEDMPU.z;
@@ -1453,9 +1446,9 @@ static void processIMU(void *pvParameters)
 							// between 2.5 seconds and 22.5 seconds, accumulate gyro and gravity data
 							if ( gyrostable <900 ) {
 								averagecount++;
-								GxBias += gyroRPSx.ABfilt();
-								GyBias += gyroRPSy.ABfilt();
-								GzBias += gyroRPSz.ABfilt();
+								GxBias += gyroRPS.x;
+								GyBias += gyroRPS.y;
+								GzBias += gyroRPS.z;
 								Gravx += RawaccelISUNEDMPU.x;
 								Gravy += RawaccelISUNEDMPU.y;
 								Gravz += RawaccelISUNEDMPU.z;
