@@ -2437,9 +2437,9 @@ void readSensors(void *pvParameters){
 			UbPrimS in hubdred of m/s²,
 			VbPrimS,
 			WbPrimS,
-			UiPrimPrimS in hundred of m/s3,
-			ViPrimPrimS,
-			WiPrimPrimS,			
+			UiPrimF.ABprim() in hundred of m/s3,
+			ViPrimF.ABprim(),
+			WiPrimF.ABprim(),			
 			UbiPrim in hundred of m/s²,
 			VbiPrim,
 			WbiPrim,
@@ -2448,13 +2448,55 @@ void readSensors(void *pvParameters){
 			RTKEproj in thousandths of meter;
 			RTKDproj in thousandths of meter;
 			RTKheading in tenth of degre;
-			ALTbi in cm
+			ALTbi in cm,
+			Vh in cm/s,
+			DHeading in mrad,
+			UbFS in cm/s,
+			VbFS in cm/s,
+			WbFS in cm/s,
+			AccelModulePrimLevel in in hundredth of m/s3,
+			GyroModulePrimLevel  in in hundredth of m/s3			
 		*/		
 
 			if ( !(count % 50) ) { 
 				// send $S1 and $S2 every 50 cycles = 5 seconds
-				sprintf(str,"$S1,%lld,%i,%i,%i,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$S3,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$S2,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",
+				sprintf(str,"$S1,%lld,%i,%i,%i,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$S3,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$S2,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",				
 				// $S1 stream
+					statTime, (int32_t)(statP*100.0),(int32_t)(teP*100.0), (int16_t)(dynP*10), 
+					(int64_t)(chosenGnss->time*1000.0), (int16_t)(GnssVx.ABfilt()*100), (int16_t)(GnssVy.ABfilt()*100), (int16_t)(GnssVz.ABfilt()*100), (int16_t)(GNSSRouteraw*1000),
+					(int32_t)(Pitch*1000.0), (int32_t)(Roll*1000.0), (int32_t)(Yaw*1000.0),
+					(int32_t)(CAS.ABfilt()*100), (int32_t)(TAS*100), (int32_t)(ALT.ABfilt()*100), (int32_t)(Vzbaro*100),
+					(int32_t)(AoA*1000), (int32_t)(AoB*1000),
+					(int32_t)(Ubi*100), (int32_t)(Vbi*100),(int32_t)(Wbi*100), (int32_t)(Vzbi*100),				
+					(int32_t)(TotalEnergy.LowPass1()*100),
+					(int32_t)(FilteredWindx*100), (int32_t)(FilteredWindy*100),
+					(int32_t)(VhHeading*10),
+					(int32_t)(dynKp*1000), 
+					(int32_t)rint(MPU.mpu_heat_pwm),
+					(int32_t) ProcessTimeSensors,
+					(int32_t) (DynPeriodVelbi*1000),
+					// $S3 stream
+					(int32_t)(UiPrim*100),(int32_t)(ViPrim*100),(int32_t)(WiPrim*100),
+					(int32_t)(UbPrimS*100), (int32_t)(VbPrimS*100),(int32_t)(WbPrimS*100),
+					(int32_t)(UiPrimF.ABprim()*100), (int32_t)(ViPrimF.ABprim()*100),(int32_t)(WiPrimF.ABprim()*100),	
+					(int32_t)(UbiPrim*100), (int32_t)(VbiPrim*100),(int32_t)(WbiPrim*100),
+					(int32_t)(Bias_AoB*1000),
+					(int32_t)(RTKNproj*1000),(int32_t)(RTKEproj*1000),(int32_t)(-RTKUproj*1000),(int32_t)(RTKheading*10),(int32_t)(ALTbi*100),
+					(int32_t)(Vh*100),(int32_t)(DHeading*1000),(int32_t)(UbFS*100),(int32_t)(VbFS*100),(int32_t)(WbFS*100),
+					(int32_t)(AccelModulePrimLevel*100),(int32_t)(GyroModulePrimLevel*100),			
+					// $S2 stream
+					(int16_t)(temperatureLP.LowPass1()*10.0), (int16_t)(OATemp.ABfilt()*10.0), (int16_t)(MPUtempcel*10.0), chosenGnss->fix, chosenGnss->numSV,
+					(int32_t)(GroundGyroBias.x*100000.0), (int32_t)(GroundGyroBias.y*100000.0), (int32_t)(GroundGyroBias.z*100000.0),				
+					(int32_t)(BiasQuatGx*100000.0), (int32_t)(BiasQuatGy*100000.0), (int32_t)(BiasQuatGz*100000.0),
+					(int32_t)(GRAVITY*10000.0),(int16_t)BIAS_Init,(int16_t)(XCVTemp*10.0), (int16_t) (PeriodVelbi*10),
+					(int32_t)(te_filt.get()*10),(int32_t)(Mahonykp*10000),(int32_t)(Mahonyki*10000), (int32_t)(UiPgain*100), (int32_t)(WiPgain*100), (int32_t)(opt_TE)
+					);
+				xSemaphoreTake( BTMutex, 2/portTICK_PERIOD_MS );				
+				Router::sendXCV(str);
+				xSemaphoreGive( BTMutex );				
+			} else {
+				// send $S1 only every 100ms
+				sprintf(str,"$S1,%lld,%i,%i,%i,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$S3,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",
 					statTime, (int32_t)(statP*100.0),(int32_t)(teP*100.0), (int16_t)(dynP*10), 
 					(int64_t)(chosenGnss->time*1000.0), (int16_t)(GnssVx.ABfilt()*100), (int16_t)(GnssVy.ABfilt()*100), (int16_t)(GnssVz.ABfilt()*100), (int16_t)(GNSSRouteraw*1000),
 					(int32_t)(Pitch*1000.0), (int32_t)(Roll*1000.0), (int32_t)(Yaw*1000.0),
@@ -2475,39 +2517,8 @@ void readSensors(void *pvParameters){
 					(int32_t)(UbiPrim*100), (int32_t)(VbiPrim*100),(int32_t)(WbiPrim*100),
 					(int32_t)(Bias_AoB*1000),
 					(int32_t)(RTKNproj*1000),(int32_t)(RTKEproj*1000),(int32_t)(-RTKUproj*1000),(int32_t)(RTKheading*10),(int32_t)(ALTbi*100),
-					// $S2 stream
-					(int16_t)(temperatureLP.LowPass1()*10.0), (int16_t)(OATemp.ABfilt()*10.0), (int16_t)(MPUtempcel*10.0), chosenGnss->fix, chosenGnss->numSV,
-					(int32_t)(GroundGyroBias.x*100000.0), (int32_t)(GroundGyroBias.y*100000.0), (int32_t)(GroundGyroBias.z*100000.0),				
-					(int32_t)(BiasQuatGx*100000.0), (int32_t)(BiasQuatGy*100000.0), (int32_t)(BiasQuatGz*100000.0),
-					(int32_t)(GRAVITY*10000.0),(int16_t)BIAS_Init,(int16_t)(XCVTemp*10.0), (int16_t) (PeriodVelbi*10),
-					(int32_t)(te_filt.get()*10),(int32_t)(Mahonykp*10000),(int32_t)(Mahonyki*10000), (int32_t)(UiPgain*100), (int32_t)(WiPgain*100), (int32_t)(opt_TE)
-					);
-				xSemaphoreTake( BTMutex, 2/portTICK_PERIOD_MS );				
-				Router::sendXCV(str);
-				xSemaphoreGive( BTMutex );				
-			} else {
-				// send $S1 only every 100ms
-				sprintf(str,"$S1,%lld,%i,%i,%i,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$S3,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",
-					statTime, (int32_t)(statP*100.0),(int32_t)(teP*100.0), (int16_t)(dynP*10), 
-					(int64_t)(chosenGnss->time*1000.0), (int16_t)(GnssVx.ABfilt()*100), (int16_t)(GnssVy.ABfilt()*100), (int16_t)(GnssVz.ABfilt()*100), (int16_t)(GNSSRouteraw*1000),
-					(int32_t)(Pitch*1000.0), (int32_t)(Roll*1000.0), (int32_t)(Yaw*1000.0),
-					(int32_t)(CAS.ABfilt()*100), (int32_t)(TAS*100), (int32_t)(ALT.ABfilt()*100), (int32_t)(Vzbaro*100),
-					(int32_t)(AoA*1000), (int32_t)(AoB*1000),
-					(int32_t)(Ubi*100), (int32_t)(Vbi*100),(int32_t)(Wbi*100), (int32_t)(Vzbi*100),				
-					(int32_t)(TotalEnergy.LowPass1()*100),
-					(int32_t)(FilteredWindx*100), (int32_t)(FilteredWindy*100),
-					(int32_t)(VhHeading*10),
-					(int32_t)(dynKp*1000), 
-					(int32_t)rint(MPU.mpu_heat_pwm),
-					(int32_t) ProcessTimeSensors,
-					(int32_t) (DynPeriodVelbi*1000),
-					// $S3 stream
-					(int32_t)(UiPrim*100),(int32_t)(ViPrim*100),(int32_t)(WiPrim*100),
-					(int32_t)(UbPrimS*100), (int32_t)(VbPrimS*100),(int32_t)(WbPrimS*100),
-					(int32_t)(UiPrimPrimS*100), (int32_t)(ViPrimPrimS*100),(int32_t)(WiPrimPrimS*100),	
-					(int32_t)(UbiPrim*100), (int32_t)(VbiPrim*100),(int32_t)(WbiPrim*100),
-					(int32_t)(Bias_AoB*1000),
-					(int32_t)(RTKNproj*1000),(int32_t)(RTKEproj*1000),(int32_t)(-RTKUproj*1000),(int32_t)(RTKheading*10),(int32_t)(ALTbi*100)
+					(int32_t)(Vh*100),(int32_t)(DHeading*1000),(int32_t)(UbFS*100),(int32_t)(VbFS*100),(int32_t)(WbFS*100),
+					(int32_t)(AccelModulePrimLevel*100),(int32_t)(GyroModulePrimLevel*100)					
 				);
 				xSemaphoreTake( BTMutex, 2/portTICK_PERIOD_MS );				
 				Router::sendXCV(str);
