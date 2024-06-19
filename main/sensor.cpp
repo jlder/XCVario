@@ -1369,12 +1369,13 @@ static void processIMU(void *pvParameters)
 
 				// Compute baro interial acceleration in body frame
 				// Compute dynamic period for baro inertiel filter
-				#define PeriodVelbiGain 1.5
+				#define PeriodVelbiGain 2.0
 				#define GyrAmplitudeLimit 0.4
 				// Gyro x and z amplitude used to adjust Baro Inertial filter
 				GyrxzAmplitudeBIdyn = abs(gyroCorr.x)*0.9 + abs(gyroCorr.z)*0.4;			
 				if ( GyrxzAmplitudeBIdyn < GyrAmplitudeLimit ) {
-					DynPeriodVelbi = 0.95 * DynPeriodVelbi + 0.05 * PeriodVelbi / ( 1 + GyrxzAmplitudeBIdyn / (GyrAmplitudeLimit/PeriodVelbiGain) );
+					//DynPeriodVelbi = 0.95 * DynPeriodVelbi + 0.05 * PeriodVelbi / ( 1 + GyrxzAmplitudeBIdyn / (GyrAmplitudeLimit/PeriodVelbiGain) );
+					DynPeriodVelbi = 0.95 * DynPeriodVelbi + 0.05 * PeriodVelbi / ( 1 + GyrxzAmplitudeBIdyn * (PeriodVelbiGain - 1.0) / GyrAmplitudeLimit );					
 				} else {
 					DynPeriodVelbi = 0.95 * DynPeriodVelbi + 0.05 * PeriodVelbi / PeriodVelbiGain;
 				}
