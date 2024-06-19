@@ -956,11 +956,15 @@ float PseudoHeadingPrim;// MOD#4 gyro bias
 		GnssTrack = atan2( GnssVy.ABfilt(), GnssVx.ABfilt() );
 		PseudoHeadingPrim = ( GnssVy.ABprim() * cos(GnssTrack) - GnssVx.ABprim() * sin(GnssTrack) ) / TAS;
 		// compute Gz - pseudo heading variation long term average.		
-		GyroBiasz.LPupdate( GyroCutoffPeriod, dt, gzraw - PseudoHeadingPrim );		
+		GyroBiasz.LPupdate( GyroCutoffPeriod, dt, gzraw - PseudoHeadingPrim );
+		// update gyros biases variables
+		Bias_Gx = GyroBiasx.LowPass2();
+		Bias_Gy = GyroBiasy.LowPass2();
+		Bias_Gz = GyroBiasz.LowPass2();		
 		// limit bias estimation	
-		if ( abs(GyroBiasx.LowPass2()) > GMaxBias ) Bias_Gx = copysign( GMaxBias, GyroBiasx.LowPass2()) ;
-		if ( abs(GyroBiasy.LowPass2()) > GMaxBias ) Bias_Gy = copysign( GMaxBias, GyroBiasy.LowPass2()) ;		
-		if ( abs(GyroBiasz.LowPass2()) > GMaxBias ) Bias_Gz = copysign( GMaxBias, GyroBiasz.LowPass2()) ;		
+		if ( abs(Bias_Gx) > GMaxBias ) Bias_Gx = copysign( GMaxBias, Bias_Gx) ;
+		if ( abs(Bias_Gy) > GMaxBias ) Bias_Gy = copysign( GMaxBias, Bias_Gy) ;		
+		if ( abs(Bias_Gz) > GMaxBias ) Bias_Gz = copysign( GMaxBias, Bias_Gz) ;		
 	}
 	// MOD#4 gyro bias end
 	#endif
