@@ -1399,37 +1399,37 @@ static void processIMU(void *pvParameters)
 				TASbi = sqrt( TASbiSquare );
 				
 				xSemaphoreGive( dataMutex );
+				
+				// compute acceleration module variation
+				// update accel module filter
+				AccelModule.ABupdate(dtGyr, sqrt(accelNEDBODYx.ABfilt()* accelNEDBODYx.ABfilt()+ accelNEDBODYy.ABfilt()* accelNEDBODYy.ABfilt()+ accelNEDBODYz.ABfilt()* accelNEDBODYz.ABfilt() ) );
+				// asysmetric filter with fast raise and slow decay
+				#define fcAccelLevel 3.0 // 3Hz low pass to filter 
+				#define fcAL1 (40.0/(40.0+fcAccelLevel))
+				#define fcAL2 (1.0-fcAL1)		
+				if ( AccelModulePrimLevel < abs(AccelModule.ABprim()) ) {
+					AccelModulePrimLevel = abs(AccelModule.ABprim());
+				} else {
+					AccelModulePrimLevel = fcAL1 * AccelModulePrimLevel +  fcAL2 * abs(AccelModule.ABprim());
+				}
+				// compute gyro module variation
+				// update gyro module filter
+				GyroModule.ABupdate( dtGyr, sqrt(gyroRPSx.ABfilt() * gyroRPSx.ABfilt() + gyroRPSy.ABfilt() * gyroRPSy.ABfilt() + gyroRPSz.ABfilt() * gyroRPSz.ABfilt()) );
+				// asymetric filter with fast raise and slow decay
+				#define fcGyroLevel 3.0 // 3Hz low pass to filter 
+				#define fcGL1 (40.0/(40.0+fcGyroLevel))
+				#define fcGL2 (1.0-fcGL1)		
+				if ( GyroModulePrimLevel < abs(GyroModule.ABprim()) ) {
+					GyroModulePrimLevel = abs(GyroModule.ABprim());
+				} else {
+					GyroModulePrimLevel = fcGL1 * GyroModulePrimLevel +  fcGL2 * abs(GyroModule.ABprim());
+				}				
 			}
 		}
 
 		// When TAS < 15 m/s the vario is considered potentially stable on ground
 		// This is when bias and local gravity are estimated
 		if ( TAS < 15.0 ) {
-			// compute acceleration module variation
-			// update accel module filter
-			AccelModule.ABupdate(dtGyr, sqrt(accelNEDBODYx.ABfilt()* accelNEDBODYx.ABfilt()+ accelNEDBODYy.ABfilt()* accelNEDBODYy.ABfilt()+ accelNEDBODYz.ABfilt()* accelNEDBODYz.ABfilt() ) );
-			// asysmetric filter with fast raise and slow decay
-			#define fcAccelLevel 3.0 // 3Hz low pass to filter 
-			#define fcAL1 (40.0/(40.0+fcAccelLevel))
-			#define fcAL2 (1.0-fcAL1)		
-			if ( AccelModulePrimLevel < abs(AccelModule.ABprim()) ) {
-				AccelModulePrimLevel = abs(AccelModule.ABprim());
-			} else {
-				AccelModulePrimLevel = fcAL1 * AccelModulePrimLevel +  fcAL2 * abs(AccelModule.ABprim());
-			}
-			// compute gyro module variation
-			// update gyro module filter
-			GyroModule.ABupdate( dtGyr, sqrt(gyroRPSx.ABfilt() * gyroRPSx.ABfilt() + gyroRPSy.ABfilt() * gyroRPSy.ABfilt() + gyroRPSz.ABfilt() * gyroRPSz.ABfilt()) );
-			// asymetric filter with fast raise and slow decay
-			#define fcGyroLevel 3.0 // 3Hz low pass to filter 
-			#define fcGL1 (40.0/(40.0+fcGyroLevel))
-			#define fcGL2 (1.0-fcGL1)		
-			if ( GyroModulePrimLevel < abs(GyroModule.ABprim()) ) {
-				GyroModulePrimLevel = abs(GyroModule.ABprim());
-			} else {
-				GyroModulePrimLevel = fcGL1 * GyroModulePrimLevel +  fcGL2 * abs(GyroModule.ABprim());
-			}	
-			
 			// Estimate gyro bias and gravity up to 100 times, except if doing Lab test then only one estimation is performed
 			if ( (BIAS_Init < 100 && !LABtest) || BIAS_Init < 1 ) {
 				// When MPU temperature is controled and temperature is locked   or   when there is no temperature control
