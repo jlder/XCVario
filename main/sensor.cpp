@@ -670,6 +670,8 @@ static LowPassFilter AccelMotor1, AccelMotor2;
 // declare low pass for outside temperature
 static LowPassFilter temperatureLP;
 
+// declare low pass for AoB bias
+static LowPassFilter BiasAoB;
 
 #define GYRO_FS (mpud::GYRO_FS_250DPS)
 
@@ -948,7 +950,7 @@ float PseudoHeadingPrim;// MOD#4 gyro bias
 	#define PitchLimit 0.175 // max longitudinal gravity acceleration (normalized acceleration) for 10° pitch
 	#define GMaxBias 0.005 // limit biais correction to 5 mrad/s
 	#define GyroCutoffPeriod 700 //  very long term average ~ 700 seconds
-	if ( TAS > 15.0 && RollLimit < abs(halfvy) && PitchLimit < abs(halfvx) ) {
+	if ( (TAS > 15.0) && (abs(halfvy) < RollLimit)  && (abs(halfvx) < PitchLimit) ) {
 		// compute Gx - d(roll)/dt and Gy - d(pitch)/dt long term average.
 		GyroBiasx.LPupdate( GyroCutoffPeriod, dt, gxraw - RollAHRS.ABprim() );
 		GyroBiasy.LPupdate( GyroCutoffPeriod, dt, gyraw - PitchAHRS.ABprim() );		
@@ -1732,7 +1734,7 @@ void readSensors(void *pvParameters){
 	float deltaAoB;
 	float AoBPrim = 0.0;
 	float AoBF = 0.0;
-	float BiasAoB = 0.0;	
+	float Bias_AoB = 0.0;	
 	
 	float deltaEnergy;
 	float EnergyPrim = 0.0;
@@ -2005,17 +2007,14 @@ void readSensors(void *pvParameters){
 		xSemaphoreGive( dataMutex );
 		
 		// if TAS > 130 km/h and bank is less than ~5°, long term average of AoB to detect bias
-		if (  (TAS > 36.0) && ( abs(RollAHRS.ABfilt()) < 0.1) ) {
-			#define NAoBBias 1000
-			#define alphaBiasAoB (2.0 * (2.0 * NAoBBias - 1.0) / NAoBBias / (NAoBBias + 1.0))
-			#define betaBiasAoB (6.0 / NAoBBias / (NAoBBias + 1.0) )
-			deltaAoB = AoB - AoBF;
-			AoBPrim = AoBPrim + betaBiasAoB * deltaAoB / dtStat ;
-			AoBF = AoBF + alphaBiasAoB  * deltaAoB + AoBPrim * dtStat;
-			BiasAoB = BiasAoB +  alphaBiasAoB  * deltaAoB + AoBPrim * dtStat;
-		} else {
-			// reset filter when not within observation limits
-			AoBF = AoB;
+		#define RollLimitAoB 0.1 // max roll for AoB bias estimation
+		#define MinTASAoB 36.0 // minimum speed to evaluate AoB bias
+		#define AoBMaxBias 0.005 // limit biais correction to 5 mrad/s
+		#define AoBCutoffPeriod 500 //  very long term average ~ 500 seconds
+		if ( ( TAS > MinTASAoB ) && ( abs(RollAHRS.ABfilt()) < RollLimitAoB ) ) {
+			BiasAoB.LPupdate( AoBCutoffPeriod, dtStat, AoB );
+			Bias_AoB = GyroBiasx.LowPass2();
+			if ( abs(Bias_AoB) > AoBMaxBias ) Bias_AoB = copysign( AoBMaxBias, Bias_AoB);
 		}
 		
 		// Compute trajectory pneumatic speeds components in body frame NEDBODY
@@ -2443,7 +2442,7 @@ void readSensors(void *pvParameters){
 			UbiPrim in hundred of m/s²,
 			VbiPrim,
 			WbiPrim,
-			BiasAoB in mrad
+			Bias_AoB in mrad
 			RTKNproj in thousandths of meter;
 			RTKEproj in thousandths of meter;
 			RTKDproj in thousandths of meter;
@@ -2473,7 +2472,7 @@ void readSensors(void *pvParameters){
 					(int32_t)(UbPrimS*100), (int32_t)(VbPrimS*100),(int32_t)(WbPrimS*100),
 					(int32_t)(UiPrimPrimS*100), (int32_t)(ViPrimPrimS*100),(int32_t)(WiPrimPrimS*100),	
 					(int32_t)(UbiPrim*100), (int32_t)(VbiPrim*100),(int32_t)(WbiPrim*100),
-					(int32_t)(BiasAoB*1000),
+					(int32_t)(Bias_AoB*1000),
 					(int32_t)(RTKNproj*1000),(int32_t)(RTKEproj*1000),(int32_t)(-RTKUproj*1000),(int32_t)(RTKheading*10),(int32_t)(ALTbi*100),
 					// $S2 stream
 					(int16_t)(temperatureLP.LowPass1()*10.0), (int16_t)(OATemp.ABfilt()*10.0), (int16_t)(MPUtempcel*10.0), chosenGnss->fix, chosenGnss->numSV,
@@ -2506,7 +2505,7 @@ void readSensors(void *pvParameters){
 					(int32_t)(UbPrimS*100), (int32_t)(VbPrimS*100),(int32_t)(WbPrimS*100),
 					(int32_t)(UiPrimPrimS*100), (int32_t)(ViPrimPrimS*100),(int32_t)(WiPrimPrimS*100),	
 					(int32_t)(UbiPrim*100), (int32_t)(VbiPrim*100),(int32_t)(WbiPrim*100),
-					(int32_t)(BiasAoB*1000),
+					(int32_t)(Bias_AoB*1000),
 					(int32_t)(RTKNproj*1000),(int32_t)(RTKEproj*1000),(int32_t)(-RTKUproj*1000),(int32_t)(RTKheading*10),(int32_t)(ALTbi*100)
 				);
 				xSemaphoreTake( BTMutex, 2/portTICK_PERIOD_MS );				
