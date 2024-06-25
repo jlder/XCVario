@@ -1114,8 +1114,8 @@ static void processIMU(void *pvParameters)
 	accelISUNEDMPUPrim.z = 0.0;
 	accelISUNEDMPU.z = -9.807;
 
-	#define GroundAccelprimlimit 0.9 // m/s²
-	#define	GroundGyroprimlimit 0.3 // rad/s²
+	#define GroundAccelprimlimit 2.5 // m/s3
+	#define	GroundGyroprimlimit 0.55// rad/s2
 	
 	mpud::raw_axes_t accelRaw;
 	mpud::raw_axes_t gyroRaw;
