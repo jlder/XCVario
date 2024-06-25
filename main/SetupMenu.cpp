@@ -2061,12 +2061,12 @@ void SetupMenu::flighttest_menu_create( MenuEntry *top ){
 	velbiperiod->setPrecision(1);
 	top->addEntry( velbiperiod );
 	
-	SetupMenuValFloat * kpMahony = new SetupMenuValFloat( "Kp Mahony filt.", "unit",	0.0, 1.0, 0.005, kp_adj, true, &kp_Mahony );
+	SetupMenuValFloat * kpMahony = new SetupMenuValFloat( "Kp Mahony filt.", "unit",	0.0, 5.0, 0.1, kp_adj, true, &kp_Mahony );
 	kpMahony->setHelp(PROGMEM"Kp value");
 	kpMahony->setPrecision(3);
 	top->addEntry( kpMahony );
 	
-	SetupMenuValFloat * kiMahony = new SetupMenuValFloat( "Ki Mahony filt.", "unit",	0.0, 0.01, 0.0005, ki_adj, true, &ki_Mahony );
+	SetupMenuValFloat * kiMahony = new SetupMenuValFloat( "Ki Mahony filt.", "unit",	0.0, 0.5, 0.01, ki_adj, true, &ki_Mahony );
 	kiMahony->setHelp(PROGMEM"Ki value");
 	kiMahony->setPrecision(4);
 	top->addEntry( kiMahony );

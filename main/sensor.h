@@ -9,7 +9,9 @@
 //
 #define COMPUTEBIAS   // code to estimate gyro bias
 //
-#define COMPUTEWIND   // code to compute wind with GNSS
+//#define COMPUTEWIND1   // code to compute wind with GNSS
+//
+//#define COMPUTEWIND2   // code to compute wind with GNSS
 //
 #define FILTERMPU  // code to filter MPU data at ~ 7 Hz
 
@@ -20,8 +22,8 @@
 //
 //!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 //
-#define LS6
-//#define VENTUS3
+//#define LS6
+#define VENTUS3
 
 
 #ifdef LS6

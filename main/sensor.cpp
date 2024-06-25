@@ -1165,7 +1165,7 @@ static void processIMU(void *pvParameters)
 	PrevaccelISUNEDMPU.z = -9.807;
 	
 	// alpha beta gyros parameters
-	#define NGyro 4 //  AB Filter parameter
+	#define NGyro 5 //  AB Filter parameter
 	#define GyroOutlier 1.0 // 1 rad/s maximum variation sample to sample
 	#define Gyromin -4.0
 	#define Gyromax 4.0
@@ -1177,7 +1177,7 @@ static void processIMU(void *pvParameters)
 	gyroNEDz.ABinit( NGyro, GyroOutlier, Gyromin, Gyromax );	
 
 	// alpha beta accels parameters
-	#define NAccel 4 //  AB Filter parameter
+	#define NAccel 5 //  AB Filter parameter
 	#define AccelOutlier 10.0 // 10 m/s² maximum variation sample to sample
 	#define Accelmin -60.0
 	#define Accelmax 60.0
@@ -1186,12 +1186,12 @@ static void processIMU(void *pvParameters)
 	accelNEDBODYz.ABinit( NAccel, AccelOutlier, Accelmin, Accelmax );	
 	
 	// alpha beta gyro and accel module parameters
-	#define NModule 8 //  AB Filter parameter
+	#define NModule 4 //  AB Filter parameter
 	GyroModule.ABinit( NModule );
 	AccelModule.ABinit( NModule );
 
 	// alpha beta AHRS parameters
-	#define NAHRS 6 //  AB Filter parameter
+	#define NAHRS 4 //  AB Filter parameter
 	#define AHRSOutliers 1.0 // remove outiliers 1.0 rad away from signal sample to sample
 	#define AHRSmin -4.0
 	#define AHRSmax 4.0
@@ -1199,7 +1199,7 @@ static void processIMU(void *pvParameters)
 	PitchAHRS.ABinit( NAHRS, AHRSOutliers, AHRSmin, AHRSmax );
 	
 	// alpha beta parameters for kinetic accels
-	#define NIPRIM 6
+	#define NIPRIM 4
 	UiPrimF.ABinit( NIPRIM );
 	ViPrimF.ABinit( NIPRIM );
 	WiPrimF.ABinit( NIPRIM );
@@ -1234,18 +1234,18 @@ static void processIMU(void *pvParameters)
 			gyroISUNEDMPU.x = -(gyroRPS.z - GroundGyroBias.z);
 			gyroISUNEDMPU.y = -(gyroRPS.y - GroundGyroBias.y);
 			gyroISUNEDMPU.z = -(gyroRPS.x - GroundGyroBias.x);
-			// convert NEDMPU to NEDBODY			
-			gyroISUNEDBODY.x = C_T * gyroISUNEDMPU.x + STmultSS * gyroISUNEDMPU.y + STmultCS * gyroISUNEDMPU.z;
-			gyroISUNEDBODY.y = C_S * gyroISUNEDMPU.y - S_S * gyroISUNEDMPU.z;
-			gyroISUNEDBODY.z = -S_T * gyroISUNEDMPU.x + SSmultCT  * gyroISUNEDMPU.y + CTmultCS * gyroISUNEDMPU.z;
+			// convert NEDMPU to NEDBODY and apply bias estimation
+			gyroISUNEDBODY.x = C_T * gyroISUNEDMPU.x + STmultSS * gyroISUNEDMPU.y + STmultCS * gyroISUNEDMPU.z; // + BiasQuatGx;
+			gyroISUNEDBODY.y = C_S * gyroISUNEDMPU.y - S_S * gyroISUNEDMPU.z; //+ BiasQuatGy;
+			gyroISUNEDBODY.z = -S_T * gyroISUNEDMPU.x + SSmultCT  * gyroISUNEDMPU.y + CTmultCS * gyroISUNEDMPU.z; // + BiasQuatGz;
 			// update gyro filters
 			gyroNEDx.ABupdate(dtGyr, gyroISUNEDBODY.x );
 			gyroNEDy.ABupdate(dtGyr, gyroISUNEDBODY.y );			
 			gyroNEDz.ABupdate(dtGyr, gyroISUNEDBODY.z );			
-			// correct gyro with flight gyro estimation
-			gyroCorr.x = gyroNEDx.ABfilt();// + BiasQuatGx;
-			gyroCorr.y = gyroNEDy.ABfilt();// + BiasQuatGy;
-			gyroCorr.z = gyroNEDz.ABfilt();// + BiasQuatGz;
+			// apply gyro filters
+			gyroCorr.x = gyroNEDx.ABfilt();
+			gyroCorr.y = gyroNEDy.ABfilt();
+			gyroCorr.z = gyroNEDz.ABfilt();
 			xSemaphoreGive( dataMutex );
 		}
 		// get accel data
@@ -1278,26 +1278,54 @@ static void processIMU(void *pvParameters)
 			//	PeriodVelbi = PeriodVelbi * 0.98 + LastPeriodVelbi * 0.02; // restore last baro inertial period progressively when engine is stopped
 			//}			
 		}
-		
+
+		// compute acceleration module variation using unfiltered accels
+		// update accel module filter
+		AccelModule.ABupdate(dtGyr, sqrt(RawaccelISUNEDMPU.x * RawaccelISUNEDMPU.x + RawaccelISUNEDMPU.y * RawaccelISUNEDMPU.y + RawaccelISUNEDMPU.z * RawaccelISUNEDMPU.z ) );
+		// asysmetric filter with fast raise and slow decay
+		#define fcAccelLevel 3.0 // 3Hz low pass to filter 
+		#define fcAL1 (40.0/(40.0+fcAccelLevel))
+		#define fcAL2 (1.0-fcAL1)		
+		if ( AccelModulePrimLevel < abs(AccelModule.ABprim()) ) {
+			AccelModulePrimLevel = abs(AccelModule.ABprim());
+		} else {
+			AccelModulePrimLevel = fcAL1 * AccelModulePrimLevel +  fcAL2 * abs(AccelModule.ABprim());
+		}
+		// compute gyro module variation using unfiltered gyros
+		// update gyro module filter
+		GyroModule.ABupdate( dtGyr, sqrt(gyroISUNEDMPU.x * gyroISUNEDMPU.x + gyroISUNEDMPU.y * gyroISUNEDMPU.y + gyroISUNEDMPU.z * gyroISUNEDMPU.z ) );
+		// asymetric filter with fast raise and slow decay
+		#define fcGyroLevel 3.0 // 3Hz low pass to filter 
+		#define fcGL1 (40.0/(40.0+fcGyroLevel))
+		#define fcGL2 (1.0-fcGL1)		
+		if ( GyroModulePrimLevel < abs(GyroModule.ABprim()) ) {
+			GyroModulePrimLevel = abs(GyroModule.ABprim());
+		} else {
+			GyroModulePrimLevel = fcGL1 * GyroModulePrimLevel +  fcGL2 * abs(GyroModule.ABprim());
+		}
+
 		// attitude initialization when XCVario starts during first 10 iterations 
-		if ( AttitudeInit < 10 ) { // initialize quaternions at xcvario start using first 10 samples
-			if ( AttitudeInit == 0 ) { // initialize roll, pitch and yaw at first sample
+		if ( AttitudeInit < 100 ) { // initialize quaternions at xcvario start using first 100 samples
+			if ( AttitudeInit <= 50 ) { // initialize roll, pitch and yaw at first sample
 				// first iteration initialize attitude from accels
-				RollInit = atan2(-accelNEDBODYy.ABfilt(), accelNEDBODYz.ABfilt());
+				RollInit = atan2(-accelNEDBODYy.ABfilt(), -accelNEDBODYz.ABfilt());
 				PitchInit = asin( accelNEDBODYx.ABfilt()/ sqrt(accelNEDBODYx.ABfilt()* accelNEDBODYx.ABfilt()+ accelNEDBODYy.ABfilt()* accelNEDBODYy.ABfilt()+ accelNEDBODYz.ABfilt() * accelNEDBODYz.ABfilt() ));
 				YawInit   = 0.0;
-			} else { // filter roll, pitch and yaw over 10 samples
+			} else { // filter roll, pitch and yaw over 50 samples
 				// following iterations average attitude from accels
-				RollInit = 0.75 * RollInit + 0.25 * atan2(-accelNEDBODYy.ABfilt(), -accelNEDBODYz.ABfilt());
-				PitchInit = 0.75 * PitchInit + 0.25 * asin( accelNEDBODYx.ABfilt()/ sqrt(accelNEDBODYx.ABfilt() * accelNEDBODYx.ABfilt() + accelNEDBODYy.ABfilt() * accelNEDBODYy.ABfilt() + accelNEDBODYz.ABfilt() * accelNEDBODYz.ABfilt() ));
+				RollInit = 0.9 * RollInit + 0.1 * atan2(-accelNEDBODYy.ABfilt(), -accelNEDBODYz.ABfilt());
+				PitchInit = 0.9 * PitchInit + 0.1 * asin( accelNEDBODYx.ABfilt()/ sqrt(accelNEDBODYx.ABfilt() * accelNEDBODYx.ABfilt() + accelNEDBODYy.ABfilt() * accelNEDBODYy.ABfilt() + accelNEDBODYz.ABfilt() * accelNEDBODYz.ABfilt() ));
 			}
 			// compute quaternion corresponding to initial averaged accels attitude
-			q0=((cos(RollInit/2.0)*cos(PitchInit/2.0)*cos(YawInit/2.0)+sin(RollInit/2.0)*sin(PitchInit/2.0)*sin(YawInit/2.0)));
-			q1=((sin(RollInit/2.0)*cos(PitchInit/2.0)*cos(YawInit/2.0)-cos(RollInit/2.0)*sin(PitchInit/2.0)*sin(YawInit/2.0)));
-			q2=((cos(RollInit/2.0)*sin(PitchInit/2.0)*cos(YawInit/2.0)+sin(RollInit/2.0)*cos(PitchInit/2.0)*sin(YawInit/2.0)));
-			q3=((cos(RollInit/2.0)*cos(PitchInit/2.0)*sin(YawInit/2.0)-sin(RollInit/2.0)*sin(PitchInit/2.0)*cos(YawInit/2.0)));
 			AttitudeInit++;
-		} else { // after xcvario is started and attitude initialized perform normal calculations
+			if ( AttitudeInit == 100 ) {
+				q0=((cos(RollInit/2.0)*cos(PitchInit/2.0)*cos(YawInit/2.0)+sin(RollInit/2.0)*sin(PitchInit/2.0)*sin(YawInit/2.0)));
+				q1=((sin(RollInit/2.0)*cos(PitchInit/2.0)*cos(YawInit/2.0)-cos(RollInit/2.0)*sin(PitchInit/2.0)*sin(YawInit/2.0)));
+				q2=((cos(RollInit/2.0)*sin(PitchInit/2.0)*cos(YawInit/2.0)+sin(RollInit/2.0)*cos(PitchInit/2.0)*sin(YawInit/2.0)));
+				q3=((cos(RollInit/2.0)*cos(PitchInit/2.0)*sin(YawInit/2.0)-sin(RollInit/2.0)*sin(PitchInit/2.0)*cos(YawInit/2.0)));
+			}
+
+		} else { // after xcvario is started and quaternion attitude initialized perform normal calculations
 			if (!CALstream) { // if not in calibration mode MOD#8
 				if ( TAS > 15.0 ) {	// Update IMU, only consider centrifugal forces if TAS > 15 m/s
 					// estimate gravity in body frame taking into account centrifugal corrections
@@ -1314,7 +1342,7 @@ static void processIMU(void *pvParameters)
 				}
 
 				// Update quaternions
-				MahonyUpdateIMU( dtGyr, gyroCorr.x, gyroCorr.y, gyroCorr.z, -gravISUNEDBODY.x, -gravISUNEDBODY.y, -gravISUNEDBODY.z, BiasQuatGx, BiasQuatGy, BiasQuatGz );								
+				MahonyUpdateIMU( dtGyr, gyroISUNEDBODY.x, gyroISUNEDBODY.y, gyroISUNEDBODY.z, -gravISUNEDBODY.x, -gravISUNEDBODY.y, -gravISUNEDBODY.z, BiasQuatGx, BiasQuatGy, BiasQuatGz );								
 				// Compute Euler angles from IMU quaternion
 				if ( abs(q1 * q3 - q0 * q2) < 0.5 ) {
 					Pitch = asin(-2.0 * (q1 * q3 - q0 * q2));
@@ -1358,7 +1386,7 @@ static void processIMU(void *pvParameters)
 				// Kinectic accels alpha/beta short filter
 				UiPrimF.ABupdate( dtGyr, UiPrim );
 				ViPrimF.ABupdate( dtGyr, ViPrim );
-				WiPrimF.ABupdate( dtGyr, WiPrim);
+				WiPrimF.ABupdate( dtGyr, WiPrim );
 
 				// Compute baro interial acceleration in body frame
 				// Compute dynamic period for baro inertiel filter
@@ -1392,183 +1420,159 @@ static void processIMU(void *pvParameters)
 				TASbi = sqrt( TASbiSquare );
 				
 				xSemaphoreGive( dataMutex );
-				
-				// compute acceleration module variation
-				// update accel module filter
-				AccelModule.ABupdate(dtGyr, sqrt(accelNEDBODYx.ABfilt()* accelNEDBODYx.ABfilt()+ accelNEDBODYy.ABfilt()* accelNEDBODYy.ABfilt()+ accelNEDBODYz.ABfilt()* accelNEDBODYz.ABfilt() ) );
-				// asysmetric filter with fast raise and slow decay
-				#define fcAccelLevel 3.0 // 3Hz low pass to filter 
-				#define fcAL1 (40.0/(40.0+fcAccelLevel))
-				#define fcAL2 (1.0-fcAL1)		
-				if ( AccelModulePrimLevel < abs(AccelModule.ABprim()) ) {
-					AccelModulePrimLevel = abs(AccelModule.ABprim());
-				} else {
-					AccelModulePrimLevel = fcAL1 * AccelModulePrimLevel +  fcAL2 * abs(AccelModule.ABprim());
-				}
-				// compute gyro module variation
-				// update gyro module filter
-				GyroModule.ABupdate( dtGyr, sqrt(gyroRPS.x * gyroRPS.x + gyroRPS.y * gyroRPS.y + gyroRPS.z * gyroRPS.z) );
-				// asymetric filter with fast raise and slow decay
-				#define fcGyroLevel 3.0 // 3Hz low pass to filter 
-				#define fcGL1 (40.0/(40.0+fcGyroLevel))
-				#define fcGL2 (1.0-fcGL1)		
-				if ( GyroModulePrimLevel < abs(GyroModule.ABprim()) ) {
-					GyroModulePrimLevel = abs(GyroModule.ABprim());
-				} else {
-					GyroModulePrimLevel = fcGL1 * GyroModulePrimLevel +  fcGL2 * abs(GyroModule.ABprim());
-				}				
+								
 			}
-		}
-
-		// When TAS < 15 m/s the vario is considered potentially stable on ground
-		// This is when bias and local gravity are estimated
-		if ( TAS < 15.0 ) {
-			// Estimate gyro bias and gravity up to 100 times, except if doing Lab test then only one estimation is performed
-			if ( (BIAS_Init < 100 && !LABtest) || BIAS_Init < 1 ) {
-				// When MPU temperature is controled and temperature is locked   or   when there is no temperature control
-				if ( (HAS_MPU_TEMP_CONTROL && (MPU.getSiliconTempStatus() == MPU_T_LOCKED)) || !HAS_MPU_TEMP_CONTROL ) {
-					// count cycles when temperature is locked
-					gyrobiastemptimer++;
-					// detect if gyro and accel variations is below stability threshold using an alpha/beta filter to estimate variation over short period of time
-					// if temperature conditions has been stable for more than 30 seconds (1200 = 30x40hz) and there is very little angular and acceleration variation
-					if ( (gyrobiastemptimer > 1200) && (GyroModulePrimLevel < GroundGyroprimlimit) && (AccelModulePrimLevel < GroundAccelprimlimit) ) {
-						gyrostable++;
-						// during first 2.5 seconds, initialize gyro and gravity data
-						if ( gyrostable < 100 ) {
-							GxBias = gyroRPS.x;
-							GyBias = gyroRPS.y;
-							GzBias = gyroRPS.z;							
-							Gravx = RawaccelISUNEDMPU.x;
-							Gravy = RawaccelISUNEDMPU.y;
-							Gravz = RawaccelISUNEDMPU.z;
-							averagecount = 1;
-						} else {
-							// between 2.5 seconds and 22.5 seconds, accumulate gyro and gravity data
-							if ( gyrostable <900 ) {
-								averagecount++;
-								GxBias += gyroRPS.x;
-								GyBias += gyroRPS.y;
-								GzBias += gyroRPS.z;
-								Gravx += RawaccelISUNEDMPU.x;
-								Gravy += RawaccelISUNEDMPU.y;
-								Gravz += RawaccelISUNEDMPU.z;
+			
+			// When TAS < 15 m/s the vario is considered potentially stable on ground
+			// This is when bias and local gravity are estimated
+			if ( TAS < 15.0 ) {
+				// Estimate gyro bias and gravity up to 100 times, except if doing Lab test then only one estimation is performed
+				if ( (BIAS_Init < 100 && !LABtest) || BIAS_Init < 1 ) {
+					// When MPU temperature is controled and temperature is locked   or   when there is no temperature control
+					if ( (HAS_MPU_TEMP_CONTROL && (MPU.getSiliconTempStatus() == MPU_T_LOCKED)) || !HAS_MPU_TEMP_CONTROL ) {
+						// count cycles when temperature is locked
+						gyrobiastemptimer++;
+						// detect if gyro and accel variations is below stability threshold using an alpha/beta filter to estimate variation over short period of time
+						// if temperature conditions has been stable for more than 30 seconds (1200 = 30x40hz) and there is very little angular and acceleration variation
+						if ( (gyrobiastemptimer > 1200) && (GyroModulePrimLevel < GroundGyroprimlimit) && (AccelModulePrimLevel < GroundAccelprimlimit) ) {
+							gyrostable++;
+							// during first 2.5 seconds, initialize gyro and gravity data
+							if ( gyrostable < 100 ) {
+								GxBias = gyroRPS.x;
+								GyBias = gyroRPS.y;
+								GzBias = gyroRPS.z;							
+								Gravx = RawaccelISUNEDMPU.x;
+								Gravy = RawaccelISUNEDMPU.y;
+								Gravz = RawaccelISUNEDMPU.z;
+								averagecount = 1;
 							} else {
-								// wait for 2.5 seconds (900 to 1000) before updating bias and gravity (just in case glider starts to move, discard previous bias/gravity assesment)
-								// then compute updated bias/gravity
-								if ( gyrostable > 1000 ) {
-									NewGroundGyroBias.x = GxBias / averagecount;
-									NewGroundGyroBias.y = GyBias / averagecount;
-									NewGroundGyroBias.z = GzBias / averagecount;
-									Gravx /= averagecount;
-									Gravy /= averagecount;
-									Gravz /= averagecount;
-									GRAVITY = sqrt(Gravx*Gravx+Gravy*Gravy+Gravz*Gravz);
-									AccelGravModuleFilt = GRAVITY;
-									BIAS_Init++;
-									// Store bias and gravity in non volatile memory if they have identified for the first time or every 10 times 								
-									if ( BIAS_Init == 1 ||  BIAS_Init % 10 ) {
-										gyro_bias.set(NewGroundGyroBias);
-										gravity.set(GRAVITY);
-									}								
-									gyrostable = 0; // reset stability counter when bias/gravity have been obtained
-								}
-							} 
+								// between 2.5 seconds and 22.5 seconds, accumulate gyro and gravity data
+								if ( gyrostable <900 ) {
+									averagecount++;
+									GxBias += gyroRPS.x;
+									GyBias += gyroRPS.y;
+									GzBias += gyroRPS.z;
+									Gravx += RawaccelISUNEDMPU.x;
+									Gravy += RawaccelISUNEDMPU.y;
+									Gravz += RawaccelISUNEDMPU.z;
+								} else {
+									// wait for 2.5 seconds (900 to 1000) before updating bias and gravity (just in case glider starts to move, discard previous bias/gravity assesment)
+									// then compute updated bias/gravity
+									if ( gyrostable > 1000 ) {
+										NewGroundGyroBias.x = GxBias / averagecount;
+										NewGroundGyroBias.y = GyBias / averagecount;
+										NewGroundGyroBias.z = GzBias / averagecount;
+										Gravx /= averagecount;
+										Gravy /= averagecount;
+										Gravz /= averagecount;
+										GRAVITY = sqrt(Gravx*Gravx+Gravy*Gravy+Gravz*Gravz);
+										AccelGravModuleFilt = GRAVITY;
+										BIAS_Init++;
+										// Store bias and gravity in non volatile memory if they have identified for the first time or every 10 times 								
+										if ( BIAS_Init == 1 ||  BIAS_Init % 10 ) {
+											gyro_bias.set(NewGroundGyroBias);
+											gravity.set(GRAVITY);
+										}								
+										gyrostable = 0; // reset stability counter when bias/gravity have been obtained
+									}
+								} 
+							}
+						} else {
+							gyrostable = 0; // reset gyro stability counter if temperature not stable or movement detected
+						}
+					}
+				}
+				// Adjust progressively ground gyro bias with new ground bias estimate
+				if ( abs(GroundGyroBias.x - NewGroundGyroBias.x) > 0.0001 ) GroundGyroBias.x = 0.99 * GroundGyroBias.x + 0.01 * NewGroundGyroBias.x;
+				if ( abs(GroundGyroBias.y - NewGroundGyroBias.y) > 0.0001 ) GroundGyroBias.y = 0.99 * GroundGyroBias.y + 0.01 * NewGroundGyroBias.y;	
+				if ( abs(GroundGyroBias.z - NewGroundGyroBias.z) > 0.0001 ) GroundGyroBias.z = 0.99 * GroundGyroBias.z + 0.01 * NewGroundGyroBias.z;			
+				
+				// Only for laboratory calibration of the accelerometers
+				// stream accel data and compute offsts/gains
+				if ( CALstream ) {
+					// If gyro are stable
+					if ( GyroModulePrimLevel < GroundGyroprimlimit  &&  AccelModulePrimLevel < GroundAccelprimlimit) { //MOD#6 improve calibration process
+						if ( gyromodulestable > 5 ) gyromodulestable--;  
+						if ( gyromodulestable == 5 ) {
+							accelAvgx = -accelG.z*9.807;
+							accelAvgy = -accelG.y*9.807;
+							accelAvgz = -accelG.x*9.807;
+							gyromodulestable = 4;
+						}
+						if ( gyromodulestable < 5 ) {
+							accelAvgx = 0.8 * accelAvgx + 0.2 * (-accelG.z*9.807);
+							accelAvgy = 0.8 * accelAvgy + 0.2 * (-accelG.y*9.807);
+							accelAvgz = 0.8 * accelAvgz + 0.2 * (-accelG.x*9.807);
+							if ( gyromodulestable > 1 ) gyromodulestable--;
+						}					
+						// store max and min with a short ~10 Hz low pass // MOD#9
+						if ( gyromodulestable == 1 ) {
+							if ( accelAvgx > accelMaxx ) accelMaxx = accelMaxx*0.5 + accelAvgx*0.5;
+							if ( accelAvgy > accelMaxy ) accelMaxy = accelMaxy*0.5 + accelAvgy*0.5;
+							if ( accelAvgz > accelMaxz ) accelMaxz = accelMaxz*0.5 + accelAvgz*0.5;
+							if ( accelAvgx < accelMinx ) accelMinx = accelMinx*0.5 + accelAvgx*0.5;
+							if ( accelAvgy < accelMiny ) accelMiny = accelMiny*0.5 + accelAvgy*0.5;
+							if ( accelAvgz < accelMinz ) accelMinz = accelMinz*0.5 + accelAvgz*0.5;
 						}
 					} else {
-						gyrostable = 0; // reset gyro stability counter if temperature not stable or movement detected
+						gyromodulestable = 8;
 					}
-				}
-			}
-			// Adjust progressively ground gyro bias with new ground bias estimate
-			if ( abs(GroundGyroBias.x - NewGroundGyroBias.x) > 0.0001 ) GroundGyroBias.x = 0.99 * GroundGyroBias.x + 0.01 * NewGroundGyroBias.x;
-			if ( abs(GroundGyroBias.y - NewGroundGyroBias.y) > 0.0001 ) GroundGyroBias.y = 0.99 * GroundGyroBias.y + 0.01 * NewGroundGyroBias.y;	
-			if ( abs(GroundGyroBias.z - NewGroundGyroBias.z) > 0.0001 ) GroundGyroBias.z = 0.99 * GroundGyroBias.z + 0.01 * NewGroundGyroBias.z;			
-			
-			// Only for laboratory calibration of the accelerometers
-			// stream accel data and compute offsts/gains
-			if ( CALstream ) {
-				// If gyro are stable
-				if ( GyroModulePrimLevel < GroundGyroprimlimit  &&  AccelModulePrimLevel < GroundAccelprimlimit) { //MOD#6 improve calibration process
-					if ( gyromodulestable > 5 ) gyromodulestable--;  
-					if ( gyromodulestable == 5 ) {
-						accelAvgx = -accelG.z*9.807;
-						accelAvgy = -accelG.y*9.807;
-						accelAvgz = -accelG.x*9.807;
-						gyromodulestable = 4;
-					}
-					if ( gyromodulestable < 5 ) {
-						accelAvgx = 0.8 * accelAvgx + 0.2 * (-accelG.z*9.807);
-						accelAvgy = 0.8 * accelAvgy + 0.2 * (-accelG.y*9.807);
-						accelAvgz = 0.8 * accelAvgz + 0.2 * (-accelG.x*9.807);
-						if ( gyromodulestable > 1 ) gyromodulestable--;
-					}					
-					// store max and min with a short ~10 Hz low pass // MOD#9
+					/*
+					CAL data
+					$CAL,
+					time in ms,
+					Gyro x in rad/s,
+					Gyro y in rad/s,
+					Gyro z in rad/s,
+					Gyromodule prim in unit,
+					Gyro module prim limit in unit,
+					Acceleration in X-Axis in m/s²,
+					Acceleration max in X-Axis in m/s²,
+					Acceleration min in X-Axis in m/s²,				
+					Acceleration in Y-Axis in m/s²,
+					Acceleration max in Y-Axis in m/s²,
+					Acceleration min in Y-Axis in  m/s²,				
+					Acceleration in Z-Axis in m/s²,
+					Acceleration max in Z-Axis in m/s²,
+					Acceleration min in Z-Axis in m/s²,
+					Acceleration bias x in m/s²,
+					Acceleration bias y in m/s²
+					Acceleration bias z in m/s²	
+					Acceleration gain x in m/s²,
+					Acceleration gain y in m/s²
+					Acceleration gain z in m/s²				
+					<CR><LF>	
+					*/
 					if ( gyromodulestable == 1 ) {
-						if ( accelAvgx > accelMaxx ) accelMaxx = accelMaxx*0.5 + accelAvgx*0.5;
-						if ( accelAvgy > accelMaxy ) accelMaxy = accelMaxy*0.5 + accelAvgy*0.5;
-						if ( accelAvgz > accelMaxz ) accelMaxz = accelMaxz*0.5 + accelAvgz*0.5;
-						if ( accelAvgx < accelMinx ) accelMinx = accelMinx*0.5 + accelAvgx*0.5;
-						if ( accelAvgy < accelMiny ) accelMiny = accelMiny*0.5 + accelAvgy*0.5;
-						if ( accelAvgz < accelMinz ) accelMinz = accelMinz*0.5 + accelAvgz*0.5;
+						if( gflags.gload_alarm ) {
+							Audio::alarm( false );
+							gflags.gload_alarm = false;
+						}					
+						sprintf(str,"$CAL,%lld,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f\r\n",
+							gyroTime, gyroCorr.x, gyroCorr.y, gyroCorr.z, GyroModulePrimLevel, GroundGyroprimlimit,
+							accelAvgx, accelMaxx, accelMinx, accelAvgy, accelMaxy, accelMiny, accelAvgz, accelMaxz, accelMinz,
+							(accelMaxx+accelMinx)/2, (accelMaxy+accelMiny)/2, (accelMaxz+accelMinz)/2,
+							localGravity /((accelMaxx-accelMinx)/2), localGravity /((accelMaxy-accelMiny)/2), localGravity/((accelMaxz-accelMinz)/2) );
+					} else {
+						if( !gflags.gload_alarm ) {
+							Audio::alarm( true );
+							gflags.gload_alarm = true;
+						}
+						sprintf(str,"$CAL,%lld,%.4f,%.4f,%.4f,%.4f,%.4f, - , - , - , - , - , - , - , - , - ,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f\r\n",
+							gyroTime, gyroCorr.x, gyroCorr.y, gyroCorr.z, GyroModulePrimLevel, GroundGyroprimlimit,
+							(accelMaxx+accelMinx)/2, (accelMaxy+accelMiny)/2, (accelMaxz+accelMinz)/2,
+							localGravity /((accelMaxx-accelMinx)/2), localGravity /((accelMaxy-accelMiny)/2), localGravity/((accelMaxz-accelMinz)/2) );					
 					}
-				} else {
-					gyromodulestable = 8;
+					Router::sendXCV(str);
+				}	
+			} else {
+				// if moving ( TAS > 15 m/s )
+				// if bias and gravtity have been estimated more than once, store last available bias and gravity in FLASH
+				if ( BIAS_Init > 1  ) {
+					gyro_bias.set(NewGroundGyroBias);
+					gravity.set(GRAVITY);
 				}
-				/*
-				CAL data
-				$CAL,
-				time in ms,
-				Gyro x in rad/s,
-				Gyro y in rad/s,
-				Gyro z in rad/s,
-				Gyromodule prim in unit,
-				Gyro module prim limit in unit,
-				Acceleration in X-Axis in m/s²,
-				Acceleration max in X-Axis in m/s²,
-				Acceleration min in X-Axis in m/s²,				
-				Acceleration in Y-Axis in m/s²,
-				Acceleration max in Y-Axis in m/s²,
-				Acceleration min in Y-Axis in  m/s²,				
-				Acceleration in Z-Axis in m/s²,
-				Acceleration max in Z-Axis in m/s²,
-				Acceleration min in Z-Axis in m/s²,
-				Acceleration bias x in m/s²,
-				Acceleration bias y in m/s²
-				Acceleration bias z in m/s²	
-				Acceleration gain x in m/s²,
-				Acceleration gain y in m/s²
-				Acceleration gain z in m/s²				
-				<CR><LF>	
-				*/
-				if ( gyromodulestable == 1 ) {
-					if( gflags.gload_alarm ) {
-						Audio::alarm( false );
-						gflags.gload_alarm = false;
-					}					
-					sprintf(str,"$CAL,%lld,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f\r\n",
-						gyroTime, gyroCorr.x, gyroCorr.y, gyroCorr.z, GyroModulePrimLevel, GroundGyroprimlimit,
-						accelAvgx, accelMaxx, accelMinx, accelAvgy, accelMaxy, accelMiny, accelAvgz, accelMaxz, accelMinz,
-						(accelMaxx+accelMinx)/2, (accelMaxy+accelMiny)/2, (accelMaxz+accelMinz)/2,
-						localGravity /((accelMaxx-accelMinx)/2), localGravity /((accelMaxy-accelMiny)/2), localGravity/((accelMaxz-accelMinz)/2) );
-				} else {
-					if( !gflags.gload_alarm ) {
-						Audio::alarm( true );
-						gflags.gload_alarm = true;
-					}
-					sprintf(str,"$CAL,%lld,%.4f,%.4f,%.4f,%.4f,%.4f, - , - , - , - , - , - , - , - , - ,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f\r\n",
-						gyroTime, gyroCorr.x, gyroCorr.y, gyroCorr.z, GyroModulePrimLevel, GroundGyroprimlimit,
-						(accelMaxx+accelMinx)/2, (accelMaxy+accelMiny)/2, (accelMaxz+accelMinz)/2,
-						localGravity /((accelMaxx-accelMinx)/2), localGravity /((accelMaxy-accelMiny)/2), localGravity/((accelMaxz-accelMinz)/2) );					
-				}
-				Router::sendXCV(str);
 			}	
-		} else {
-			// if moving ( TAS > 15 m/s )
-			// if bias and gravtity have been estimated more than once, store last available bias and gravity in FLASH
-			if ( BIAS_Init > 1  ) {
-				gyro_bias.set(NewGroundGyroBias);
-				gravity.set(GRAVITY);
-			}
 		}
 		
 		ProcessTimeIMU = (esp_timer_get_time()/1000.0) - gyroTime;
@@ -1895,19 +1899,13 @@ void readSensors(void *pvParameters){
 			chosenGnss->speed.x = RTKNvel;
 			chosenGnss->speed.y = RTKEvel;
 			chosenGnss->speed.z = -RTKUvel;
-			// dtRTKtime = RTKtime - prevRTKtime;
-			dtRTKtime = 0.25; // need to convert RTKtime to seconds to calculate dt time.
+			dtRTKtime = RTKtime - prevRTKtime;
 			prevRTKtime = RTKtime;
-			if ( dtRTKtime > 0.05 && dtRTKtime < 0.3 ) {
+			if ( dtRTKtime > 0.0 ) {
 				GnssVx.ABupdate( dtRTKtime, chosenGnss->speed.x );
 				GnssVy.ABupdate( dtRTKtime, chosenGnss->speed.y );		
 				GnssVz.ABupdate( dtRTKtime, chosenGnss->speed.z );
-			} else {
-				GnssVx.ABupdate( 0.125, chosenGnss->speed.x );
-				GnssVy.ABupdate( 0.125, chosenGnss->speed.y );		
-				GnssVz.ABupdate( 0.125, chosenGnss->speed.z );
-			}
-				
+			} 				
 			GNSSRouteraw = atan2(GnssVy.ABfilt(),GnssVx.ABfilt());			
 		} else {
 			chosenGnss->fix = 0;
@@ -1926,15 +1924,11 @@ void readSensors(void *pvParameters){
 			chosenGnss->speed.x = AllyvelN;
 			chosenGnss->speed.y = AllyvelE;
 			chosenGnss->speed.z = -AllyvelU;
-			if ( dtAllytime > 0.05 && dtAllytime < 0.3 ) {
+			if ( dtAllytime > 0.0 ) {
 				GnssVx.ABupdate( dtAllytime, chosenGnss->speed.x );
 				GnssVy.ABupdate( dtAllytime, chosenGnss->speed.y );		
 				GnssVz.ABupdate( dtAllytime, chosenGnss->speed.z );
-			} else {
-				GnssVx.ABupdate( 0.1, chosenGnss->speed.x );
-				GnssVy.ABupdate( 0.1, chosenGnss->speed.y );		
-				GnssVz.ABupdate( 0.1, chosenGnss->speed.z );
-			}
+			} 
 			GNSSRouteraw = atan2(GnssVy.ABfilt(),GnssVx.ABfilt());
 		} else {
 			chosenGnss->fix = 8; // GNSS Allystar TAU1301 checksum error			
@@ -2070,7 +2064,7 @@ void readSensors(void *pvParameters){
 		// long term average filter
 		AverageTotalEnergy.LPupdate( 20, 0.1, TotalEnergy.LowPass1() );		
 
-		#ifdef COMPUTEWIND
+		#ifdef COMPUTEWIND1
 		// TODO test and optimze wind calculation
 		// compute wind speed using GNSS and horizontal true airspeed
 		Vgx = 0.5 * Vgx + 0.5 * GnssVx.ABfilt(); // GNSS x coordinate with short low pass to reduce noise
@@ -2116,8 +2110,8 @@ void readSensors(void *pvParameters){
 			}
 		}
 		#endif
-		/*
-		#ifdef COMPUTEWIND
+	
+		#ifdef COMPUTEWIND2
 		// compute wind speed using GNSS and horizontal baro inertial true airspeed
 
 		float Vhbi; // horizontal baro inertial true airspeed
@@ -2184,9 +2178,7 @@ void readSensors(void *pvParameters){
 			Vhbipast[0] = Vhbi;
 		}                                            
 		#endif
-		*/
-		
-		
+				
 		//
 		// Eckhard code
 		//
