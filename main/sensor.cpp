@@ -2377,7 +2377,6 @@ void readSensors(void *pvParameters){
 				TotalEnergy in cm/s,
 				dynKp in thousands of unit,
 				MPU.mpu_heat_pwn integer pwm unit,
-				ProcessTimeSensors in milli second,
 				DynPeriodVelbi in thousands of second
 				<CR><LF>		
 			*/
@@ -2445,7 +2444,7 @@ void readSensors(void *pvParameters){
 					(int32_t)(TotalEnergy.LowPass1()*100),
 					(int32_t)(dynKp*1000), 
 					(int32_t)rint(MPU.mpu_heat_pwm),
-					(int32_t) (DynPeriodVelbi*1000),
+					(int32_t)(DynPeriodVelbi*1000),
 					// $S3 stream
 					(int32_t)(UiPrim*100),(int32_t)(ViPrim*100),(int32_t)(WiPrim*100),
 					(int32_t)(UbPrimS*100), (int32_t)(VbPrimS*100),(int32_t)(WbPrimS*100),
