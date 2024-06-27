@@ -220,6 +220,9 @@ mpud::float_axes_t PrevgyroRPS;
 mpud::float_axes_t gyroISUNEDMPU;
 mpud::float_axes_t gyroISUNEDBODY;
 mpud::float_axes_t gyroCorr;
+static float GravityModule = 0.0;
+static float GravityModuleErr = 0.0;
+static float GravityModuleErrLevel = 0.0;
 static float AccelGravModuleFilt = 0.0;
 static int32_t gyrobiastemptimer = 0;
 static float integralFBx = 0.0;
@@ -232,7 +235,6 @@ static float GzPrim = 0.0;
 static float GxF = 0.0;
 static float GyF = 0.0;
 static float GzF = 0.0;
-static float GravityModuleErr = 0.0;
 static float BiasGx = 0.0;
 static float BiasGy =0.0;
 static float BiasGz = 0.0;
@@ -911,7 +913,7 @@ void audioTask(void *pvParameters){
 
 void MahonyUpdateIMU(float dt, float gxraw, float gyraw, float gzraw,
 					float ax, float ay, float az, 
-					float &Bias_Gx, float &Bias_Gy, float &Bias_Gz ) {
+					float &Bias_Gx, float &Bias_Gy, float &Bias_Gz, float &AccelGravModule ) {
 
 #define Nlimit 0.15 // stability criteria for gravity estimation from accels in m/s²
 #define Kp 0.7 // proportional feedback to sync quaternion
@@ -919,7 +921,7 @@ void MahonyUpdateIMU(float dt, float gxraw, float gyraw, float gzraw,
 #define Gyroprimlimit 0.3
 
 float gx, gy, gz;
-float AccelGravModule, QuatModule, recipNorm;
+float QuatModule, recipNorm;
 float halfvx = 0.0;
 float halfvy = 0.0;
 float halfvz = 0.0;
@@ -1342,7 +1344,20 @@ static void processIMU(void *pvParameters)
 				}
 
 				// Update quaternions
-				MahonyUpdateIMU( dtGyr, gyroISUNEDBODY.x, gyroISUNEDBODY.y, gyroISUNEDBODY.z, -gravISUNEDBODY.x, -gravISUNEDBODY.y, -gravISUNEDBODY.z, BiasQuatGx, BiasQuatGy, BiasQuatGz );								
+				MahonyUpdateIMU( dtGyr, gyroISUNEDBODY.x, gyroISUNEDBODY.y, gyroISUNEDBODY.z, -gravISUNEDBODY.x, -gravISUNEDBODY.y, -gravISUNEDBODY.z, BiasQuatGx, BiasQuatGy, BiasQuatGz, GravityModule );								
+
+				// compute & filter GravityModule error
+				GravityModuleErr = abs( GravityModule - GRAVITY );
+				// asysmetric filter with fast raise and slow decay
+				#define fcGravModuleErr 3.0 // 3Hz low pass to filter 
+				#define fcGME1 (40.0/(40.0+fcGravModuleErr))
+				#define fcGME2 (1.0-fcGME1)		
+				if ( GravityModuleErrLevel < GravityModuleErr ) {
+					GravityModuleErrLevel = GravityModuleErr;
+				} else {
+					GravityModuleErrLevel = fcGME1 * GravityModuleErrLevel +  fcGME2 * GravityModuleErr;
+				}
+
 				// Compute Euler angles from IMU quaternion
 				if ( abs(q1 * q3 - q0 * q2) < 0.5 ) {
 					Pitch = asin(-2.0 * (q1 * q3 - q0 * q2));
@@ -2427,13 +2442,14 @@ void readSensors(void *pvParameters){
 				UbFS in cm/s,
 				VbFS in cm/s,
 				WbFS in cm/s,
-				AccelModulePrimLevel in in hundredth of m/s3,
-				GyroModulePrimLevel  in in hundredth of m/s3			
+				AccelModulePrimLevel in hundredth of m/s3,
+				GyroModulePrimLevel  in hundredth of m/s3,
+				GravityModuleErrLevel in thousandth of m/s2				
 			*/		
 
 			if ( !(count % 50) ) { 
 				// send $S1 and $S2 every 50 cycles = 5 seconds
-				sprintf(str,"$S1,%lld,%i,%i,%i,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$S3,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$S2,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",				
+				sprintf(str,"$S1,%lld,%i,%i,%i,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$S3,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$S2,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",				
 				// $S1 stream
 					statTime, (int32_t)(statP*100.0),(int32_t)(teP*100.0), (int16_t)(dynP*10), 
 					(int64_t)(chosenGnss->time*1000.0), (int16_t)(GnssVx.ABfilt()*100), (int16_t)(GnssVy.ABfilt()*100), (int16_t)(GnssVz.ABfilt()*100),
@@ -2453,7 +2469,7 @@ void readSensors(void *pvParameters){
 					(int32_t)(Bias_AoB*1000),
 					(int32_t)(RTKNproj*1000),(int32_t)(RTKEproj*1000),(int32_t)(-RTKUproj*1000),(int32_t)(RTKheading*10),(int32_t)(ALTbi*100),
 					(int32_t)(DHeading*1000),(int32_t)(UbFS*100),(int32_t)(VbFS*100),(int32_t)(WbFS*100),
-					(int32_t)(AccelModulePrimLevel*100),(int32_t)(GyroModulePrimLevel*100),			
+					(int32_t)(AccelModulePrimLevel*100),(int32_t)(GyroModulePrimLevel*100), (int32_t)(GravityModuleErrLevel*1000),		
 					// $S2 stream
 					(int16_t)(temperatureLP.LowPass1()*10.0), (int16_t)(MPUtempcel*10.0), chosenGnss->fix, chosenGnss->numSV,
 					(int32_t)(GroundGyroBias.x*100000.0), (int32_t)(GroundGyroBias.y*100000.0), (int32_t)(GroundGyroBias.z*100000.0),				
@@ -2467,7 +2483,7 @@ void readSensors(void *pvParameters){
 				xSemaphoreGive( BTMutex );				
 			} else {
 				// send $S1 only every 100ms
-				sprintf(str,"$S1,%lld,%i,%i,%i,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$S3,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",
+				sprintf(str,"$S1,%lld,%i,%i,%i,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$S3,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",
 					statTime, (int32_t)(statP*100.0),(int32_t)(teP*100.0), (int16_t)(dynP*10), 
 					(int64_t)(chosenGnss->time*1000.0), (int16_t)(GnssVx.ABfilt()*100), (int16_t)(GnssVy.ABfilt()*100), (int16_t)(GnssVz.ABfilt()*100),
 					(int32_t)(Pitch*1000.0), (int32_t)(Roll*1000.0), (int32_t)(Yaw*1000.0),
@@ -2480,13 +2496,13 @@ void readSensors(void *pvParameters){
 					(int32_t)(DynPeriodVelbi*1000),
 					// $S3 stream
 					(int32_t)(UiPrim*100),(int32_t)(ViPrim*100),(int32_t)(WiPrim*100),
-					(int32_t)(UbPrimS*100), (int32_t)(VbPrimS*100),(int32_t)(WbPrimS*100),
+					(int32_t)(UbPrimS*100), (int32_t)(VbPrimS*100),(int32_t)(WbPrimS*100),   
 					(int32_t)(UiPrimPrimS*100), (int32_t)(ViPrimPrimS*100),(int32_t)(WiPrimPrimS*100),	
 					(int32_t)(UbiPrim*100), (int32_t)(VbiPrim*100),(int32_t)(WbiPrim*100),
 					(int32_t)(Bias_AoB*1000),
 					(int32_t)(RTKNproj*1000),(int32_t)(RTKEproj*1000),(int32_t)(-RTKUproj*1000),(int32_t)(RTKheading*10),(int32_t)(ALTbi*100),
 					(int32_t)(DHeading*1000),(int32_t)(UbFS*100),(int32_t)(VbFS*100),(int32_t)(WbFS*100),
-					(int32_t)(AccelModulePrimLevel*100),(int32_t)(GyroModulePrimLevel*100)					
+					(int32_t)(AccelModulePrimLevel*100),(int32_t)(GyroModulePrimLevel*100), (int32_t)(GravityModuleErrLevel*1000)			
 				);
 				xSemaphoreTake( BTMutex, 2/portTICK_PERIOD_MS );				
 				Router::sendXCV(str);
