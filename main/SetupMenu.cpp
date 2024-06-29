@@ -2028,8 +2028,8 @@ int kp_adj( SetupMenuValFloat * p ){
 	return 0;
 }
 
-int ki_adj( SetupMenuValFloat * p ){
-		Mahonyki = ki_Mahony.get(); // period in second for baro/inertial velocity. period long enough to reduce effect of baro wind gradients
+int beta_adj( SetupMenuValFloat * p ){
+		MagdwickBeta = Beta_Magdwick.get(); // period in second for baro/inertial velocity. period long enough to reduce effect of baro wind gradients
 	return 0;
 }
 
@@ -2061,15 +2061,15 @@ void SetupMenu::flighttest_menu_create( MenuEntry *top ){
 	velbiperiod->setPrecision(1);
 	top->addEntry( velbiperiod );
 	
-	SetupMenuValFloat * kpMahony = new SetupMenuValFloat( "Kp Mahony filt.", "unit",	0.0, 5.0, 0.1, kp_adj, true, &kp_Mahony );
+	SetupMenuValFloat * kpMahony = new SetupMenuValFloat( "Kp Mahony", "unit",	0.0, 5.0, 0.1, kp_adj, true, &kp_Mahony );
 	kpMahony->setHelp(PROGMEM"Kp value");
 	kpMahony->setPrecision(3);
 	top->addEntry( kpMahony );
 	
-	SetupMenuValFloat * kiMahony = new SetupMenuValFloat( "Ki Mahony filt.", "unit",	0.0, 0.5, 0.01, ki_adj, true, &ki_Mahony );
-	kiMahony->setHelp(PROGMEM"Ki value");
-	kiMahony->setPrecision(4);
-	top->addEntry( kiMahony );
+	SetupMenuValFloat * BetaMagdwick = new SetupMenuValFloat( "Beta Magdwick", "unit",	0.0, 0.033, 0.001, beta_adj, true, &Beta_Magdwick );
+	BetaMagdwick->setHelp(PROGMEM"Beta value");
+	BetaMagdwick->setPrecision(4);
+	top->addEntry( BetaMagdwick );
 	
 	SetupMenuValFloat * gainUiP = new SetupMenuValFloat( "UiP bi gain.", "unit",	0.6, 1.4, 0.05, UiP_gain_adj, true, &UiP_gain );
 	gainUiP->setHelp(PROGMEM"UiPrim gain value");

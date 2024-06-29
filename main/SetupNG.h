@@ -504,7 +504,7 @@ extern SetupNG<float>  		ias;
 extern SetupNG<float>  		te_vario;
 extern SetupNG<float>  		velbi_period;
 extern SetupNG<float>		kp_Mahony;
-extern SetupNG<float>		ki_Mahony;
+extern SetupNG<float>		Beta_Magdwick;
 extern SetupNG<float>		UiP_gain;
 extern SetupNG<float>		WiP_gain;
 

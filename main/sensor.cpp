@@ -277,6 +277,9 @@ static float TASbiSquare = 0.0;
 static float AoA = 0.0;
 static float AoB = 0.0;
 
+float GnssTrack;// MOD#4 gyro bias
+float PseudoHeadingPrim;// MOD#4 gyro bias
+
 // variables for gravity estimation
 mpud::float_axes_t GravIMU;
 mpud::float_axes_t gravISUNEDBODY;
@@ -342,7 +345,8 @@ static float WbiPrim = 0.0;
 float opt_TE = 1;
 
 float Mahonykp = 0.05;
-float Mahonyki = 0.001;
+float MagdwickBeta = 0.002;
+float CurrentBeta = 0.033;
 
 static int32_t cur_gyro_bias[3];
 
@@ -911,6 +915,81 @@ void audioTask(void *pvParameters){
 	}
 }
 
+void MagdwickUpdateIMU(	float dt, float Beta, float gx, float gy, float gz, float ax, float ay, float az, float &AccelGravModule ) {
+
+	float  recipNorm;
+	float s0, s1, s2, s3;
+	float qDot1, qDot2, qDot3, qDot4;
+	float _2q0, _2q1, _2q2, _2q3, _4q0, _4q1, _4q2, _8q1, _8q2, q0q0, q1q1, q2q2, q3q3;
+
+	// Rate of change of quaternion from gyroscope
+	qDot1 = 0.5 * (-q1 * gx - q2 * gy - q3 * gz);
+	qDot2 = 0.5 * (q0 * gx + q2 * gz - q3 * gy);
+	qDot3 = 0.5 * (q0 * gy - q1 * gz + q3 * gx);
+	qDot4 = 0.5 * (q0 * gz + q1 * gy - q2 * gx);
+
+	// Compute feedback only if accelerometer measurement valid (avoids NaN in accelerometer normalisation)
+	AccelGravModule = sqrt(ax * ax + ay * ay + az * az);
+	if ( AccelGravModule != 0.0 ) {
+		recipNorm = 1.0 / AccelGravModule;
+		// Normalise accelerometer measurement
+		ax = ax * recipNorm;
+		ay = ay * recipNorm;
+		az = az * recipNorm;
+		// Auxiliary variables to avoid repeated arithmetic
+		_2q0 = 2.0 * q0;
+		_2q1 = 2.0 * q1;
+		_2q2 = 2.0 * q2;
+		_2q3 = 2.0 * q3;
+		_4q0 = 4.0 * q0;
+		_4q1 = 4.0 * q1;
+		_4q2 = 4.0 * q2;
+		_8q1 = 8.0 * q1;
+		_8q2 = 8.0 * q2;
+		q0q0 = q0 * q0;
+		q1q1 = q1 * q1;
+		q2q2 = q2 * q2;
+		q3q3 = q3 * q3;
+		// Gradient decent algorithm corrective step
+		s0 = _4q0 * q2q2 + _2q2 * ax + _4q0 * q1q1 - _2q1 * ay;
+		s1 = _4q1 * q3q3 - _2q3 * ax + 4.0 * q0q0 * q1 - _2q0 * ay - _4q1 + _8q1 * q1q1 + _8q1 * q2q2 + _4q1 * az;
+		s2 = 4.0 * q0q0 * q2 + _2q0 * ax + _4q2 * q3q3 - _2q3 * ay - _4q2 + _8q2 * q1q1 + _8q2 * q2q2 + _4q2 * az;
+		s3 = 4.0 * q1q1 * q3 - _2q1 * ax + 4.0 * q2q2 * q3 - _2q2 * ay;
+		if ( (s0 + s1 + s2 + s3) != 0 ) {
+			recipNorm = 1.0 / sqrt(s0 * s0 + s1 * s1 + s2 * s2 + s3 * s3);
+		} else {
+			recipNorm = 1.0;
+			// normalise step magnitude
+			s0 = s0 * recipNorm;
+			s1 = s1 * recipNorm;
+			s2 = s2 * recipNorm;
+			s3 = s3 * recipNorm;
+		}
+		// Apply feedback step
+		qDot1 = qDot1 - Beta * s0;
+		qDot2 = qDot2 - Beta * s1;
+		qDot3 = qDot3 - Beta * s2;
+		qDot4 = qDot4 - Beta * s3;
+	}
+	// Integrate rate of change of quaternion
+	q0 = q0 + qDot1 * dt;
+	q1 = q1 + qDot2 * dt;
+	q2 = q2 + qDot3 * dt;
+	q3 = q3 + qDot4 * dt;
+
+	// Normalise quaternion*/
+	if ( (q0 * q1 * q2 * q3) != 0 ) {
+		recipNorm = 1.0 / sqrt( q0 * q0 + q1 * q1 + q2 * q2 + q3 * q3 );
+	} else {
+		recipNorm = 1.0;
+	}
+	q0 = q0 * recipNorm;
+	q1 = q1 * recipNorm;
+	q2 = q2 * recipNorm;
+	q3 = q3 * recipNorm;
+}
+
+
 void MahonyUpdateIMU(float dt, float gxraw, float gyraw, float gzraw,
 					float ax, float ay, float az, 
 					float &Bias_Gx, float &Bias_Gy, float &Bias_Gz, float &AccelGravModule ) {
@@ -934,8 +1013,6 @@ float deltaGx;
 float deltaGy;
 float deltaGz;
 float GyrxzAmplitudeKdyn = 0.0;
-float GnssTrack;// MOD#4 gyro bias
-float PseudoHeadingPrim;// MOD#4 gyro bias
 
 	// Estimate direction of gravity from IMU quaternion
 	halfvx = q1 * q3 - q0 * q2;
@@ -1036,7 +1113,7 @@ float PseudoHeadingPrim;// MOD#4 gyro bias
 		dynKi = Kgain * Ki;
 		*/
 		dynKp = Mahonykp; 
-		dynKi = Mahonyki;
+		dynKi = Mahonykp/10;
 		
 		// Normalise accelerometer measurement
 		recipNorm = 1.0 / AccelGravModule;
@@ -1210,7 +1287,7 @@ static void processIMU(void *pvParameters)
 	PeriodVelbi = velbi_period.get(); // period in second for baro/inertial velocity. period long enough to reduce effect of baro wind gradients
 	LastPeriodVelbi = PeriodVelbi;
 	Mahonykp = kp_Mahony.get(); // get last kp value from NV memory
-	Mahonyki = ki_Mahony.get(); // get last ki value from NV memory
+	MagdwickBeta = Beta_Magdwick.get(); // get last ki value from NV memory
 	UiPgain = UiP_gain.get(); // get last UiPrim gain for bi calc from NV memory
 	WiPgain = WiP_gain.get(); // get last WiPrim gain for bi calc from NV memory
 	
@@ -1344,8 +1421,13 @@ static void processIMU(void *pvParameters)
 				}
 
 				// Update quaternions
-				MahonyUpdateIMU( dtGyr, gyroISUNEDBODY.x, gyroISUNEDBODY.y, gyroISUNEDBODY.z, -gravISUNEDBODY.x, -gravISUNEDBODY.y, -gravISUNEDBODY.z, BiasQuatGx, BiasQuatGy, BiasQuatGz, GravityModule );								
-
+				
+				if ( Mahonykp != 0.0 ) {
+					MahonyUpdateIMU( dtGyr, gyroISUNEDBODY.x, gyroISUNEDBODY.y, gyroISUNEDBODY.z, -gravISUNEDBODY.x, -gravISUNEDBODY.y, -gravISUNEDBODY.z, BiasQuatGx, BiasQuatGy, BiasQuatGz, GravityModule );								
+				} else {
+					CurrentBeta = CurrentBeta * 0.995 + MagdwickBeta * 0.005;
+					MagdwickUpdateIMU( dtGyr, CurrentBeta, gyroISUNEDBODY.x, gyroISUNEDBODY.y, gyroISUNEDBODY.z, -gravISUNEDBODY.x, -gravISUNEDBODY.y, -gravISUNEDBODY.z, GravityModule );
+				}	
 				// compute & filter GravityModule error
 				GravityModuleErr = abs( GravityModule - GRAVITY );
 				// asysmetric filter with fast raise and slow decay
@@ -1373,6 +1455,37 @@ static void processIMU(void *pvParameters)
 				// Update roll and pitch alpha beta filter. This provides Roll and Pitch derivatives for bias analysis 
 				RollAHRS.ABupdate( dtGyr, Roll );// MOD#4 gyro bias
 				PitchAHRS.ABupdate( dtGyr, Pitch );// MOD#4 gyro bias
+				
+				#ifdef COMPUTEBIAS
+				// gyro bias estimation when using Magdwick
+				// When TAS below 15 m/s and roll and pitch are below respective thresholds, 
+				// x and y gyros biases are computed by long term average of the gyro values minus corresponding axis attitude variation
+				// z gyro bias is computed by long term average of gyro value minus heading variation estimation
+				if ( Mahonykp == 0.0 ) {
+					#define RollLimitMagd 0.175 // max lateral gravity acceleration (normalized acceleration) for 10° roll
+					#define PitchLimitMagd 0.175 // max longitudinal gravity acceleration (normalized acceleration) for 10° pitch
+					#define GMaxBiasMagd 0.005 // limit biais correction to 5 mrad/s
+					#define GyroCutoffPeriodMagd 700 //  very long term average ~ 700 seconds
+					if ( (TAS > 15.0) && (abs(Roll) < RollLimitMagd)  && (abs(Pitch) < PitchLimitMagd) ) {
+						// compute Gx - d(roll)/dt and Gy - d(pitch)/dt long term average.
+						GyroBiasx.LPupdate( GyroCutoffPeriodMagd, dtGyr, gyroISUNEDBODY.x - RollAHRS.ABprim() );
+						GyroBiasy.LPupdate( GyroCutoffPeriodMagd, dtGyr, gyroISUNEDBODY.y - PitchAHRS.ABprim() );		
+						// compute pseudo heading from GNSS
+						GnssTrack = atan2( GnssVy.ABfilt(), GnssVx.ABfilt() );
+						PseudoHeadingPrim = ( GnssVy.ABprim() * cos(GnssTrack) - GnssVx.ABprim() * sin(GnssTrack) ) / TAS;
+						// compute Gz - pseudo heading variation long term average.		
+						GyroBiasz.LPupdate( GyroCutoffPeriodMagd, dtGyr, gyroISUNEDBODY.z - PseudoHeadingPrim );
+						// update gyros biases variables
+						BiasQuatGx = GyroBiasx.LowPass2();
+						BiasQuatGy = GyroBiasy.LowPass2();
+						BiasQuatGz = GyroBiasz.LowPass2();		
+						// limit bias estimation	
+						if ( abs(BiasQuatGx) > GMaxBiasMagd ) BiasQuatGx = copysign( GMaxBias, BiasQuatGx);
+						if ( abs(BiasQuatGy) > GMaxBiasMagd ) BiasQuatGy = copysign( GMaxBias, BiasQuatGy);		
+						if ( abs(BiasQuatGz) > GMaxBiasMagd ) BiasQuatGz = copysign( GMaxBias, BiasQuatGz);		
+					}
+				}
+				#endif				
 				
 				// compute sin and cos for Roll and Pitch from IMU quaternion since they are used in multiple calculations
 				cosRoll = cos( Roll );
@@ -2411,7 +2524,7 @@ void readSensors(void *pvParameters){
 				PeriodVelbi (Baro Inertial period in tenth of seconds),
 				te_filt (Total Energy low pass filter period) in tenth of second,
 				Mahonykp in tenthousandth of unit,
-				Mahonyki in tenthousandth of unit,
+				MagdwickBeta in tenthousandth of unit,
 				UiPgain in hundredth of unit,
 				WiPgain in hunderdth of unit,
 				opt_TE 1 or 2,
@@ -2475,7 +2588,7 @@ void readSensors(void *pvParameters){
 					(int32_t)(GroundGyroBias.x*100000.0), (int32_t)(GroundGyroBias.y*100000.0), (int32_t)(GroundGyroBias.z*100000.0),				
 					(int32_t)(BiasQuatGx*100000.0), (int32_t)(BiasQuatGy*100000.0), (int32_t)(BiasQuatGz*100000.0),
 					(int16_t)(XCVTemp*10.0), (int16_t) (PeriodVelbi*10),
-					(int32_t)(te_filt.get()*10),(int32_t)(Mahonykp*10000),(int32_t)(Mahonyki*10000), (int32_t)(UiPgain*100), (int32_t)(WiPgain*100), (int32_t)(opt_TE),
+					(int32_t)(te_filt.get()*10),(int32_t)(Mahonykp*10000),(int32_t)(MagdwickBeta*10000), (int32_t)(UiPgain*100), (int32_t)(WiPgain*100), (int32_t)(opt_TE),
 					(int32_t)(FTVERSION),(int32_t)(SOFTVERSION)
 					);
 				xSemaphoreTake( BTMutex, 2/portTICK_PERIOD_MS );				

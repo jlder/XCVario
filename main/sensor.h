@@ -164,7 +164,7 @@ extern float betaEnergy;
 extern float PeriodVelbi;
 extern float LastPeriodVelbi;
 extern float Mahonykp;
-extern float Mahonyki;
+extern float MagdwickBeta;
 extern float UiPgain;
 extern float WiPgain;
 extern float opt_TE;
