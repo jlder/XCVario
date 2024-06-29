@@ -586,9 +586,6 @@ public:
 					}						
 				}
 			}
-		} else {
-			filt = RawData;
-			prim = 0.0;
 		}
 	}
 	
@@ -1304,8 +1301,8 @@ static void processIMU(void *pvParameters)
 			prevgyroTime = gyroTime;
 			gyroTime = esp_timer_get_time()/1000.0; // record time of gyro measurement in milli second
 			dtGyr = (gyroTime - prevgyroTime) / 1000.0; // period between last two valid samples in second
-			// use theoritical dt @ 40Hz in case computed dt is zero
-			if (dtGyr == 0) dtGyr = PERIOD40HZ;
+			// If dtGyr is negative or abnormaly high, skip filters and baro inertial and AHRS updates using dtGyr = 0
+			if (dtGyr < 0.0 or dtGyr > 0.075) dtGyr = 0.0;
 			gyroDPS = mpud::gyroDegPerSec(gyroRaw, GYRO_FS); // For compatibility with Eckhard code only. Convert raw gyro to Gyro_FS full scale in degre per second 
 			gyroRPS = mpud::gyroRadPerSec(gyroRaw, GYRO_FS); // convert raw gyro to Gyro_FS full scale in radians per second
 			// convert gyro coordinates to ISU : rad/s NED MPU and remove bias
