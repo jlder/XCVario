@@ -1699,12 +1699,7 @@ static void processIMU(void *pvParameters)
 				}
 			}	
 		}
-		
-		ProcessTimeIMU = (esp_timer_get_time()/1000.0) - gyroTime;
-		if ( ProcessTimeIMU > 8 ) {
-			ESP_LOGI(FNAME,"processIMU: %i / 25", (int16_t)(ProcessTimeIMU) );
-		}
-		
+
 		// If required stream IMU data
 		if ( IMUstream  ) {
 			/*
@@ -1729,9 +1724,12 @@ static void processIMU(void *pvParameters)
 			Router::sendXCV(str);
 			xSemaphoreGive( BTMutex );
 		} 
-		
+
+		ProcessTimeIMU = (esp_timer_get_time()/1000.0) - gyroTime;
+		if ( ProcessTimeIMU > 8 ) {
+			ESP_LOGI(FNAME,"processIMU: %i / 25", (int16_t)(ProcessTimeIMU) );
+		}		
 		mtick++;
-		
 		vTaskDelayUntil(&xLastWakeTime_mpu, 25/portTICK_PERIOD_MS);  // 25 ms = 40 Hz loop
 		if( (mtick % 40) == 0) {  // test stack every second
 			if( uxTaskGetStackHighWaterMark( mpid ) < 1024 )
@@ -2473,11 +2471,6 @@ void readSensors(void *pvParameters){
 			MPU.temp_control( count,XCVTemp);
 		}
 
-		ProcessTimeSensors = (esp_timer_get_time()/1000.0) - ProcessTimeSensors;
-		if ( ProcessTimeSensors > 15 ) {
-			ESP_LOGI(FNAME,"readSensors: %i / 100", (int16_t)(ProcessTimeSensors) );
-		}
-
 		if ( SENstream ) {
 			/* Sensor data
 				$S1,			
@@ -2620,6 +2613,10 @@ void readSensors(void *pvParameters){
 			}
 		}
 		Router::routeXCV();
+		ProcessTimeSensors = (esp_timer_get_time()/1000.0) - ProcessTimeSensors;
+		if ( ProcessTimeSensors > 30 ) {
+			ESP_LOGI(FNAME,"readSensors: %i / 100", (int16_t)(ProcessTimeSensors) );
+		}		
 		esp_task_wdt_reset();
 		if( uxTaskGetStackHighWaterMark( bpid ) < 512 )
 			ESP_LOGW(FNAME,"Warning sensor task stack low: %d bytes", uxTaskGetStackHighWaterMark( bpid ) );
@@ -2641,14 +2638,14 @@ void readTemp(void *pvParameters){
 			t = ds18b20.getTemp();
 			if( t ==  DEVICE_DISCONNECTED_C ) {
 				if( gflags.validTemperature == true ) {
-					ESP_LOGI(FNAME,"Temperatur Sensor disconnected or out of realistic range , please plug Temperature Sensor or check sensor");
+					//ESP_LOGI(FNAME,"Temperatur Sensor disconnected or out of realistic range , please plug Temperature Sensor or check sensor");
 					gflags.validTemperature = false;
 				}
 			}
 			else
 			{
 				if( gflags.validTemperature == false ) {
-					ESP_LOGI(FNAME,"Temperatur Sensor connected, temperature valid");
+					//ESP_LOGI(FNAME,"Temperatur Sensor connected, temperature valid");
 					gflags.validTemperature = true;
 				}
 				// ESP_LOGI(FNAME,"temperature=%2.1f", temperature );
@@ -2659,7 +2656,7 @@ void readTemp(void *pvParameters){
 				temperatureLP.LPupdate( 4.0, 1.0, temperature);
 				if( abs(temperatureLP.LowPass1() - temp_prev) > 0.1 ){
 					OAT.set( std::round(temperatureLP.LowPass1()*10)/10 );
-					ESP_LOGI(FNAME,"NEW temperature=%2.1f, prev T=%2.1f", temperatureLP.LowPass1(), temp_prev );
+					//ESP_LOGI(FNAME,"NEW temperature=%2.1f, prev T=%2.1f", temperatureLP.LowPass1(), temp_prev );
 					temp_prev = temperatureLP.LowPass1();
 				}
 			}
@@ -2714,7 +2711,7 @@ void register_coredump() {
 			.priv = NULL,
 	};
 	if( coredump_to_server(&coredump_cfg) != ESP_OK ){  // Dump to console and do not clear (will done after fetched from Webserver)
-		ESP_LOGI( FNAME, "+++ All green, no coredump found in FLASH +++");
+		//ESP_LOGI( FNAME, "+++ All green, no coredump found in FLASH +++");
 	}
 }
 

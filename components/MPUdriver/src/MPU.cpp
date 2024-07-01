@@ -171,7 +171,7 @@ uint32_t MPU::pi_control(int tick_count,float XCVTemp){
 		mpu_heat_pwm = 0.0;
 	pwm = (uint32_t)rint(mpu_heat_pwm);
 	if( !(tick_count%30) && abs(mpu_t_delta) > 0.1){
-		MPU_LOGW("Warning MPU T deviation > 1°: T=%.2f Delta= %.1f P=%.2f I=%.2f , PWM=%d", temp, mpu_t_delta, mpu_t_delta_p, mpu_t_delta_i,  pwm );
+		//MPU_LOGW("Warning MPU T deviation > 1°: T=%.2f Delta= %.1f P=%.2f I=%.2f , PWM=%d", temp, mpu_t_delta, mpu_t_delta_p, mpu_t_delta_i,  pwm );
 	}
 	// return mpu_heat_pwm
 	return  (uint32_t)rint(mpu_heat_pwm);
