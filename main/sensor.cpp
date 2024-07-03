@@ -1306,7 +1306,17 @@ static void processIMU(void *pvParameters)
 			gyroDPS = mpud::gyroDegPerSec(gyroRaw, GYRO_FS); // For compatibility with Eckhard code only. Convert raw gyro to Gyro_FS full scale in degre per second 
 			gyroRPS = mpud::gyroRadPerSec(gyroRaw, GYRO_FS); // convert raw gyro to Gyro_FS full scale in radians per second
 			// convert gyro coordinates to ISU : rad/s NED MPU and remove bias
-			xSemaphoreTake( dataMutex, 3/portTICK_PERIOD_MS ); // prevent data conflicts for 3ms max.			
+			xSemaphoreTake( dataMutex, 3/portTICK_PERIOD_MS ); // prevent data conflicts for 3ms max.
+			// TODO just for flight test. If Magdwick Beta and Mahonykp are set to zero for gyro drift analysis, do not apply bias estimation to gyro values
+			if ( MagdwickBeta != 0.0 || Mahonykp != 0.0 ) {
+				gyroISUNEDMPU.x = -(gyroRPS.z - GroundGyroBias.z);
+				gyroISUNEDMPU.y = -(gyroRPS.y - GroundGyroBias.y);
+				gyroISUNEDMPU.z = -(gyroRPS.x - GroundGyroBias.x);				
+			} else {
+				gyroISUNEDMPU.x = -gyroRPS.z;
+				gyroISUNEDMPU.y = -gyroRPS.y;
+				gyroISUNEDMPU.z = -gyroRPS.x;
+			}			
 			gyroISUNEDMPU.x = -(gyroRPS.z - GroundGyroBias.z);
 			gyroISUNEDMPU.y = -(gyroRPS.y - GroundGyroBias.y);
 			gyroISUNEDMPU.z = -(gyroRPS.x - GroundGyroBias.x);
@@ -1422,7 +1432,8 @@ static void processIMU(void *pvParameters)
 				if ( Mahonykp != 0.0 ) {
 					MahonyUpdateIMU( dtGyr, gyroISUNEDBODY.x, gyroISUNEDBODY.y, gyroISUNEDBODY.z, -gravISUNEDBODY.x, -gravISUNEDBODY.y, -gravISUNEDBODY.z, BiasQuatGx, BiasQuatGy, BiasQuatGz, GravityModule );								
 				} else {
-					CurrentBeta = CurrentBeta * 0.995 + MagdwickBeta * 0.005;
+					// CurrentBeta = CurrentBeta * 0.995 + MagdwickBeta * 0.005;
+					CurrentBeta = MagdwickBeta;
 					MagdwickUpdateIMU( dtGyr, CurrentBeta, gyroISUNEDBODY.x, gyroISUNEDBODY.y, gyroISUNEDBODY.z, -gravISUNEDBODY.x, -gravISUNEDBODY.y, -gravISUNEDBODY.z, GravityModule );
 				}	
 				// compute & filter GravityModule error
@@ -1454,7 +1465,7 @@ static void processIMU(void *pvParameters)
 				PitchAHRS.ABupdate( dtGyr, Pitch );// MOD#4 gyro bias
 				
 				#ifdef COMPUTEBIAS
-				// gyro bias estimation when using Magdwick
+				// gyro bias estimation when using Magdwick i.e. Mahonykp = 0.0
 				// When TAS below 15 m/s and roll and pitch are below respective thresholds, 
 				// x and y gyros biases are computed by long term average of the gyro values minus corresponding axis attitude variation
 				// z gyro bias is computed by long term average of gyro value minus heading variation estimation
@@ -1726,13 +1737,13 @@ static void processIMU(void *pvParameters)
 		} 
 
 		ProcessTimeIMU = (esp_timer_get_time()/1000.0) - gyroTime;
-		if ( ProcessTimeIMU > 8 ) {
+		if ( ProcessTimeIMU > 8 && TAS < 15.0 ) {
 			ESP_LOGI(FNAME,"processIMU: %i / 25", (int16_t)(ProcessTimeIMU) );
 		}		
 		mtick++;
 		vTaskDelayUntil(&xLastWakeTime_mpu, 25/portTICK_PERIOD_MS);  // 25 ms = 40 Hz loop
 		if( (mtick % 40) == 0) {  // test stack every second
-			if( uxTaskGetStackHighWaterMark( mpid ) < 1024 )
+			if( uxTaskGetStackHighWaterMark( mpid ) < 1024 && TAS < 15.0 )
 				 ESP_LOGW(FNAME,"Warning MPU and sensor task stack low: %d bytes", uxTaskGetStackHighWaterMark( mpid ) );
 		}
 	}		
@@ -2614,11 +2625,11 @@ void readSensors(void *pvParameters){
 		}
 		Router::routeXCV();
 		ProcessTimeSensors = (esp_timer_get_time()/1000.0) - ProcessTimeSensors;
-		if ( ProcessTimeSensors > 30 ) {
+		if ( ProcessTimeSensors > 30 && TAS < 15.0 ) {
 			ESP_LOGI(FNAME,"readSensors: %i / 100", (int16_t)(ProcessTimeSensors) );
 		}		
 		esp_task_wdt_reset();
-		if( uxTaskGetStackHighWaterMark( bpid ) < 512 )
+		if( uxTaskGetStackHighWaterMark( bpid ) < 512 && TAS < 15.0)
 			ESP_LOGW(FNAME,"Warning sensor task stack low: %d bytes", uxTaskGetStackHighWaterMark( bpid ) );
 		vTaskDelayUntil(&xLastWakeTime, 100/portTICK_PERIOD_MS);
 	}
@@ -2844,7 +2855,12 @@ void system_startup(void *args){
 			hardwareRevision.set(XCVARIO_21);  // there is MPU6050 gyro and acceleration sensor, at least we got an XCV-21
 		}
 		gflags.haveMPU = true;
-		mpu_target_temp = mpu_temperature.get();
+		// TODO just for flight test. If Magdwick Beta and Mahony Kp are set to zero for gyro drift analysis, diasble MPU temperature control.
+		if ( Beta_Magdwick.get() != 0.0  ||  kp_Mahony.get() != 0.0 ) {
+			mpu_target_temp = mpu_temperature.get();
+		} else {
+			mpu_target_temp = -1;
+		}
 		ESP_LOGI( FNAME,"MPU initialize");
 		MPU.initialize();  // this will initialize the chip and set default configurations
 		MPU.setSampleRate(400);  // in (Hz)
