@@ -1317,9 +1317,6 @@ static void processIMU(void *pvParameters)
 				gyroISUNEDMPU.y = -gyroRPS.y;
 				gyroISUNEDMPU.z = -gyroRPS.x;
 			}			
-			gyroISUNEDMPU.x = -(gyroRPS.z - GroundGyroBias.z);
-			gyroISUNEDMPU.y = -(gyroRPS.y - GroundGyroBias.y);
-			gyroISUNEDMPU.z = -(gyroRPS.x - GroundGyroBias.x);
 			// convert NEDMPU to NEDBODY and apply bias estimation
 			gyroISUNEDBODY.x = C_T * gyroISUNEDMPU.x + STmultSS * gyroISUNEDMPU.y + STmultCS * gyroISUNEDMPU.z; // + BiasQuatGx;
 			gyroISUNEDBODY.y = C_S * gyroISUNEDMPU.y - S_S * gyroISUNEDMPU.z; //+ BiasQuatGy;
@@ -1606,8 +1603,10 @@ static void processIMU(void *pvParameters)
 										BIAS_Init++;
 										// Store bias and gravity in non volatile memory if they have identified for the first time or every 10 times 								
 										if ( BIAS_Init == 1 ||  BIAS_Init % 10 ) {
-											gyro_bias.set(NewGroundGyroBias);
-											gravity.set(GRAVITY);
+											if ( MagdwickBeta != 0.0 || Mahonykp != 0.0 ) {											
+												gyro_bias.set(NewGroundGyroBias);
+												gravity.set(GRAVITY);
+											}
 										}								
 										gyrostable = 0; // reset stability counter when bias/gravity have been obtained
 									}
@@ -1619,9 +1618,11 @@ static void processIMU(void *pvParameters)
 					}
 				}
 				// Adjust progressively ground gyro bias with new ground bias estimate
-				if ( abs(GroundGyroBias.x - NewGroundGyroBias.x) > 0.0001 ) GroundGyroBias.x = 0.99 * GroundGyroBias.x + 0.01 * NewGroundGyroBias.x;
-				if ( abs(GroundGyroBias.y - NewGroundGyroBias.y) > 0.0001 ) GroundGyroBias.y = 0.99 * GroundGyroBias.y + 0.01 * NewGroundGyroBias.y;	
-				if ( abs(GroundGyroBias.z - NewGroundGyroBias.z) > 0.0001 ) GroundGyroBias.z = 0.99 * GroundGyroBias.z + 0.01 * NewGroundGyroBias.z;			
+				if ( MagdwickBeta != 0.0 || Mahonykp != 0.0 ) {
+					if ( abs(GroundGyroBias.x - NewGroundGyroBias.x) > 0.0001 ) GroundGyroBias.x = 0.99 * GroundGyroBias.x + 0.01 * NewGroundGyroBias.x;
+					if ( abs(GroundGyroBias.y - NewGroundGyroBias.y) > 0.0001 ) GroundGyroBias.y = 0.99 * GroundGyroBias.y + 0.01 * NewGroundGyroBias.y;	
+					if ( abs(GroundGyroBias.z - NewGroundGyroBias.z) > 0.0001 ) GroundGyroBias.z = 0.99 * GroundGyroBias.z + 0.01 * NewGroundGyroBias.z;			
+				}			
 				
 				// Only for laboratory calibration of the accelerometers
 				// stream accel data and compute offsts/gains
@@ -2906,17 +2907,24 @@ void system_startup(void *args){
 				currentAccelGain.y = 1.0;
 				currentAccelGain.z = 1.0;
 		}
-		
-		// get last known ground gyro biases
-		GroundGyroBias = gyro_bias.get();
-		// Check value just in case FLASH is not correct to reset to neutral values (OK range is +-0.2 rad/s)
-		if ( abs(GroundGyroBias.x)>0.2 || abs(GroundGyroBias.y)>0.2 || abs(GroundGyroBias.z)>0.2 ) {
-				GroundGyroBias.x = 0.0;
-				GroundGyroBias.y = 0.0;
-				GroundGyroBias.z = 0.0;
+				// TODO just for flight test. If Magdwick Beta and Mahony Kp are set to zero for gyro drift analysis, diasble MPU temperature control.
+		if ( Beta_Magdwick.get() != 0.0  ||  kp_Mahony.get() != 0.0 ) {
+			// get last known ground gyro biases
+			GroundGyroBias = gyro_bias.get();
+			// Check value just in case FLASH is not correct to reset to neutral values (OK range is +-0.2 rad/s)
+			if ( abs(GroundGyroBias.x)>0.2 || abs(GroundGyroBias.y)>0.2 || abs(GroundGyroBias.z)>0.2 ) {
+					GroundGyroBias.x = 0.0;
+					GroundGyroBias.y = 0.0;
+					GroundGyroBias.z = 0.0;
+			}
+			NewGroundGyroBias = GroundGyroBias;
+		} else {
+			GroundGyroBias.x = 0.0;
+			GroundGyroBias.y = 0.0;
+			GroundGyroBias.z = 0.0;
+			NewGroundGyroBias = GroundGyroBias;
+			gyro_bias.set(NewGroundGyroBias);		
 		}
-		NewGroundGyroBias = GroundGyroBias;
-
 		// get installation parameters tilt, sway, distCG
 		DistCGVario = distCG.get();
 		// Check value just in case FLASH is not correct to reset to neutral values (OK range is dist from CG to XCV between 0 an 3 meters and sway and tilt +-0.4 rad)
