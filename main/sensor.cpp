@@ -1427,11 +1427,11 @@ static void processIMU(void *pvParameters)
 				// Update quaternions
 				
 				if ( Mahonykp != 0.0 ) {
-					MahonyUpdateIMU( dtGyr, gyroISUNEDBODY.x, gyroISUNEDBODY.y, gyroISUNEDBODY.z, -gravISUNEDBODY.x, -gravISUNEDBODY.y, -gravISUNEDBODY.z, BiasQuatGx, BiasQuatGy, BiasQuatGz, GravityModule );								
+					MahonyUpdateIMU( dtGyr, gyroCorr.x, gyroCorr.y, gyroCorr.z, -gravISUNEDBODY.x, -gravISUNEDBODY.y, -gravISUNEDBODY.z, BiasQuatGx, BiasQuatGy, BiasQuatGz, GravityModule );								
 				} else {
 					// CurrentBeta = CurrentBeta * 0.995 + MagdwickBeta * 0.005;
 					CurrentBeta = MagdwickBeta;
-					MagdwickUpdateIMU( dtGyr, CurrentBeta, gyroISUNEDBODY.x, gyroISUNEDBODY.y, gyroISUNEDBODY.z, -gravISUNEDBODY.x, -gravISUNEDBODY.y, -gravISUNEDBODY.z, GravityModule );
+					MagdwickUpdateIMU( dtGyr, CurrentBeta, gyroCorr.x, gyroCorr.y, gyroCorr.z, -gravISUNEDBODY.x, -gravISUNEDBODY.y, -gravISUNEDBODY.z, GravityModule );
 				}	
 				// compute & filter GravityModule error
 				GravityModuleErr = abs( GravityModule - GRAVITY );
@@ -1473,13 +1473,13 @@ static void processIMU(void *pvParameters)
 					#define GyroCutoffPeriodMagd 700 //  very long term average ~ 700 seconds
 					if ( (TAS > 15.0) && (abs(Roll) < RollLimitMagd)  && (abs(Pitch) < PitchLimitMagd) ) {
 						// compute Gx - d(roll)/dt and Gy - d(pitch)/dt long term average.
-						GyroBiasx.LPupdate( GyroCutoffPeriodMagd, dtGyr, gyroISUNEDBODY.x - RollAHRS.ABprim() );
-						GyroBiasy.LPupdate( GyroCutoffPeriodMagd, dtGyr, gyroISUNEDBODY.y - PitchAHRS.ABprim() );		
+						GyroBiasx.LPupdate( GyroCutoffPeriodMagd, dtGyr, gyroCorr.x - RollAHRS.ABprim() );
+						GyroBiasy.LPupdate( GyroCutoffPeriodMagd, dtGyr, gyroCorr.y - PitchAHRS.ABprim() );		
 						// compute pseudo heading from GNSS
 						GnssTrack = atan2( GnssVy.ABfilt(), GnssVx.ABfilt() );
 						PseudoHeadingPrim = ( GnssVy.ABprim() * cos(GnssTrack) - GnssVx.ABprim() * sin(GnssTrack) ) / TAS;
 						// compute Gz - pseudo heading variation long term average.		
-						GyroBiasz.LPupdate( GyroCutoffPeriodMagd, dtGyr, gyroISUNEDBODY.z - PseudoHeadingPrim );
+						GyroBiasz.LPupdate( GyroCutoffPeriodMagd, dtGyr, gyroCorr.z - PseudoHeadingPrim );
 						// update gyros biases variables
 						BiasQuatGx = GyroBiasx.LowPass2();
 						BiasQuatGy = GyroBiasy.LowPass2();
