@@ -568,9 +568,9 @@ void Protocols::parseNMEA( const char *str ){
 				&RTKdummyd,&RTKmode,&RTKage,&RTKratio,&RTKcs);
 		float RTKhoursminutes;
 		float RTKhours;
-		float RTKhundredthseconds = modf(_RTKtime/100.0, &RTKhoursminutes);	
-		float RTKminutes = modf(RTKhoursminutes/100.0, &RTKhours);
-		RTKtime = (RTKhours*3600) + (RTKminutes*60) + RTKhundredthseconds*100.0;
+		float RTKseconds = modf(_RTKtime/100.0, &RTKhoursminutes) * 100.0;	
+		float RTKminutes = modf(RTKhoursminutes/100.0, &RTKhours) * 100.0;
+		RTKtime = (RTKhours*3600) + (RTKminutes*60) + RTKseconds;
 		int RTK_cs=calcNMEACheckSum( str );
 		if( (RTK_cs != RTKcs) || (RTKtime < 0) || (RTKtime > 86400) ){
 			RTKtime = -1.0; // if checksum error or bad time value, set time to -1	
@@ -592,9 +592,9 @@ void Protocols::parseNMEA( const char *str ){
 		sscanf( str,"$GNRMV,%lf,%f,%f,%f,%f,%f*%x",&_Allytime,&AllyvelE,&AllyvelN,&AllyvelU,&Allyvel3D,&Allyvel2D,&Allycs);
 		float Allyhoursminutes;
 		float Allyhours;
-		float Allyhundredthseconds = modf(_Allytime/100.0, &Allyhoursminutes);	
-		float Allyminutes = modf(Allyhoursminutes/100.0, &Allyhours);
-		Allytime = (Allyhours*3600) + (Allyminutes*60) + Allyhundredthseconds*100.0;		
+		float Allyseconds = modf(_Allytime/100.0, &Allyhoursminutes) * 100.0;	
+		float Allyminutes = modf(Allyhoursminutes/100.0, &Allyhours) * 100.0;
+		Allytime = (Allyhours*3600) + (Allyminutes*60) + Allyseconds;		
 		int Ally_cs=calcNMEACheckSum( str );
 		if( (Ally_cs != Allycs) || (Allytime < 0) || (Allytime > 86400) ){
 			Allytime = -1.0; // if checksum error or bad time value, set time to -1	
