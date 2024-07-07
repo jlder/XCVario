@@ -188,7 +188,6 @@ extern float AllyvelE;
 extern float AllyvelU;
 extern float Allyvel3D;
 extern float Allyvel2D;
-extern int Allycs;
 // MOD#5 add Allystar TAU1201 velocity
 
 

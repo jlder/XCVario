@@ -563,11 +563,12 @@ void Protocols::parseNMEA( const char *str ){
 		//$PSTI,030,hhmmss.sss,A,dddmm.mmmmmmm,a,dddmm.mmmmmmm,a,x.x,x.x,x.x,x.x,ddmmyy,a.x.x,x.x*hh<CR><LF>
 		//ex: $PSTI,030,074539.250,A,4230.0154652,N,00203.0538122,E,1669.869,-0.00,0.01,0.01,070724,F,0.000,1.300*04
 		//ex: $PSTI,030,033010.000,A,2447.0895508,N,12100.5234656,E,94.615,0.00,-0.01,0.04,111219,R,0.999,3.724*1A<CR><LF>
-		sscanf( str,"$PSTI,030,%lf,%c,%f,%c,%f,%c,%f,%f,%f,%f,%d,%c,%f,%f*%x",&RTKtime,&RTKdummyc,&RTKdummyf,&RTKdummyc,&RTKdummyf,&RTKdummyc,&RTKdummyf,&RTKEvel,&RTKNvel,&RTKUvel,
+		double _RTKtime;
+		sscanf( str,"$PSTI,030,%lf,%c,%f,%c,%f,%c,%f,%f,%f,%f,%d,%c,%f,%f*%x",&_RTKtime,&RTKdummyc,&RTKdummyf,&RTKdummyc,&RTKdummyf,&RTKdummyc,&RTKdummyf,&RTKEvel,&RTKNvel,&RTKUvel,
 				&RTKdummyd,&RTKmode,&RTKage,&RTKratio,&RTKcs);
 		float RTKhoursminutes;
 		float RTKhours;
-		float RTKhundredthseconds = modf(RTKtime/100.0, &RTKhoursminutes);	
+		float RTKhundredthseconds = modf(_RTKtime/100.0, &RTKhoursminutes);	
 		float RTKminutes = modf(RTKhoursminutes/100.0, &RTKhours);
 		RTKtime = (RTKhours*3600) + (RTKminutes*60) + RTKhundredthseconds*100.0;
 		int RTK_cs=calcNMEACheckSum( str );
@@ -586,10 +587,12 @@ void Protocols::parseNMEA( const char *str ){
 		// Structure:
 		// $GNRMV,s.sss,x.xxx,x.xxx,x.xxx,x.xxx,x.xxx*hh<CR><LF>
 		//ex: $GNRMV,124951.800,-0.000,0.000,0.000,0.000,0.000*5F
-		sscanf( str,"$GNRMV,%lf,%f,%f,%f,%f,%f*%x",&Allytime,&AllyvelE,&AllyvelN,&AllyvelU,&Allyvel3D,&Allyvel2D,&Allycs);
+		double _Allytime;
+		int Allycs;
+		sscanf( str,"$GNRMV,%lf,%f,%f,%f,%f,%f*%x",&_Allytime,&AllyvelE,&AllyvelN,&AllyvelU,&Allyvel3D,&Allyvel2D,&Allycs);
 		float Allyhoursminutes;
 		float Allyhours;
-		float Allyhundredthseconds = modf(Allytime/100.0, &Allyhoursminutes);	
+		float Allyhundredthseconds = modf(_Allytime/100.0, &Allyhoursminutes);	
 		float Allyminutes = modf(Allyhoursminutes/100.0, &Allyhours);
 		Allytime = (Allyhours*3600) + (Allyminutes*60) + Allyhundredthseconds*100.0;		
 		int Ally_cs=calcNMEACheckSum( str );

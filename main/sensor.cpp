@@ -228,16 +228,6 @@ static int32_t gyrobiastemptimer = 0;
 static float integralFBx = 0.0;
 static float integralFBy = 0.0;
 static float integralFBz = 0.0;
-static float BankFilt = 0.0;
-static float GxPrim = 0.0;
-static float GyPrim = 0.0;
-static float GzPrim = 0.0;
-static float GxF = 0.0;
-static float GyF = 0.0;
-static float GzF = 0.0;
-static float BiasGx = 0.0;
-static float BiasGy =0.0;
-static float BiasGz = 0.0;
 static float Pitch = 0.0;
 static float Roll = 0.0;
 static float Yaw = 0.0;
@@ -248,7 +238,6 @@ static float q3 = 0.0;
 static float BiasQuatGx = 0.0;
 static float BiasQuatGy = 0.0;
 static float BiasQuatGz = 0.0;
-static float Kgain = 1.0;
 static float cosRoll = 1.0;
 static float sinRoll = 0.0;
 static float cosPitch = 1.0;
@@ -263,15 +252,9 @@ static float Wb = 0.0;
 static float UiPrim = 0.0;
 static float ViPrim = 0.0;
 static float WiPrim = 0.0;
-static float deltaUiPrimS = 0.0;
 static float UiPrimPrimS = 0.0;
-static float UiPrimSF = 0.0;
-static float deltaViPrimS = 0.0;
 static float ViPrimPrimS = 0.0;
-static float ViPrimSF = 0.0;
-static float deltaWiPrimS = 0.0;
 static float WiPrimPrimS = 0.0;
-static float WiPrimSF = 0.0;
 static float TASbi = 0.0;
 static float TASbiSquare = 0.0;
 static float AoA = 0.0;
@@ -322,13 +305,8 @@ static int64_t prevdynPTime;
 static float dtdynP = PERIOD10HZ;
 static float dynP=0.0; // raw dynamic pressure
 static float PrevdynP=0.0;
-static float ISATemp = 15.0;
-static float ISATempBias = 0.0;
-static float HasISATempBias = false;
 static float MPUtempcel; // MPU chip temperature
 static float GNSSRouteraw;
-static float GNSSRoutePrim = 0.0;
-static float GNSSRoute = 0.0;
 static float deltaUbS = 0.0;
 static float UbPrimS = 0.0;
 static float UbFS = 0.0;
@@ -380,7 +358,6 @@ float AllyvelE;
 float AllyvelU;
 float Allyvel3D = 0.0;
 float Allyvel2D;
-int Allycs;
 // MOD#5 add Allystar TAU1201 velocity
 
 bool LABtest = false; // LAB switch to limit to one ground bias evaluation
@@ -392,7 +369,6 @@ static float GRAVITY = 9.807;
 static float dynamicP; // filtered dynamic pressure
 static float baroP=0; // barometric pressure
 static float temperature=15.0;
-static float delta_temperature=0.0;
 static float XCVTemp=15.0;//External temperature for MPU temp control
 
 #define RhoSLISA 1.225
@@ -403,9 +379,6 @@ static float Rho;
 // static float CAS = 0.0;
 static float Rhocorr = RhoSLISA;
 static float TAS = 0.0;
-static float ALTraw;
-static float deltaALT;
-static float ALTPrim = 0.0;
 static float Vzbaro = 0.0;
 // static float ALT = 0.0;
 // static float EnergyFilt = 0.0;
@@ -432,14 +405,7 @@ static float Vybi = 0.0;
 static float Vzbi = 0.0;
 static float ALTbi = 0.0;
 
-// static float TotalEnergy = 0.0;
-static float TotalEnergyAvg = 0.0;
-#define NVztot 7.0 // CAS alpha/beta filter coeff
-#define alphaVztot (2.0 * (2.0 * NVztot - 1.0) / NVztot / (NVztot + 1.0))
-#define betaVztot (6.0 / NVztot / (NVztot + 1.0) / PERIOD10HZ)
-#define NVelAcc 7.0 // pneumatic velocity variation alpha/beta filter coeff
-#define alphaVelAcc (2.0 * (2.0 * NVelAcc - 1.0) / NVelAcc / (NVelAcc + 1.0))
-#define betaVelAcc (6.0 / NVelAcc / (NVelAcc + 1.0) / PERIOD10HZ)
+
 
 static float battery=0.0;
 
@@ -1011,10 +977,6 @@ float halfey = 0.0;
 float halfez = 0.0;
 float qa, qb, qc;
 float dynKi = Kp/10;
-float deltaGx;
-float deltaGy;
-float deltaGz;
-float GyrxzAmplitudeKdyn = 0.0;
 
 	// Estimate direction of gravity from IMU quaternion
 	halfvx = q1 * q3 - q0 * q2;
@@ -1065,55 +1027,7 @@ float GyrxzAmplitudeKdyn = 0.0;
 	if ( AccelGravModule != 0.0) {
 		// gyro should be corrected using error between vertical from IMU quaternion and observered vertical from accels.
 		// gyro correction is performed with PI feedback using Kp and Ki (proportional & integral) coefficients.
-		// these coefficients are adjusted dynamicaly (dynKp and dynKi) in function of gx and gz 
-/*
-		#define gxzlimit 0.3 // 0.3 rad/s threshold
-		GyrxzAmplitudeKdyn = abs(gyroCorr.x / 3.0) + abs(gyroCorr.z);
-		if  ( GyrxzAmplitudeKdyn < gxzlimit ) {
-			dynKp = 0.5 * dynKp + 0.5 * Kp * pow(10, GyrxzAmplitudeKdyn / gxzlimit);
-		} else {
-			dynKp = 0.5 * dynKp + 0.5 * 10 * Kp;
-		}
-		dynKi = dynKp * 0.1;
-		
-		// gyro should be corrected using error between vertical from IMU quaternion and observered vertical from accels.
-		// Accels are good proxy for vertical :
-		// - when the flight mechanic forces apply, this is true when the module of acceleration is close to local gravity (GRAVITY)
-		// - when on the ground, additional condition on gyro stability is required to insure accels can be used to observe vertical. 
-		// gyro correction is performed with PI feedback using Kp and Ki (proportional & integral) coefficients.
-		// these coefficients are adjusted dynamicaly (dynKp and dynKi) in function acceleration module proximity to GRAVITY
-		// when error is lower than a threshold, maximum Kp and Ki coefficients are used
-		// when error is higher than threshold, reduced coefficients are used.
-		// A very low pass filter is used to compute an average Accel grav Module which is used to adapt Kgain to allow some IMU corrections
-		// even in noisy environments
-		//
-		// acceleration module filtered with asymetrical low pass filter (fast rise and slower decay) 
-		if ( AccelGravModuleFilt < abs(AccelGravModule - GRAVITY) ) { // faster rise
-			#define fcGravRis 3.0 // 3Hz low pass to filter rising gravity error for testing stability criteria during decays
-			#define fcGravRis1 ( fcGravRis /( fcGravRis + PERIOD40HZ ))
-			#define fcGravRis2 ( 1.0 - fcGravRis1 )
-			AccelGravModuleFilt = fcGravRis1 * AccelGravModuleFilt + fcGravRis2 * abs(AccelGravModule - GRAVITY);			
-		} else { // slower decay
-			#define fcGravDec 1.0 // 1Hz low pass to filter decaying gravity error for testing stability criteria during decays
-			#define fcGravDec1 ( fcGravDec /( fcGravDec + PERIOD40HZ ))
-			#define fcGravDec2 ( 1.0 - fcGravDec1 )
-			AccelGravModuleFilt = fcGravDec1 * AccelGravModuleFilt + fcGravDec2 * abs(AccelGravModule - GRAVITY);
-		}
-		
-		GravityModuleErr = Nlimit - AccelGravModuleFilt;		
-		
-		if  ( GravityModuleErr > 0.0 ) {
-			Kgain = 1.0;
-		} else {
-			// if GravityModuleErr negative, low confidence in accels
-			// limit error magnitude
-			if ( GravityModuleErr < -2.0 ) GravityModuleErr = -2.0;
-			// compute dynamic gain function of error magnitude
-			Kgain = pow( 10.0, GravityModuleErr );
-		}
-		dynKp = Kgain * Kp;
-		dynKi = Kgain * Ki;
-		*/
+
 		dynKp = Mahonykp; 
 		dynKi = Mahonykp/10;
 		
@@ -1233,8 +1147,6 @@ static void processIMU(void *pvParameters)
 	float RollInit = 0.0;
 	float YawInit = 0.0;
 	int16_t AttitudeInit = 0;
-	
-	int Alarm = 0;
 	
 	// initialize prevgyrotime
 	prevgyroTime = esp_timer_get_time()/1000.0;
@@ -1872,18 +1784,8 @@ void readSensors(void *pvParameters){
 	float AoARaw = 0.0;
 	float WingLoad = 40.0;
 	float AccelzFiltAoA = 0.0;
-	float deltaAoB;
-	float AoBPrim = 0.0;
-	float AoBF = 0.0;
 	float Bias_AoB = 0.0;	
-	
-	float deltaEnergy;
-	float EnergyPrim = 0.0;
-	float EnergyFilt = 0.0;
-	
-	int16_t FirsTimeSensor = 2;
-	
-	float deltaGNSSRoute;	
+
 
 	// Wind speed variables
 	float Vgx = 0.0;
