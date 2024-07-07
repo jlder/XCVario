@@ -441,8 +441,8 @@ SetupNG<float>          mpu_temperature("MPUTEMP", 45.0, true, SYNC_FROM_MASTER,
 #endif	
 
 #ifdef VENTUS3
-SetupNG<mpud::float_axes_t>	accl_bias("ACCL_BIAS", load_float_axes_t(1.03, -0.06, -0.524) );
-SetupNG<mpud::float_axes_t>	accl_gain("ACCL_GAIN", load_float_axes_t(0.98, 0.9933, 0.9947) );
+SetupNG<mpud::float_axes_t>	accl_bias("ACCL_BIAS", load_float_axes_t(1.194, -0.052, -0.553) );
+SetupNG<mpud::float_axes_t>	accl_gain("ACCL_GAIN", load_float_axes_t(0.9781, 0.993, 0.9942) );
 SetupNG<float>			tilt("XCV_TILT", -0.063);
 SetupNG<float>			sway("XCV_SWAY", 0.024);
 SetupNG<float>			distCG("DIST_CG_XCVARIO", 1.4);
