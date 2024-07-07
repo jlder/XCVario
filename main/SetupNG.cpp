@@ -437,6 +437,7 @@ SetupNG<mpud::float_axes_t>	accl_gain("ACCL_GAIN", load_float_axes_t(0.968, 0.98
 SetupNG<float>			tilt("XCV_TILT", -0.223);
 SetupNG<float>			sway("XCV_SWAY", 0.024);
 SetupNG<float>			distCG("DIST_CG_XCVARIO", 1.42);
+SetupNG<float>          mpu_temperature("MPUTEMP", 45.0, true, SYNC_FROM_MASTER, PERSISTENT, chg_mpu_target );    // default for AHRS chip temperature (XCV 2023)
 #endif	
 
 #ifdef VENTUS3
@@ -445,13 +446,14 @@ SetupNG<mpud::float_axes_t>	accl_gain("ACCL_GAIN", load_float_axes_t(0.98, 0.993
 SetupNG<float>			tilt("XCV_TILT", -0.063);
 SetupNG<float>			sway("XCV_SWAY", 0.024);
 SetupNG<float>			distCG("DIST_CG_XCVARIO", 1.4);
+SetupNG<float>          mpu_temperature("MPUTEMP", 50.0, true, SYNC_FROM_MASTER, PERSISTENT, chg_mpu_target );    // default for AHRS chip temperature (XCV 2023)
 #endif
 
 SetupNG<mpud::float_axes_t>	gyro_bias("GYRO_BIAS", load_float_axes_t( 0.0, 0.0, 0.0) );
 SetupNG<mpud::float_axes_t>	gyro_gain("GYRO_GAIN", load_float_axes_t( 0.0, 0.0, 0.0) );
 
 SetupNG<float>			gravity("LOCAL_GRAVITY", 9.804);
-SetupNG<float>          mpu_temperature("MPUTEMP", 45.0, true, SYNC_FROM_MASTER, PERSISTENT, chg_mpu_target );    // default for AHRS chip temperature (XCV 2023)
+
 SetupNG<float> 			te_filt( "TE FILTER",0.5, true, SYNC_FROM_MASTER, PERSISTENT, change_tefilter );
 SetupNG<float>			te_opt( "TE OPTION",2, true, SYNC_FROM_MASTER, PERSISTENT, change_teopt );
 SetupNG<float> 			velbi_period( "VELBI_PERIOD",8.0, true, SYNC_FROM_MASTER, PERSISTENT, change_bifilt );

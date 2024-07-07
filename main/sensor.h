@@ -25,8 +25,8 @@
 //
 //!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 //
-#define LS6
-//#define VENTUS3
+//#define LS6
+#define VENTUS3
 
 
 #ifdef LS6
@@ -169,7 +169,7 @@ extern float UiPgain;
 extern float WiPgain;
 extern float opt_TE;
 
-extern float RTKtime;
+extern double RTKtime;
 extern float RTKEvel;
 extern float RTKNvel;
 extern float RTKUvel;
@@ -182,7 +182,7 @@ extern float RTKUproj;
 extern float RTKheading;
 
 // MOD#5 add Allystar TAU1201 velocity
-extern float Allytime;
+extern double Allytime;
 extern float AllyvelN;
 extern float AllyvelE;
 extern float AllyvelU;
