@@ -561,12 +561,20 @@ void Protocols::parseNMEA( const char *str ){
 		// Time, date, position, course and speed data provided by a GNSS navigation receiver.
 		//Structure:
 		//$PSTI,030,hhmmss.sss,A,dddmm.mmmmmmm,a,dddmm.mmmmmmm,a,x.x,x.x,x.x,x.x,ddmmyy,a.x.x,x.x*hh<CR><LF>
+		//ex: $PSTI,030,074539.250,A,4230.0154652,N,00203.0538122,E,1669.869,-0.00,0.01,0.01,070724,F,0.000,1.300*04
 		//ex: $PSTI,030,033010.000,A,2447.0895508,N,12100.5234656,E,94.615,0.00,-0.01,0.04,111219,R,0.999,3.724*1A<CR><LF>
-		sscanf( str,"$PSTI,030,%f,%c,%f,%c,%f,%c,%f,%f,%f,%f,%d,%c,%f,%f*%x",&RTKtime,&RTKdummyc,&RTKdummyf,&RTKdummyc,&RTKdummyf,&RTKdummyc,&RTKdummyf,&RTKEvel,&RTKNvel,&RTKUvel,
+		double _RTKtime;
+		sscanf( str,"$PSTI,030,%lf,%c,%f,%c,%f,%c,%f,%f,%f,%f,%d,%c,%f,%f*%x",&_RTKtime,&RTKdummyc,&RTKdummyf,&RTKdummyc,&RTKdummyf,&RTKdummyc,&RTKdummyf,&RTKEvel,&RTKNvel,&RTKUvel,
 				&RTKdummyd,&RTKmode,&RTKage,&RTKratio,&RTKcs);
-		int32_t RTKhours = (int32_t)(RTKtime/10000);
-		int32_t RTKminutes = (int32_t)(RTKtime/100-RTKhours*100);
-		RTKtime = (float)(RTKhours*3600) + (float)(RTKminutes*60) + RTKtime - RTKhours*10000 - RTKminutes*100;				
+		float RTKhoursminutes;
+		float RTKhours;
+		float RTKseconds = modf(_RTKtime/100.0, &RTKhoursminutes) * 100.0;	
+		float RTKminutes = modf(RTKhoursminutes/100.0, &RTKhours) * 100.0;
+		RTKtime = (RTKhours*3600) + (RTKminutes*60) + RTKseconds;
+		int RTK_cs=calcNMEACheckSum( str );
+		if( (RTK_cs != RTKcs) || (RTKtime < 0) || (RTKtime > 86400) ){
+			RTKtime = -1.0; // if checksum error or bad time value, set time to -1	
+		}		
 	}else if( !strncmp( str, "$PSTI,032", 9 ) ) {
 		// STI,032– RTK Baseline Data
 		// Time, date, status and baseline related data provided by a GNSS navigation receiver.
@@ -579,13 +587,17 @@ void Protocols::parseNMEA( const char *str ){
 		// Structure:
 		// $GNRMV,s.sss,x.xxx,x.xxx,x.xxx,x.xxx,x.xxx*hh<CR><LF>
 		//ex: $GNRMV,124951.800,-0.000,0.000,0.000,0.000,0.000*5F
-		sscanf( str,"$GNRMV,%f,%f,%f,%f,%f,%f*%x",&Allytime,&AllyvelE,&AllyvelN,&AllyvelU,&Allyvel3D,&Allyvel2D,&Allycs);
-		int32_t Allyhours = (int32_t)(Allytime/10000);
-		int32_t Allyminutes = (int32_t)(Allytime/100-Allyhours*100);
-		Allytime = (float)(Allyhours*3600) + (float)(Allyminutes*60) + Allytime - Allyhours*10000 - Allyminutes*100;		
-		int calc_cs=calcNMEACheckSum( str );
-		if( calc_cs != Allycs ){
-			Allytime = -1.0; // if checksum error, set time to -1	
+		double _Allytime;
+		int Allycs;
+		sscanf( str,"$GNRMV,%lf,%f,%f,%f,%f,%f*%x",&_Allytime,&AllyvelE,&AllyvelN,&AllyvelU,&Allyvel3D,&Allyvel2D,&Allycs);
+		float Allyhoursminutes;
+		float Allyhours;
+		float Allyseconds = modf(_Allytime/100.0, &Allyhoursminutes) * 100.0;	
+		float Allyminutes = modf(Allyhoursminutes/100.0, &Allyhours) * 100.0;
+		Allytime = (Allyhours*3600) + (Allyminutes*60) + Allyseconds;		
+		int Ally_cs=calcNMEACheckSum( str );
+		if( (Ally_cs != Allycs) || (Allytime < 0) || (Allytime > 86400) ){
+			Allytime = -1.0; // if checksum error or bad time value, set time to -1	
 		}		
 		// MOD#5 add Allystar TAU1201 end
 	}

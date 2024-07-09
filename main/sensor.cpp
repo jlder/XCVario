@@ -228,16 +228,6 @@ static int32_t gyrobiastemptimer = 0;
 static float integralFBx = 0.0;
 static float integralFBy = 0.0;
 static float integralFBz = 0.0;
-static float BankFilt = 0.0;
-static float GxPrim = 0.0;
-static float GyPrim = 0.0;
-static float GzPrim = 0.0;
-static float GxF = 0.0;
-static float GyF = 0.0;
-static float GzF = 0.0;
-static float BiasGx = 0.0;
-static float BiasGy =0.0;
-static float BiasGz = 0.0;
 static float Pitch = 0.0;
 static float Roll = 0.0;
 static float Yaw = 0.0;
@@ -248,7 +238,6 @@ static float q3 = 0.0;
 static float BiasQuatGx = 0.0;
 static float BiasQuatGy = 0.0;
 static float BiasQuatGz = 0.0;
-static float Kgain = 1.0;
 static float cosRoll = 1.0;
 static float sinRoll = 0.0;
 static float cosPitch = 1.0;
@@ -263,15 +252,9 @@ static float Wb = 0.0;
 static float UiPrim = 0.0;
 static float ViPrim = 0.0;
 static float WiPrim = 0.0;
-static float deltaUiPrimS = 0.0;
 static float UiPrimPrimS = 0.0;
-static float UiPrimSF = 0.0;
-static float deltaViPrimS = 0.0;
 static float ViPrimPrimS = 0.0;
-static float ViPrimSF = 0.0;
-static float deltaWiPrimS = 0.0;
 static float WiPrimPrimS = 0.0;
-static float WiPrimSF = 0.0;
 static float TASbi = 0.0;
 static float TASbiSquare = 0.0;
 static float AoA = 0.0;
@@ -322,13 +305,8 @@ static int64_t prevdynPTime;
 static float dtdynP = PERIOD10HZ;
 static float dynP=0.0; // raw dynamic pressure
 static float PrevdynP=0.0;
-static float ISATemp = 15.0;
-static float ISATempBias = 0.0;
-static float HasISATempBias = false;
 static float MPUtempcel; // MPU chip temperature
 static float GNSSRouteraw;
-static float GNSSRoutePrim = 0.0;
-static float GNSSRoute = 0.0;
 static float deltaUbS = 0.0;
 static float UbPrimS = 0.0;
 static float UbFS = 0.0;
@@ -356,8 +334,8 @@ bool CALstream = false; // accel calibration stream
 bool TSTstream = false; // Test stream
 
 // MOD#2 add RTK begin
-float RTKtime;
-float prevRTKtime;
+double RTKtime;
+double prevRTKtime;
 float dtRTKtime = 0.125;
 float RTKEvel = 0.0;
 float RTKNvel = 0.0;
@@ -373,14 +351,13 @@ float RTKheading = 0.0;
 
 // MOD#5 add Allystar TAU1201 velocity
 float dtAllytime = 0.1;
-float prevAllytime = 0.1;
-float Allytime = 0.0;
+double prevAllytime = 0.1;
+double Allytime = 0.0;
 float AllyvelN;
 float AllyvelE;
 float AllyvelU;
 float Allyvel3D = 0.0;
 float Allyvel2D;
-int Allycs;
 // MOD#5 add Allystar TAU1201 velocity
 
 bool LABtest = false; // LAB switch to limit to one ground bias evaluation
@@ -392,7 +369,6 @@ static float GRAVITY = 9.807;
 static float dynamicP; // filtered dynamic pressure
 static float baroP=0; // barometric pressure
 static float temperature=15.0;
-static float delta_temperature=0.0;
 static float XCVTemp=15.0;//External temperature for MPU temp control
 
 #define RhoSLISA 1.225
@@ -403,9 +379,6 @@ static float Rho;
 // static float CAS = 0.0;
 static float Rhocorr = RhoSLISA;
 static float TAS = 0.0;
-static float ALTraw;
-static float deltaALT;
-static float ALTPrim = 0.0;
 static float Vzbaro = 0.0;
 // static float ALT = 0.0;
 // static float EnergyFilt = 0.0;
@@ -432,14 +405,7 @@ static float Vybi = 0.0;
 static float Vzbi = 0.0;
 static float ALTbi = 0.0;
 
-// static float TotalEnergy = 0.0;
-static float TotalEnergyAvg = 0.0;
-#define NVztot 7.0 // CAS alpha/beta filter coeff
-#define alphaVztot (2.0 * (2.0 * NVztot - 1.0) / NVztot / (NVztot + 1.0))
-#define betaVztot (6.0 / NVztot / (NVztot + 1.0) / PERIOD10HZ)
-#define NVelAcc 7.0 // pneumatic velocity variation alpha/beta filter coeff
-#define alphaVelAcc (2.0 * (2.0 * NVelAcc - 1.0) / NVelAcc / (NVelAcc + 1.0))
-#define betaVelAcc (6.0 / NVelAcc / (NVelAcc + 1.0) / PERIOD10HZ)
+
 
 static float battery=0.0;
 
@@ -494,6 +460,8 @@ extern UbloxGnssDecoder s2UbloxGnssDecoder;
 // alpha beta filter class
 class AlphaBeta {
 private:
+	float dtMax = 0.0;
+	float dtMin = 0.0;
 	float delta = 0.0;
 	float prim = 0.0;
 	float filt = 0.0;
@@ -511,19 +479,21 @@ private:
 	int zicket = 0;
 
 public:
-	void ABinit( int16_t N ) {
-		ABinit( N, 0.0, 0.0, 0.0, 0.0, 0.0 );
+	void ABinit( int16_t N, float dtTypical ) {
+		ABinit( N, dtTypical, 0.0, 0.0, 0.0, 0.0, 0.0 );
 	}
-	void ABinit( int16_t N, float _Threshold ) {
-		ABinit( N, _Threshold, 0.0, 0.0, 0.0, 0.0 );
+	void ABinit( int16_t N, float dtTypical, float _Threshold ) {
+		ABinit( N, dtTypical, _Threshold, 0.0, 0.0, 0.0, 0.0 );
 	}
-	void ABinit( int16_t N, float _Threshold, float _filtMin, float _filtMax ) {
-		ABinit( N, _Threshold, _filtMin, _filtMax, 0.0, 0.0 );
+	void ABinit( int16_t N, float dtTypical, float _Threshold, float _filtMin, float _filtMax ) {
+		ABinit( N, dtTypical, _Threshold, _filtMin, _filtMax, 0.0, 0.0 );
 	}
-	void ABinit( int16_t N, float _Threshold, float _filtMin, float _filtMax, float _primMin, float _primMax ) {
+	void ABinit( int16_t N, float dtTypical, float _Threshold, float _filtMin, float _filtMax, float _primMin, float _primMax ) {
 		if ( N != 0.0  ) {
 			alpha =  (2.0 * (2.0 * N - 1.0) / N / (N + 1.0));
 			beta = (6.0 / N / (N + 1.0));
+			dtMax = dtTypical * 4.0;
+			dtMin = dtTypical / 4.0;
 			firstpass = true;
 		}
 		Threshold = _Threshold;
@@ -535,7 +505,8 @@ public:
 	
 	void ABupdate(float dt, float RawData ) {
 		#define MaxZicket 2 // maximum number of concecuitives zickets to let the filter track the signal. If zicket is higher a step change in signal is suspected
-		if ( dt != 0.0 ) {
+		// process sample if dt above dtMin and below dtMax (dtMin typicaly average dt / 4 and dtMax typicaly 4 x average dt)
+		if ( dt > dtMin && dt < dtMax  ) {
 			if ( firstpass ) { // initialize filter variables when first called
 				filt = RawData;
 				_filt = RawData;
@@ -1006,10 +977,6 @@ float halfey = 0.0;
 float halfez = 0.0;
 float qa, qb, qc;
 float dynKi = Kp/10;
-float deltaGx;
-float deltaGy;
-float deltaGz;
-float GyrxzAmplitudeKdyn = 0.0;
 
 	// Estimate direction of gravity from IMU quaternion
 	halfvx = q1 * q3 - q0 * q2;
@@ -1060,55 +1027,7 @@ float GyrxzAmplitudeKdyn = 0.0;
 	if ( AccelGravModule != 0.0) {
 		// gyro should be corrected using error between vertical from IMU quaternion and observered vertical from accels.
 		// gyro correction is performed with PI feedback using Kp and Ki (proportional & integral) coefficients.
-		// these coefficients are adjusted dynamicaly (dynKp and dynKi) in function of gx and gz 
-/*
-		#define gxzlimit 0.3 // 0.3 rad/s threshold
-		GyrxzAmplitudeKdyn = abs(gyroCorr.x / 3.0) + abs(gyroCorr.z);
-		if  ( GyrxzAmplitudeKdyn < gxzlimit ) {
-			dynKp = 0.5 * dynKp + 0.5 * Kp * pow(10, GyrxzAmplitudeKdyn / gxzlimit);
-		} else {
-			dynKp = 0.5 * dynKp + 0.5 * 10 * Kp;
-		}
-		dynKi = dynKp * 0.1;
-		
-		// gyro should be corrected using error between vertical from IMU quaternion and observered vertical from accels.
-		// Accels are good proxy for vertical :
-		// - when the flight mechanic forces apply, this is true when the module of acceleration is close to local gravity (GRAVITY)
-		// - when on the ground, additional condition on gyro stability is required to insure accels can be used to observe vertical. 
-		// gyro correction is performed with PI feedback using Kp and Ki (proportional & integral) coefficients.
-		// these coefficients are adjusted dynamicaly (dynKp and dynKi) in function acceleration module proximity to GRAVITY
-		// when error is lower than a threshold, maximum Kp and Ki coefficients are used
-		// when error is higher than threshold, reduced coefficients are used.
-		// A very low pass filter is used to compute an average Accel grav Module which is used to adapt Kgain to allow some IMU corrections
-		// even in noisy environments
-		//
-		// acceleration module filtered with asymetrical low pass filter (fast rise and slower decay) 
-		if ( AccelGravModuleFilt < abs(AccelGravModule - GRAVITY) ) { // faster rise
-			#define fcGravRis 3.0 // 3Hz low pass to filter rising gravity error for testing stability criteria during decays
-			#define fcGravRis1 ( fcGravRis /( fcGravRis + PERIOD40HZ ))
-			#define fcGravRis2 ( 1.0 - fcGravRis1 )
-			AccelGravModuleFilt = fcGravRis1 * AccelGravModuleFilt + fcGravRis2 * abs(AccelGravModule - GRAVITY);			
-		} else { // slower decay
-			#define fcGravDec 1.0 // 1Hz low pass to filter decaying gravity error for testing stability criteria during decays
-			#define fcGravDec1 ( fcGravDec /( fcGravDec + PERIOD40HZ ))
-			#define fcGravDec2 ( 1.0 - fcGravDec1 )
-			AccelGravModuleFilt = fcGravDec1 * AccelGravModuleFilt + fcGravDec2 * abs(AccelGravModule - GRAVITY);
-		}
-		
-		GravityModuleErr = Nlimit - AccelGravModuleFilt;		
-		
-		if  ( GravityModuleErr > 0.0 ) {
-			Kgain = 1.0;
-		} else {
-			// if GravityModuleErr negative, low confidence in accels
-			// limit error magnitude
-			if ( GravityModuleErr < -2.0 ) GravityModuleErr = -2.0;
-			// compute dynamic gain function of error magnitude
-			Kgain = pow( 10.0, GravityModuleErr );
-		}
-		dynKp = Kgain * Kp;
-		dynKi = Kgain * Ki;
-		*/
+
 		dynKp = Mahonykp; 
 		dynKi = Mahonykp/10;
 		
@@ -1229,8 +1148,6 @@ static void processIMU(void *pvParameters)
 	float YawInit = 0.0;
 	int16_t AttitudeInit = 0;
 	
-	int Alarm = 0;
-	
 	// initialize prevgyrotime
 	prevgyroTime = esp_timer_get_time()/1000.0;
 	PrevgyroRPS.x = 0.0;
@@ -1242,43 +1159,48 @@ static void processIMU(void *pvParameters)
 	
 	// alpha beta gyros parameters
 	#define NGyro 5 //  AB Filter parameter
+	#define Gyrodt 0.025 // typical Gyro dt	
 	#define GyroOutlier 1.0 // 1 rad/s maximum variation sample to sample
 	#define Gyromin -4.0
 	#define Gyromax 4.0
-	//gyroRPSx.ABinit( NGyro, GyroOutlier, Gyromin, Gyromax );
-	//gyroRPSy.ABinit( NGyro, GyroOutlier, Gyromin, Gyromax );
-	//gyroRPSz.ABinit( NGyro, GyroOutlier, Gyromin, Gyromax );
-	gyroNEDx.ABinit( NGyro, GyroOutlier, Gyromin, Gyromax );
-	gyroNEDy.ABinit( NGyro, GyroOutlier, Gyromin, Gyromax );
-	gyroNEDz.ABinit( NGyro, GyroOutlier, Gyromin, Gyromax );	
+	//gyroRPSx.ABinit( NGyro, Gyrodt, GyroOutlier, Gyromin, Gyromax );
+	//gyroRPSy.ABinit( NGyro, Gyrodt, GyroOutlier, Gyromin, Gyromax );
+	//gyroRPSz.ABinit( NGyro, Gyrodt, GyroOutlier, Gyromin, Gyromax );
+	gyroNEDx.ABinit( NGyro, Gyrodt, GyroOutlier, Gyromin, Gyromax );
+	gyroNEDy.ABinit( NGyro, Gyrodt, GyroOutlier, Gyromin, Gyromax );
+	gyroNEDz.ABinit( NGyro, Gyrodt, GyroOutlier, Gyromin, Gyromax );	
 
 	// alpha beta accels parameters
 	#define NAccel 5 //  AB Filter parameter
+	#define Accdt 0.025 // typical Acc dt	
 	#define AccelOutlier 10.0 // 10 m/s² maximum variation sample to sample
 	#define Accelmin -60.0
 	#define Accelmax 60.0
-	accelNEDBODYx.ABinit( NAccel, AccelOutlier, Accelmin, Accelmax );
-	accelNEDBODYy.ABinit( NAccel, AccelOutlier, Accelmin, Accelmax );	
-	accelNEDBODYz.ABinit( NAccel, AccelOutlier, Accelmin, Accelmax );	
+	accelNEDBODYx.ABinit( NAccel, Accdt, AccelOutlier, Accelmin, Accelmax );
+	accelNEDBODYy.ABinit( NAccel, Accdt, AccelOutlier, Accelmin, Accelmax );	
+	accelNEDBODYz.ABinit( NAccel, Accdt, AccelOutlier, Accelmin, Accelmax );	
 	
 	// alpha beta gyro and accel module parameters
 	#define NModule 4 //  AB Filter parameter
-	GyroModule.ABinit( NModule );
-	AccelModule.ABinit( NModule );
+	#define Moduledt 0.025 // typical Module dt	
+	GyroModule.ABinit( NModule, Moduledt );
+	AccelModule.ABinit( NModule, Moduledt );
 
 	// alpha beta AHRS parameters
 	#define NAHRS 4 //  AB Filter parameter
+	#define AHRSdt 0.025 // typical AHRS dt	
 	#define AHRSOutliers 1.0 // remove outiliers 1.0 rad away from signal sample to sample
 	#define AHRSmin -4.0
 	#define AHRSmax 4.0
-	RollAHRS.ABinit( NAHRS, AHRSOutliers, AHRSmin, AHRSmax );
-	PitchAHRS.ABinit( NAHRS, AHRSOutliers, AHRSmin, AHRSmax );
+	RollAHRS.ABinit( NAHRS, AHRSdt, AHRSOutliers, AHRSmin, AHRSmax );
+	PitchAHRS.ABinit( NAHRS, AHRSdt, AHRSOutliers, AHRSmin, AHRSmax );
 	
 	// alpha beta parameters for kinetic accels
 	#define NIPRIM 4
-	UiPrimF.ABinit( NIPRIM );
-	ViPrimF.ABinit( NIPRIM );
-	WiPrimF.ABinit( NIPRIM );
+	#define IPrimdt 0.025
+	UiPrimF.ABinit( NIPRIM, IPrimdt );
+	ViPrimF.ABinit( NIPRIM, IPrimdt );
+	WiPrimF.ABinit( NIPRIM, IPrimdt );
 	
 	// compute once the filter parameters in functions of values in FLASH
 	PeriodVelbi = velbi_period.get(); // period in second for baro/inertial velocity. period long enough to reduce effect of baro wind gradients
@@ -1862,18 +1784,8 @@ void readSensors(void *pvParameters){
 	float AoARaw = 0.0;
 	float WingLoad = 40.0;
 	float AccelzFiltAoA = 0.0;
-	float deltaAoB;
-	float AoBPrim = 0.0;
-	float AoBF = 0.0;
 	float Bias_AoB = 0.0;	
-	
-	float deltaEnergy;
-	float EnergyPrim = 0.0;
-	float EnergyFilt = 0.0;
-	
-	int16_t FirsTimeSensor = 2;
-	
-	float deltaGNSSRoute;	
+
 
 	// Wind speed variables
 	float Vgx = 0.0;
@@ -1907,34 +1819,38 @@ void readSensors(void *pvParameters){
 	bool ALTbiFirstPass = true;
 	
 	// alpha beta GNSS parameters
-	#define NGNSS 6 //  Filter parameter 
+	#define NGNSS 6 //  Filter parameter
+	#define GNSSdt 0.25 // typical GNSS dt
 	#define GNSSOutliers 30.0 // 30 m/s maximum variation sample to sample
 	#define Vgnssmin -100.0
 	#define Vgnssmax 100.0
-	GnssVx.ABinit( NGNSS, GNSSOutliers, Vgnssmin, Vgnssmax );
-	GnssVy.ABinit( NGNSS, GNSSOutliers, Vgnssmin, Vgnssmax );
-	GnssVz.ABinit( NGNSS, GNSSOutliers, Vgnssmin, Vgnssmax );
+	GnssVx.ABinit( NGNSS, GNSSdt, GNSSOutliers, Vgnssmin, Vgnssmax );
+	GnssVy.ABinit( NGNSS, GNSSdt, GNSSOutliers, Vgnssmin, Vgnssmax );
+	GnssVz.ABinit( NGNSS, GNSSdt, GNSSOutliers, Vgnssmin, Vgnssmax );
 
 	// alpha beta filters paramegters for Energy and average Energy
 	#define NTOTENR 6 // Energy alpha/beta coeff
+	#define ENRdt 0.1 // average Energy dt
 	#define EnergyOutliers 10.0 // 10 m/s maximum variation sample to sample
 	#define EnergyPrimMin -30.0
 	#define EnergyPrimMax 30.0
-	KinEnergy.ABinit(  NTOTENR,  EnergyOutliers, 0.0, 0.0, EnergyPrimMin, EnergyPrimMax );
+	KinEnergy.ABinit(  NTOTENR,  ENRdt, EnergyOutliers, 0.0, 0.0, EnergyPrimMin, EnergyPrimMax );
 
 	// alpha beta parameters for CAS and TAS
 	#define NCAS 6 // CAS alpha/beta filter coeff
+	#define CASdt 0.1 // average CAS dt	
 	#define SpeedOutliers 30.0 // 30 m/s maximum variation sample to sample
 	#define CASmin 0.0
 	#define CASmax 100.0
 	#define CASPrimmin -30.0
 	#define CASPrimmax 30.0
-	CAS.ABinit( NCAS, SpeedOutliers, CASmin, CASmax, CASPrimmin, CASPrimmax );
+	CAS.ABinit( NCAS, CASdt, SpeedOutliers, CASmin, CASmax, CASPrimmin, CASPrimmax );
 	#define NALT 6 // ALT alpha/beta coeff
+	#define ALTdt 0.1 // average ALT dt	
 	#define AltitudeOutliers 30.0 // 30 m maximum variation sample to sample
 	#define Altmin -500.0
 	#define Altmax 12000
-	ALT.ABinit( NALT, AltitudeOutliers, Altmin, Altmax );	
+	ALT.ABinit( NALT, ALTdt, AltitudeOutliers, Altmin, Altmax );	
 
 	#define DSR 15 // maximum number of samples spacing to compute wind.
 	int16_t tickDSR = 1;
@@ -2021,28 +1937,33 @@ void readSensors(void *pvParameters){
 		
 		// MOD#2 add RTK begin
 		#ifdef RTK
-		if ( RTKmode != 'N' ) {
-			if (RTKmode == 'A' ) chosenGnss->fix = 3; // GNSS 3D
-			if (RTKmode == 'D' ) chosenGnss->fix = 4; // GNSS 3D diff
-			if (RTKmode == 'F' ) chosenGnss->fix = 5; // GNSS RTK float
-			if (RTKmode == 'R' ) chosenGnss->fix = 6; // GNSS RTK Real Time Kinematic
-			GNSSstatus = chosenGnss->fix;
-			chosenGnss->numSV = RTKratio * 10;
-			chosenGnss->time = RTKtime;
-			chosenGnss->speed.x = RTKNvel;
-			chosenGnss->speed.y = RTKEvel;
-			chosenGnss->speed.z = -RTKUvel;
-			dtRTKtime = RTKtime - prevRTKtime;
-			prevRTKtime = RTKtime;
-			if ( dtRTKtime > 0.0 ) {
-				GnssVx.ABupdate( dtRTKtime, chosenGnss->speed.x );
-				GnssVy.ABupdate( dtRTKtime, chosenGnss->speed.y );		
-				GnssVz.ABupdate( dtRTKtime, chosenGnss->speed.z );
-			} 				
-			GNSSRouteraw = atan2(GnssVy.ABfilt(),GnssVx.ABfilt());			
+		if ( RTKtime >= 0 ) {
+			if ( RTKmode != 'N' ) {
+				if (RTKmode == 'A' ) chosenGnss->fix = 3; // GNSS 3D
+				if (RTKmode == 'D' ) chosenGnss->fix = 4; // GNSS 3D diff
+				if (RTKmode == 'F' ) chosenGnss->fix = 5; // GNSS RTK float
+				if (RTKmode == 'R' ) chosenGnss->fix = 6; // GNSS RTK Real Time Kinematic
+				GNSSstatus = chosenGnss->fix;
+				chosenGnss->numSV = RTKratio * 10;
+				chosenGnss->time = RTKtime;
+				chosenGnss->speed.x = RTKNvel;
+				chosenGnss->speed.y = RTKEvel;
+				chosenGnss->speed.z = -RTKUvel;
+				dtRTKtime = RTKtime - prevRTKtime;
+				prevRTKtime = RTKtime;
+				if ( dtRTKtime > 0.0 ) {
+					GnssVx.ABupdate( dtRTKtime, chosenGnss->speed.x );
+					GnssVy.ABupdate( dtRTKtime, chosenGnss->speed.y );		
+					GnssVz.ABupdate( dtRTKtime, chosenGnss->speed.z );
+				} 				
+				GNSSRouteraw = atan2(GnssVy.ABfilt(),GnssVx.ABfilt());			
+			} else {
+				chosenGnss->fix = 0;
+			}
 		} else {
-			chosenGnss->fix = 0;
-		}
+			chosenGnss->fix = 8; // GNSS RTK checksum error or bad time			
+			chosenGnss->time = -1;
+		}			
 		#endif
 		// MOD#2 add RTK end
 
@@ -2064,12 +1985,8 @@ void readSensors(void *pvParameters){
 			} 
 			GNSSRouteraw = atan2(GnssVy.ABfilt(),GnssVx.ABfilt());
 		} else {
-			chosenGnss->fix = 8; // GNSS Allystar TAU1301 checksum error			
+			chosenGnss->fix = 8; // GNSS Allystar TAU1301 checksum error or bad time			
 			chosenGnss->time = -1;
-			chosenGnss->speed.x = 0.0;
-			chosenGnss->speed.y = 0.0;
-			chosenGnss->speed.z = 0.0;
-			GNSSRouteraw = 0.0;
 		}
 		#endif
 		
@@ -3134,8 +3051,9 @@ void system_startup(void *args){
 		ds18b20.begin();
 		// OAT alpha beta filter parameters
 		#define NOAT 6 // Outside Temp AB filter coeff
+		#define OATdt 1.0 // average OAT dt		
 		#define TempOutliers 20 // 20° maximum variation sample to sample 
-		OATemp.ABinit( NOAT, TempOutliers );
+		OATemp.ABinit( NOAT, OATdt, TempOutliers );
 		temperature = ds18b20.getTemp();
 		OATemp.ABupdate( 0.1, temperature );
 		if( temperature == DEVICE_DISCONNECTED_C ) {
@@ -3148,7 +3066,7 @@ void system_startup(void *args){
 			for ( int nbsample = 0; nbsample < 20 && !OATemp.Stable(); nbsample++ ) {
 				temperature = ds18b20.getTemp();
 				// if temperature out of range, re-init the filter
-				if ( temperature < -45.0 || temperature > 65.0 ) OATemp.ABinit( NOAT, TempOutliers ); else OATemp.ABupdate( 0.1, temperature );
+				if ( temperature < -45.0 || temperature > 65.0 ) OATemp.ABinit( NOAT, OATdt, TempOutliers ); else OATemp.ABupdate( 0.1, temperature );
 				delay( 100 );
 			}
 			if ( OATemp.Stable() ) {

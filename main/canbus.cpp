@@ -33,9 +33,6 @@ CANbus* CAN = 0;
 xSemaphoreHandle sendMutex = 0;
 xSemaphoreHandle nmeaMutex = 0;
 
-static float canTxTaskTime;
-static float canRxTaskTime;
-
 // install/reinstall CAN driver in corresponding mode
 void CANbus::driverInstall( twai_mode_t mode ){
 	if( _ready_initialized ){
@@ -111,8 +108,6 @@ void CANbus::driverUninstall(){
 void canTxTask(void *arg){
 	unsigned int tick = 0;
 	while (true) {
-//time
-//		canTxTaskTime = (esp_timer_get_time()/1000.0);
 		TickType_t xLastWakeTime = xTaskGetTickCount();
 		if( !Flarm::bincom ){
 			static_cast<CANbus*>(arg)->txtick(tick);
@@ -122,8 +117,6 @@ void canTxTask(void *arg){
 			if( uxTaskGetStackHighWaterMark( nullptr ) < 128 )
 				ESP_LOGW(FNAME,"Warning canbus txtask stack low: %d bytes", uxTaskGetStackHighWaterMark( nullptr ) );
 		}
-//		canTxTaskTime = (esp_timer_get_time()/1000.0) - canTxTaskTime;
-//		ESP_LOGI(FNAME,"canTxTask: %0.1f  / %0.1f", canTxTaskTime, 10.0 );
 		vTaskDelayUntil(&xLastWakeTime, pdMS_TO_TICKS(10));
 	}
 }
