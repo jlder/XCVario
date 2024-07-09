@@ -1414,8 +1414,8 @@ static void processIMU(void *pvParameters)
 					// estimate gravity in body frame taking into account centrifugal corrections
 					xSemaphoreTake( dataMutex, 3/portTICK_PERIOD_MS ); // prevent data conflicts for 3ms max.
 					gravISUNEDBODY.x = accelNEDBODYx.ABfilt()- gyroCorr.y * TASbi * AoA + gyroCorr.z * TASbi * (+AoB) - UbiPrim; // MOD#1 Latest signs 
-					gravISUNEDBODY.y = accelNEDBODYy.ABfilt()- gyroCorr.z * TASbi + gyroCorr.x * TASbi * AoA;
-					gravISUNEDBODY.z = accelNEDBODYz.ABfilt()+ gyroCorr.y * TASbi - gyroCorr.x * TASbi * (+AoB); // MOD#1 Latest signs 
+					gravISUNEDBODY.y = accelNEDBODYy.ABfilt()- gyroCorr.z * TASbi + gyroCorr.x * TASbi * AoA - VbiPrim;
+					gravISUNEDBODY.z = accelNEDBODYz.ABfilt()+ gyroCorr.y * TASbi - gyroCorr.x * TASbi * (+AoB) - WbiPrim; // MOD#1 Latest signs 
 					xSemaphoreGive( dataMutex );
 				} else {
 					// estimate gravity in body frame using accels only
