@@ -858,7 +858,7 @@ void doAudio(){
 			Audio::setValues( TotalEnergy.LowPass1() /*te_vario.get()*/ - polar_sink, s2f_delta );// TODO clean new energt calcul / audio
 	}
 	else {
-		Audio::setValues( TotalEnergy.LowPass1() /*te_vario.get()*/, s2f_delta );
+		Audio::setValues( TotalEnergy.LowPass1() * 1.5 /*te_vario.get()*/, s2f_delta ); // TODO add 1.5 factor to vario audio to make sound more "nervous"
 	}
 }
 
@@ -924,10 +924,8 @@ void MagdwickUpdateIMU(	float dt, float Beta, float gx, float gy, float gz, floa
 		s2 = 4.0 * q0q0 * q2 + _2q0 * ax + _4q2 * q3q3 - _2q3 * ay - _4q2 + _8q2 * q1q1 + _8q2 * q2q2 + _4q2 * az;
 		s3 = 4.0 * q1q1 * q3 - _2q1 * ax + 4.0 * q2q2 * q3 - _2q2 * ay;
 		if ( (s0 + s1 + s2 + s3) != 0 ) {
-			recipNorm = 1.0 / sqrt(s0 * s0 + s1 * s1 + s2 * s2 + s3 * s3);
-		} else {
-			recipNorm = 1.0;
 			// normalise step magnitude
+			recipNorm = 1.0 / sqrt(s0 * s0 + s1 * s1 + s2 * s2 + s3 * s3);
 			s0 = s0 * recipNorm;
 			s1 = s1 * recipNorm;
 			s2 = s2 * recipNorm;
@@ -2044,14 +2042,14 @@ void readSensors(void *pvParameters){
 		}
 		xSemaphoreGive( dataMutex );
 		
-		// if TAS > 130 km/h and bank is less than ~5°, long term average of AoB to detect bias
+		// if TAS > 120 km/h and bank is less than ~5°, long term average of AoB to detect bias
 		#define RollLimitAoB 0.1 // max roll for AoB bias estimation
-		#define MinTASAoB 36.0 // minimum speed to evaluate AoB bias
-		#define AoBMaxBias 0.005 // limit biais correction to 5 mrad/s
-		#define AoBCutoffPeriod 500 //  very long term average ~ 500 seconds
+		#define MinTASAoB 33.5 // minimum speed to evaluate AoB bias
+		#define AoBMaxBias 0.15 // limit biais correction to 150 mrad/s
+		#define AoBCutoffPeriod 300 //  very long term average ~ 300 seconds
 		if ( ( TAS > MinTASAoB ) && ( abs(RollAHRS.ABfilt()) < RollLimitAoB ) ) {
 			BiasAoB.LPupdate( AoBCutoffPeriod, dtStat, AoB );
-			Bias_AoB = GyroBiasx.LowPass2();
+			Bias_AoB = BiasAoB.LowPass2();
 			if ( abs(Bias_AoB) > AoBMaxBias ) Bias_AoB = copysign( AoBMaxBias, Bias_AoB);
 		}
 		
