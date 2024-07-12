@@ -2018,10 +2018,10 @@ void readSensors(void *pvParameters){
 		Vzbaro = -ALT.ABprim();
 		
 		// compute AoA (Angle of attack) and AoB (Angle od slip)
-		#define FreqAlpha 0.7 // Hz
+		#define FreqAlpha 0.66 // Hz
 		#define fcAoA1 (10.0/(10.0+FreqAlpha))
 		#define fcAoA2 (1.0-fcAoA1)
-		#define FreqBeta 1.5 // Hz
+		#define FreqBeta 0.66 // Hz
 		#define fcAoB1 (10.0/(10.0+FreqBeta))
 		#define fcAoB2 (1.0-fcAoB1)		
 		WingLoad = gross_weight.get() / polar_wingarea.get();  // should be only computed when pilot change weight settings in XCVario
