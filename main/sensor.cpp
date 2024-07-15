@@ -2035,19 +2035,19 @@ void readSensors(void *pvParameters){
 			}  else { //when  close to Az=0, only aoa from lift considered
                 AoA = ( AoA + dAoA ) ;
             }			
-			AoB = fcAoB1 * AoB + fcAoB2 * ( KAoB * WingLoad * accelNEDBODYy.ABfilt()/ dynP - KGx * gyroCorr.x / TAS);	
+			AoB = fcAoB1 * AoB + fcAoB2 * ( KAoB * WingLoad * accelNEDBODYy.ABfilt()/ dynP - KGx * gyroCorr.x / TAS) - Bias_AoB;	
 		} else {
 			AoA = 0.0;
 			AoB = 0.0;
 		}
 		xSemaphoreGive( dataMutex );
 		
-		// if TAS > 120 km/h and bank is less than ~5°, long term average of AoB to detect bias
-		#define RollLimitAoB 0.1 // max roll for AoB bias estimation
-		#define MinTASAoB 33.5 // minimum speed to evaluate AoB bias
-		#define AoBMaxBias 0.15 // limit biais correction to 150 mrad/s
-		#define AoBCutoffPeriod 300 //  very long term average ~ 300 seconds
-		if ( ( TAS > MinTASAoB ) && ( abs(RollAHRS.ABfilt()) < RollLimitAoB ) ) {
+		// if TAS > ~110 km/h and bank is less than ~4.5°, long term average of AoB to detect bias
+		#define RollLimitAoB 0.08 // max roll for AoB bias estimation
+		#define MinTASAoB 30.0 // minimum speed to evaluate AoB bias
+		#define AoBMaxBias 0.1 // limit biais correction to 100 mrad/s
+		#define AoBCutoffPeriod 200 //  very long term average ~ 200 seconds
+		if ( ( TAS > MinTASAoB ) && ( abs(Roll) < RollLimitAoB ) ) {
 			BiasAoB.LPupdate( AoBCutoffPeriod, dtStat, AoB );
 			Bias_AoB = BiasAoB.LowPass2();
 			if ( abs(Bias_AoB) > AoBMaxBias ) Bias_AoB = copysign( AoBMaxBias, Bias_AoB);
