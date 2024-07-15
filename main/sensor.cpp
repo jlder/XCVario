@@ -230,6 +230,8 @@ static float integralFBy = 0.0;
 static float integralFBz = 0.0;
 static float Pitch = 0.0;
 static float Roll = 0.0;
+static float RollModule = 0.0;
+static float RollModuleLevel = 0.0;
 static float Yaw = 0.0;
 static float q0 = 1.0;
 static float q1 = 0.0;
@@ -956,9 +958,7 @@ void MagdwickUpdateIMU(	float dt, float Beta, float gx, float gy, float gz, floa
 }
 
 
-void MahonyUpdateIMU(float dt, float gxraw, float gyraw, float gzraw,
-					float ax, float ay, float az, 
-					float &Bias_Gx, float &Bias_Gy, float &Bias_Gz, float &AccelGravModule ) {
+void MahonyUpdateIMU(float dt, float gxraw, float gyraw, float gzraw, float ax, float ay, float az, float &AccelGravModule ) {
 
 #define Nlimit 0.15 // stability criteria for gravity estimation from accels in m/s²
 #define Kp 0.7 // proportional feedback to sync quaternion
@@ -980,36 +980,6 @@ float dynKi = Kp/10;
 	halfvx = q1 * q3 - q0 * q2;
 	halfvy = q0 * q1 + q2 * q3;
 	halfvz = q0 * q0 - 0.5 + q3 * q3;
-
-	#ifdef COMPUTEBIAS
-	// MOD#4 gyro bias begin
-	// When TAS below 15 m/s and roll and pitch are below respective thresholds, 
-	// x and y gyros biases are computed by long term average of the gyro values minus corresponding axis attitude variation
-	// z gyro bias is computed by long term average of gyro value minus heading variation estimation
-	#define RollLimit 0.175 // max lateral gravity acceleration (normalized acceleration) for 10° roll
-	#define PitchLimit 0.175 // max longitudinal gravity acceleration (normalized acceleration) for 10° pitch
-	#define GMaxBias 0.005 // limit biais correction to 5 mrad/s
-	#define GyroCutoffPeriod 700 //  very long term average ~ 700 seconds
-	if ( (TAS > 15.0) && (abs(halfvy) < RollLimit)  && (abs(halfvx) < PitchLimit) ) {
-		// compute Gx - d(roll)/dt and Gy - d(pitch)/dt long term average.
-		GyroBiasx.LPupdate( GyroCutoffPeriod, dt, gxraw - RollAHRS.ABprim() );
-		GyroBiasy.LPupdate( GyroCutoffPeriod, dt, gyraw - PitchAHRS.ABprim() );		
-		// compute pseudo heading from GNSS
-		GnssTrack = atan2( GnssVy.ABfilt(), GnssVx.ABfilt() );
-		PseudoHeadingPrim = ( GnssVy.ABprim() * cos(GnssTrack) - GnssVx.ABprim() * sin(GnssTrack) ) / TAS;
-		// compute Gz - pseudo heading variation long term average.		
-		GyroBiasz.LPupdate( GyroCutoffPeriod, dt, gzraw - PseudoHeadingPrim );
-		// update gyros biases variables
-		Bias_Gx = GyroBiasx.LowPass2();
-		Bias_Gy = GyroBiasy.LowPass2();
-		Bias_Gz = GyroBiasz.LowPass2();		
-		// limit bias estimation	
-		if ( abs(Bias_Gx) > GMaxBias ) Bias_Gx = copysign( GMaxBias, Bias_Gx) ;
-		if ( abs(Bias_Gy) > GMaxBias ) Bias_Gy = copysign( GMaxBias, Bias_Gy) ;		
-		if ( abs(Bias_Gz) > GMaxBias ) Bias_Gz = copysign( GMaxBias, Bias_Gz) ;		
-	}
-	// MOD#4 gyro bias end
-	#endif
 
 	// Update IMU quaternion
 	// IMU quaternion is updated by integrating rate of change (gyro)
@@ -1185,7 +1155,7 @@ static void processIMU(void *pvParameters)
 	AccelModule.ABinit( NModule, Moduledt );
 
 	// alpha beta AHRS parameters
-	#define NAHRS 4 //  AB Filter parameter
+	#define NAHRS 5 //  AB Filter parameter
 	#define AHRSdt 0.025 // typical AHRS dt	
 	#define AHRSOutliers 1.0 // remove outiliers 1.0 rad away from signal sample to sample
 	#define AHRSmin -4.0
@@ -1194,7 +1164,7 @@ static void processIMU(void *pvParameters)
 	PitchAHRS.ABinit( NAHRS, AHRSdt, AHRSOutliers, AHRSmin, AHRSmax );
 	
 	// alpha beta parameters for kinetic accels
-	#define NIPRIM 4
+	#define NIPRIM 5
 	#define IPrimdt 0.025
 	UiPrimF.ABinit( NIPRIM, IPrimdt );
 	ViPrimF.ABinit( NIPRIM, IPrimdt );
@@ -1345,12 +1315,18 @@ static void processIMU(void *pvParameters)
 				}
 
 				// Update quaternions
-				
 				if ( Mahonykp != 0.0 ) {
-					MahonyUpdateIMU( dtGyr, gyroCorr.x, gyroCorr.y, gyroCorr.z, -gravISUNEDBODY.x, -gravISUNEDBODY.y, -gravISUNEDBODY.z, BiasQuatGx, BiasQuatGy, BiasQuatGz, GravityModule );								
+					MahonyUpdateIMU( dtGyr, gyroCorr.x, gyroCorr.y, gyroCorr.z, -gravISUNEDBODY.x, -gravISUNEDBODY.y, -gravISUNEDBODY.z, GravityModule );								
 				} else {
-					// CurrentBeta = CurrentBeta * 0.995 + MagdwickBeta * 0.005;
-					CurrentBeta = MagdwickBeta;
+					// Compute dynamic Beta
+					#define BetaRollMax 0.175 // Roll max to consider Beta increase 0.0175 rad ~10°
+					#define BetaRollx10 (BetaRollMax/2.0) // Roll at which Beta is 10 times MagdwickBeta
+					#define BetaGain  (BetaRollMax - BetaRollx10)
+					if ( RollModuleLevel < BetaRollMax ) {
+						CurrentBeta = MagdwickBeta * pow( 10.0, (BetaRollMax - RollModuleLevel) / BetaGain );
+					} else {
+						CurrentBeta = MagdwickBeta;
+					}
 					MagdwickUpdateIMU( dtGyr, CurrentBeta, gyroCorr.x, gyroCorr.y, gyroCorr.z, -gravISUNEDBODY.x, -gravISUNEDBODY.y, -gravISUNEDBODY.z, GravityModule );
 				}	
 				// compute & filter GravityModule error
@@ -1375,7 +1351,18 @@ static void processIMU(void *pvParameters)
 				Yaw = atan2(2.0 * (q1 * q2 + q0 * q3), (q0 * q0 + q1 * q1 - q2 * q2 - q3 * q3));
 				if (Yaw < 0.0 ) Yaw = Yaw + 2.0 * M_PI;
 				if (Yaw > 2.0 * M_PI) Yaw = Yaw - 2.0 * M_PI;
-				
+
+				// compute & filter RollModule
+				RollModule = abs( Roll );
+				// asysmetric filter with fast raise and slow decay
+				#define fcRollModule 3.0 // 3Hz low pass to filter 
+				#define fcRM1 (40.0/(40.0+fcRollModule))
+				#define fcRM2 (1.0-fcGME1)		
+				if ( RollModuleLevel < RollModule ) {
+					RollModuleLevel = RollModule;
+				} else {
+					RollModuleLevel = fcRM1 * RollModuleLevel +  fcRM2 * RollModule;
+				}				
 				
 				// Update roll and pitch alpha beta filter. This provides Roll and Pitch derivatives for bias analysis 
 				RollAHRS.ABupdate( dtGyr, Roll );// MOD#4 gyro bias
@@ -1386,31 +1373,29 @@ static void processIMU(void *pvParameters)
 				// When TAS below 15 m/s and roll and pitch are below respective thresholds, 
 				// x and y gyros biases are computed by long term average of the gyro values minus corresponding axis attitude variation
 				// z gyro bias is computed by long term average of gyro value minus heading variation estimation
-				if ( Mahonykp == 0.0 ) {
-					#define RollLimitMagd 0.175 // max lateral gravity acceleration (normalized acceleration) for 10° roll
-					#define PitchLimitMagd 0.175 // max longitudinal gravity acceleration (normalized acceleration) for 10° pitch
-					#define GMaxBiasMagd 0.005 // limit biais correction to 5 mrad/s
-					#define GyroCutoffPeriodMagd 700 //  very long term average ~ 700 seconds
-					if ( (TAS > 15.0) && (abs(Roll) < RollLimitMagd)  && (abs(Pitch) < PitchLimitMagd) ) {
-						// compute Gx - d(roll)/dt and Gy - d(pitch)/dt long term average.
-						GyroBiasx.LPupdate( GyroCutoffPeriodMagd, dtGyr, gyroCorr.x - RollAHRS.ABprim() );
-						GyroBiasy.LPupdate( GyroCutoffPeriodMagd, dtGyr, gyroCorr.y - PitchAHRS.ABprim() );		
-						// compute pseudo heading from GNSS
-						GnssTrack = atan2( GnssVy.ABfilt(), GnssVx.ABfilt() );
-						PseudoHeadingPrim = ( GnssVy.ABprim() * cos(GnssTrack) - GnssVx.ABprim() * sin(GnssTrack) ) / TAS;
-						// compute Gz - pseudo heading variation long term average.		
-						GyroBiasz.LPupdate( GyroCutoffPeriodMagd, dtGyr, gyroCorr.z - PseudoHeadingPrim );
-						// update gyros biases variables
-						BiasQuatGx = GyroBiasx.LowPass2();
-						BiasQuatGy = GyroBiasy.LowPass2();
-						BiasQuatGz = GyroBiasz.LowPass2();		
-						// limit bias estimation	
-						if ( abs(BiasQuatGx) > GMaxBiasMagd ) BiasQuatGx = copysign( GMaxBias, BiasQuatGx);
-						if ( abs(BiasQuatGy) > GMaxBiasMagd ) BiasQuatGy = copysign( GMaxBias, BiasQuatGy);		
-						if ( abs(BiasQuatGz) > GMaxBiasMagd ) BiasQuatGz = copysign( GMaxBias, BiasQuatGz);		
-					}
+				#define RollLimit 0.175 // max lateral gravity acceleration (normalized acceleration) for 10° roll
+				#define PitchLimit 0.175 // max longitudinal gravity acceleration (normalized acceleration) for 10° pitch
+				#define GMaxBias 0.005 // limit biais correction to 5 mrad/s
+				#define GyroCutoffPeriod 700 //  very long term average ~ 700 seconds
+				if ( (TAS > 15.0) && (abs(Roll) < RollLimit)  && (abs(Pitch) < PitchLimit) ) {
+					// compute Gx - d(roll)/dt and Gy - d(pitch)/dt long term average.
+					GyroBiasx.LPupdate( GyroCutoffPeriod, dtGyr, gyroCorr.x - RollAHRS.ABprim() );
+					GyroBiasy.LPupdate( GyroCutoffPeriod, dtGyr, gyroCorr.y - PitchAHRS.ABprim() );		
+					// compute pseudo heading from GNSS
+					GnssTrack = atan2( GnssVy.ABfilt(), GnssVx.ABfilt() );
+					PseudoHeadingPrim = ( GnssVy.ABprim() * cos(GnssTrack) - GnssVx.ABprim() * sin(GnssTrack) ) / TAS;
+					// compute Gz - pseudo heading variation long term average.		
+					GyroBiasz.LPupdate( GyroCutoffPeriod, dtGyr, gyroCorr.z - PseudoHeadingPrim );
+					// update gyros biases variables
+					BiasQuatGx = GyroBiasx.LowPass2();
+					BiasQuatGy = GyroBiasy.LowPass2();
+					BiasQuatGz = GyroBiasz.LowPass2();		
+					// limit bias estimation	
+					if ( abs(BiasQuatGx) > GMaxBias ) BiasQuatGx = copysign( GMaxBias, BiasQuatGx);
+					if ( abs(BiasQuatGy) > GMaxBias ) BiasQuatGy = copysign( GMaxBias, BiasQuatGy);		
+					if ( abs(BiasQuatGz) > GMaxBias ) BiasQuatGz = copysign( GMaxBias, BiasQuatGz);		
 				}
-				#endif				
+				#endif		
 				
 				// compute sin and cos for Roll and Pitch from IMU quaternion since they are used in multiple calculations
 				cosRoll = cos( Roll );
