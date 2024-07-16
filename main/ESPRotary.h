@@ -39,6 +39,7 @@ public:
     static void sendDown( int diff );
     static void sendEsc();
     static bool readSwitch();  // returns true if pressed
+	static bool readLongPressed(); // returns true if long pressed
 
 private:
 	static std::list<RotaryObserver *> observers;

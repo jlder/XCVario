@@ -56,6 +56,15 @@ bool ESPRotary::readSwitch() {
 		return true;
 }
 
+bool ESPRotary::readLongPressed() {
+  if( Flarm::bincom )
+    return false;
+	if ( longPressed )
+		return true;
+	else 
+		return false;
+}
+
 void ESPRotary::begin(gpio_num_t aclk, gpio_num_t adt, gpio_num_t asw ) {
 	clk = aclk;
 	dt = adt;
