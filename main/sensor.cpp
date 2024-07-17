@@ -2391,15 +2391,15 @@ void readSensors(void *pvParameters){
 		if ( (ESPRotary::readLongPressed()) && (EventHoldTime == 0) ) {
 			Event++;
 			EventHoldTime = 5;
-			Audio::alarm( true );
+			Audio::alarm( true, 60, AUDIO_ALARM_STALL );
 		} else {
 			if ( EventHoldTime > 0 ) {
 				EventHoldTime--;
 			} else {
-				Audio::alarm( false );
+				Audio::alarm( false, 60, AUDIO_ALARM_STALL );
 				EventHoldTime = 0;
 			}
-		}			
+		}	
 
 		if ( SENstream ) {
 			/* Sensor data
