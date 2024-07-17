@@ -860,7 +860,7 @@ void doAudio(){
 			Audio::setValues( TotalEnergy.LowPass1() /*te_vario.get()*/ - polar_sink, s2f_delta );// TODO clean new energt calcul / audio
 	}
 	else {
-		Audio::setValues( TotalEnergy.LowPass1() * 1.5 /*te_vario.get()*/, s2f_delta ); // TODO add 1.5 factor to vario audio to make sound more "nervous"
+		Audio::setValues( TotalEnergy.LowPass1() /*te_vario.get()*/, s2f_delta ); // TODO add 1.5 factor to vario audio to make sound more "nervous"
 	}
 }
 
@@ -1319,8 +1319,8 @@ static void processIMU(void *pvParameters)
 					MahonyUpdateIMU( dtGyr, gyroCorr.x, gyroCorr.y, gyroCorr.z, -gravISUNEDBODY.x, -gravISUNEDBODY.y, -gravISUNEDBODY.z, GravityModule );								
 				} else {
 					// Compute dynamic Beta
-					#define BetaRollMax 0.175 // Roll max to consider Beta increase 0.0175 rad ~10°
-					#define BetaRollx10 (BetaRollMax/2.0) // Roll at which Beta is 10 times MagdwickBeta
+					#define BetaRollMax 0.12 // Roll max to consider Beta increase 0.012 rad ~7°
+					#define BetaRollx10 0.0 // Roll at which Beta is 10 times MagdwickBeta
 					#define BetaGain  (BetaRollMax - BetaRollx10)
 					if ( RollModuleLevel < BetaRollMax ) {
 						CurrentBeta = MagdwickBeta * pow( 10.0, (BetaRollMax - RollModuleLevel) / BetaGain );

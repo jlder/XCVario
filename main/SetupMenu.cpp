@@ -2066,7 +2066,7 @@ void SetupMenu::flighttest_menu_create( MenuEntry *top ){
 	kpMahony->setPrecision(3);
 	top->addEntry( kpMahony );
 	
-	SetupMenuValFloat * BetaMagdwick = new SetupMenuValFloat( "Beta Magdwick", "unit",	0.0, 0.033, 0.001, beta_adj, true, &Beta_Magdwick );
+	SetupMenuValFloat * BetaMagdwick = new SetupMenuValFloat( "Beta Magdwick", "unit",	0.0, 0.033, 0.0001, beta_adj, true, &Beta_Magdwick );
 	BetaMagdwick->setHelp(PROGMEM"Beta value");
 	BetaMagdwick->setPrecision(4);
 	top->addEntry( BetaMagdwick );
