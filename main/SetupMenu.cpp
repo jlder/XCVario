@@ -163,6 +163,12 @@ void build_streams(){
 		SENstream = true;
 	else
 		SENstream = false;
+	if( nmea_streams.get() & FT_AHRS ) {
+		IMUstream = false;
+		SENstream = false;
+		AHRSstream = true;
+	} else
+		AHRSstream = false;
 }
 
 int change_streams( SetupMenuSelect * p ){
@@ -1982,6 +1988,7 @@ void SetupMenu::system_menu_create( MenuEntry *sye ){
 	nmeas->addEntry( "IMU");
 	nmeas->addEntry( "SEN");
 	nmeas->addEntry( "IMU&SEN");
+	nmeas->addEntry( "AHRS");	
 }
 
 void SetupMenu::flight_menu_create( MenuEntry *top ){

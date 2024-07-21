@@ -205,6 +205,7 @@ float AccelModuleFilt = 0.0;
 float AccelModulePrimLevel = 0.0;
 float dynKp = 0.1;
 float DynPeriodVelbi = 4.0;
+float WingLoad = 40.0;
 
 
 // Magnetic sensor / compass
@@ -334,6 +335,7 @@ bool IMUstream = false; // IMU FT stream
 bool SENstream = false; // Sensors FT stream
 bool CALstream = false; // accel calibration stream
 bool TSTstream = false; // Test stream
+bool AHRSstream = false; // stream to test AHRS
 
 // MOD#2 add RTK begin
 double RTKtime;
@@ -1640,7 +1642,60 @@ static void processIMU(void *pvParameters)
 			xSemaphoreTake( BTMutex, 2/portTICK_PERIOD_MS ); // prevent BT conflicts for 2ms max.
 			Router::sendXCV(str);
 			xSemaphoreGive( BTMutex );
-		} 
+		}
+		
+				// If required stream IMU data
+		if ( AHRSstream  ) {
+			/*
+			gyroTime
+			dt * 1000
+			CurrentBeta * 10000
+			gyroCorr.x * 100000
+			gyroCorr.y * 100000 
+			gyroCorr.z * 100000
+			gravISUNEDBODY.x * 10000
+			gravISUNEDBODY.y * 10000
+			gravISUNEDBODY.z * 10000
+			accelNEDBODYx.ABfilt() * 10000
+			accelNEDBODYy.ABfilt() * 10000
+			accelNEDBODYz.ABfilt() * 10000
+			dynP * 10
+			TAS * 100
+			AoA * 1000
+			AoB * 1000
+			WingLoad * 10
+			fcVelbi1 * 10000 
+			UbiPrim * 10000
+			VbiPrim * 10000
+			WbiPrim * 10000
+			UiPrimF.ABprim() * 10000
+			ViPrimF.ABprim() * 10000
+			WiPrimF.ABprim() * 10000
+			UbPrimS * 10000
+			VbPrimS * 10000
+			WbPrimS * 10000
+			qo * 100000
+			q1 * 100000
+			q2 * 100000
+			q3 * 100000	
+			*/
+
+			sprintf(str,"$A,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",
+				gyroTime,
+				(int32_t)(dtGyr*1000.0), (int32_t)(CurrentBeta*10000.0),				
+				(int32_t)(gyroCorr.x*100000.0), (int32_t)(gyroCorr.y*100000.0), (int32_t)(gyroCorr.z*100000.0),
+				(int32_t)(gravISUNEDBODY.x*10000.0), (int32_t)(gravISUNEDBODY.y*10000.0),(int32_t)(gravISUNEDBODY.z*10000.0),
+				(int32_t)(accelNEDBODYx.ABfilt()*10000.0), (int32_t)(accelNEDBODYy.ABfilt()*10000.0),(int32_t)(accelNEDBODYz.ABfilt()*10000.0),				
+				(int32_t)(dynP*10.0), (int32_t)(TAS*100.0),(int32_t)(AoA*1000.0),(int32_t)(AoB*1000.0),(int32_t)(WingLoad*10.0),(int32_t)(fcVelbi1*10000.0),				
+				(int32_t)(UbiPrim*10000.0), (int32_t)(VbiPrim*10000.0),(int32_t)(WbiPrim*10000.0),
+				(int32_t)(UiPrimF.ABprim()*10000.0), (int32_t)(ViPrimF.ABprim()*10000.0),(int32_t)(WiPrimF.ABprim()*10000.0),				
+				(int32_t)(UbPrimS*10000.0), (int32_t)(VbPrimS*10000.0),(int32_t)(WbPrimS*10000.0),
+				(int32_t)(q0*100000.0), (int32_t)(q1*100000.0),(int32_t)(q2*100000.0),(int32_t)(q3*100000.0)				
+				); 
+			xSemaphoreTake( BTMutex, 2/portTICK_PERIOD_MS ); // prevent BT conflicts for 2ms max.
+			Router::sendXCV(str);
+			xSemaphoreGive( BTMutex );
+		}
 
 		ProcessTimeIMU = (esp_timer_get_time()/1000.0) - gyroTime;
 		if ( ProcessTimeIMU > 8 && TAS < 15.0 ) {
@@ -1765,7 +1820,6 @@ void readSensors(void *pvParameters){
 	float prevCL = 0.0;
 	float dAoA = 0.0;
 	float AoARaw = 0.0;
-	float WingLoad = 40.0;
 	float AccelzFiltAoA = 0.0;
 	float Bias_AoB = 0.0;
 
@@ -2030,17 +2084,18 @@ void readSensors(void *pvParameters){
 			AoB = 0.0;
 		}
 		xSemaphoreGive( dataMutex );
-		
-		// if TAS > ~110 km/h and bank is less than ~4.5°, long term average of AoB to detect bias
-		#define RollLimitAoB 0.08 // max roll for AoB bias estimation
-		#define MinTASAoB 30.0 // minimum speed to evaluate AoB bias
-		#define AoBMaxBias 0.1 // limit biais correction to 100 mrad/s
-		#define AoBCutoffPeriod 200 //  very long term average ~ 200 seconds
-		if ( ( TAS > MinTASAoB ) && ( abs(Roll) < RollLimitAoB ) ) {
-			BiasAoB.LPupdate( AoBCutoffPeriod, dtStat, AoB );
-			Bias_AoB = BiasAoB.LowPass2();
-			if ( abs(Bias_AoB) > AoBMaxBias ) Bias_AoB = copysign( AoBMaxBias, Bias_AoB);
-		}
+		#ifdef COMPUTEBIAS
+			// if TAS > ~110 km/h and bank is less than ~4.5°, long term average of AoB to detect bias
+			#define RollLimitAoB 0.08 // max roll for AoB bias estimation
+			#define MinTASAoB 30.0 // minimum speed to evaluate AoB bias
+			#define AoBMaxBias 0.1 // limit biais correction to 100 mrad/s
+			#define AoBCutoffPeriod 200 //  very long term average ~ 200 seconds
+			if ( ( TAS > MinTASAoB ) && ( abs(Roll) < RollLimitAoB ) ) {
+				BiasAoB.LPupdate( AoBCutoffPeriod, dtStat, AoB );
+				Bias_AoB = BiasAoB.LowPass2();
+				if ( abs(Bias_AoB) > AoBMaxBias ) Bias_AoB = copysign( AoBMaxBias, Bias_AoB);
+			}
+		#endif
 		
 		// Compute trajectory pneumatic speeds components in body frame NEDBODY
 		// Vh corresponds to the trajectory horizontal speed and Vzbaro corresponds to the vertical speed in earth frame

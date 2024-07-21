@@ -157,6 +157,7 @@ extern bool SENstream;
 extern bool CALstream;
 extern bool TSTstream;
 extern bool LABtest;
+extern bool AHRSstream;
 extern float localGravity;
 extern float NEnergy;
 extern float alphaEnergy;
