@@ -1332,7 +1332,7 @@ static void processIMU(void *pvParameters)
 				// compute & filter GravityModule error
 				GravityModuleErr = abs( GravityModule - GRAVITY );
 				// asysmetric filter with fast raise and slow decay
-				#define fcGravModuleErr 3.0 // 3Hz low pass to filter 
+				#define fcGravModuleErr 3.0 // 3Hz low pass to filter noise
 				#define fcGME1 (40.0/(40.0+fcGravModuleErr))
 				#define fcGME2 (1.0-fcGME1)		
 				if ( GravityModuleErrLevel < GravityModuleErr ) {
@@ -1355,9 +1355,9 @@ static void processIMU(void *pvParameters)
 				// compute & filter RollModule
 				RollModule = abs( Roll );
 				// asysmetric filter with fast raise and slow decay
-				#define fcRollModule 3.0 // 3Hz low pass to filter 
+				#define fcRollModule 1.0 // 1Hz low pass to filter noise and fast pilot roll variations
 				#define fcRM1 (40.0/(40.0+fcRollModule))
-				#define fcRM2 (1.0-fcGME1)		
+				#define fcRM2 (1.0-fcRM1)		
 				if ( RollModuleLevel < RollModule ) {
 					RollModuleLevel = RollModule;
 				} else {
@@ -2531,7 +2531,7 @@ void readSensors(void *pvParameters){
 					// $S3 stream
 					(int32_t)(UiPrim*100),(int32_t)(ViPrim*100),(int32_t)(WiPrim*100),
 					(int32_t)(UbPrimS*100), (int32_t)(VbPrimS*100),(int32_t)(WbPrimS*100),   
-					(int32_t)(UiPrimPrimS*100), (int32_t)(ViPrimPrimS*100),(int32_t)(WiPrimPrimS*100),	
+					(int32_t)(UiPrimF.ABprim()*100), (int32_t)(ViPrimF.ABprim()*100),(int32_t)(WiPrimF.ABprim()*100),	
 					(int32_t)(UbiPrim*100), (int32_t)(VbiPrim*100),(int32_t)(WbiPrim*100),
 					(int32_t)(Bias_AoB*1000),
 					(int32_t)(RTKNproj*1000),(int32_t)(RTKEproj*1000),(int32_t)(-RTKUproj*1000),(int32_t)(RTKheading*10),(int32_t)(ALTbi*100),
