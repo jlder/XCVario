@@ -446,6 +446,7 @@ float      stall_alarm_off_kmh=0;
 uint16_t   stall_alarm_off_holddown=0;
 
 int count=0;
+int countIMU=0;
 int flarm_alarm_holdtime=0;
 int the_can_mode = CAN_MODE_MASTER;
 int active_screen = 0;  // 0 = Vario
@@ -1181,7 +1182,7 @@ static void processIMU(void *pvParameters)
 	WiPgain = WiP_gain.get(); // get last WiPrim gain for bi calc from NV memory
 	
 	while (1) {
-
+		countIMU++;
 		TickType_t xLastWakeTime_mpu =xTaskGetTickCount();
 		
 		// get raw gyro data
@@ -1619,10 +1620,8 @@ static void processIMU(void *pvParameters)
 			}	
 		}
 
-		// If required stream IMU data
-		if ( IMUstream  ) {
 			/*
-			IMU data in ISU and NED orientation
+				// Sent at 40Hz when IMUstream selected
 				$I,
 				MPU (gyro) time in milli second,
 				Acceleration in BODY X-Axis in tenth milli m/s²,
@@ -1633,70 +1632,134 @@ static void processIMU(void *pvParameters)
 				Rotation BODY Z-Axis in hundredth of milli rad/s,
 				<CR><LF>	
 			*/
-
-			sprintf(str,"$I,%lld,%i,%i,%i,%i,%i,%i\r\n",
+			/*
+				// Sent at 40Hz when AHRSstream selected
+				$J,
+				MPU (gyro) time in milli second,
+				Acceleration in BODY X-Axis in tenth milli m/s²,
+				Acceleration in BODY Y-Axis in tenth milli m/s²,
+				Acceleration in BODU Z-Axis in tenth milli m/s²,				
+				Rotation BODY X-Axis in hundredth of milli rad/s,
+				Rotation BODY Y-Axis in hundredth of milli rad/s,
+				Rotation BODY Z-Axis in hundredth of milli rad/s,
+				UiPrim*10000.0, ViPrim*10000.0),WiPrim*10000.0,
+				UbiPrim*10000.0, VbiPrim*10000.0, WbiPrim*10000.0,
+				gravISUNEDBODY.x*10000.0, gravISUNEDBODY.y*10000.0, gravISUNEDBODY.z*10000.0,
+				q0*100000.0, q1*100000.0,q2*100000.0,q3*100000.0			
+				<CR><LF>	
+			*/			
+			/*
+				// Sent at 1Hz when AHRSstream selected
+				$K,
+				MPU (gyro) time in milli second,
+				Acceleration in BODY X-Axis in tenth milli m/s²,
+				Acceleration in BODY Y-Axis in tenth milli m/s²,
+				Acceleration in BODU Z-Axis in tenth milli m/s²,				
+				Rotation BODY X-Axis in hundredth of milli rad/s,
+				Rotation BODY Y-Axis in hundredth of milli rad/s,
+				Rotation BODY Z-Axis in hundredth of milli rad/s,
+				UiPrim*10000.0, ViPrim*10000.0),WiPrim*10000.0,
+				UbiPrim*10000.0, VbiPrim*10000.0, WbiPrim*10000.0,
+				gravISUNEDBODY.x*10000.0, gravISUNEDBODY.y*10000.0, gravISUNEDBODY.z*10000.0,
+				q0*100000.0, q1*100000.0,q2*100000.0,q3*100000.0,
+				accelNEDBODYx.ABfilt()*10000.0, accelNEDBODYy.ABfilt()*10000.0, accelNEDBODYz.ABfilt()*10000.0,
+				accelNEDBODYx.ABprim()*10000.0, accelNEDBODYy.ABprim()*10000.0, accelNEDBODYz.ABprim()*10000.0,
+				gyroNEDx.ABfilt()*100000.0, gyroNEDy.ABfilt()*100000.0, gyroNEDz.ABfilt()*100000.0,
+				gyroNEDx.ABprim()*100000.0, gyroNEDy.ABprim()*100000.0, gyroNEDz.ABprim()*100000.0,
+				UiPrimF.ABfilt()*10000.0, ViPrimF.ABfilt()*10000.0, WiPrimF.ABfilt()*10000.0),
+				UiPrimF.ABprim()*10000.0, ViPrimF.ABprim()*10000.0, WiPrimF.ABprim()*10000.0)				
+				<CR><LF>	
+			*/			
+			/*
+				// Sent at 10Hz
+				$A,
+				CurrentBeta * 10000
+				dynP * 10
+				TAS * 100
+				AoA * 1000
+				AoB * 1000
+				Speed2Fly.cw( CAS.ABfilt() ) * 100
+				Speed2Fly.getN() * 100
+				WingLoad * 10
+				fcVelbi1 * 10000 
+				UbPrimS * 10000
+				VbPrimS * 10000
+				WbPrimS * 10000
+				<CR><LF>				
+			*/			
+			
+		if ( countIMU % 40 && AHRSstream ) {
+			// Send $I and $A
+			sprintf(str,"$K,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$A,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",
 				gyroTime,
 				(int32_t)(accelISUNEDBODY.x*10000.0), (int32_t)(accelISUNEDBODY.y*10000.0), (int32_t)(accelISUNEDBODY.z*10000.0),
-				(int32_t)(gyroISUNEDBODY.x*100000.0), (int32_t)(gyroISUNEDBODY.y*100000.0),(int32_t)(gyroISUNEDBODY.z*100000.0)
+				(int32_t)(gyroISUNEDBODY.x*100000.0), (int32_t)(gyroISUNEDBODY.y*100000.0),(int32_t)(gyroISUNEDBODY.z*100000.0),
+				(int32_t)(UiPrim*10000.0), (int32_t)(ViPrim*10000.0),(int32_t)(WiPrim*10000.0),
+				(int32_t)(UbiPrim*10000.0), (int32_t)(VbiPrim*10000.0),(int32_t)(WbiPrim*10000.0),
+				(int32_t)(gravISUNEDBODY.x*10000.0), (int32_t)(gravISUNEDBODY.y*10000.0), (int32_t)(gravISUNEDBODY.z*10000.0),
+				(int32_t)(q0*100000.0), (int32_t)(q1*100000.0),(int32_t)(q2*100000.0),(int32_t)(q3*100000.0),
+				(int32_t)(accelNEDBODYx.ABfilt()*10000.0), (int32_t)(accelNEDBODYy.ABfilt()*10000.0), (int32_t)(accelNEDBODYz.ABfilt()*10000.0),
+				(int32_t)(accelNEDBODYx.ABprim()*10000.0), (int32_t)(accelNEDBODYy.ABprim()*10000.0), (int32_t)(accelNEDBODYz.ABprim()*10000.0),
+				(int32_t)(gyroNEDx.ABfilt()*100000.0), (int32_t)(gyroNEDy.ABfilt()*100000.0), (int32_t)(gyroNEDz.ABfilt()*100000.0),
+				(int32_t)(gyroNEDx.ABprim()*100000.0), (int32_t)(gyroNEDy.ABprim()*100000.0), (int32_t)(gyroNEDz.ABprim()*100000.0),
+				(int32_t)(UiPrimF.ABfilt()*10000.0), (int32_t)(ViPrimF.ABfilt()*10000.0), (int32_t)(WiPrimF.ABfilt()*10000.0),
+				(int32_t)(UiPrimF.ABprim()*10000.0), (int32_t)(ViPrimF.ABprim()*10000.0), (int32_t)(WiPrimF.ABprim()*10000.0),
+				(int32_t)(CurrentBeta*10000.0), (int32_t)(dynP*10.0),(int32_t)(TAS*100.0),(int32_t)(AoA*1000.0),(int32_t)(AoB*1000.0),
+				(int32_t)(Speed2Fly.cw( CAS.ABfilt() )*100.0), (int32_t)(Speed2Fly.getN()*100.0),(int32_t)(WingLoad*100.0),(int32_t)(fcVelbi1*10000.0),
+				(int32_t)(UbPrimS*10000.0), (int32_t)(VbPrimS*10000.0),(int32_t)(WbPrimS*10000.0)			
 				); 
 			xSemaphoreTake( BTMutex, 2/portTICK_PERIOD_MS ); // prevent BT conflicts for 2ms max.
 			Router::sendXCV(str);
 			xSemaphoreGive( BTMutex );
+		} else {
+			if ( countIMU % 4 && AHRSstream  ) {
+				// Send $J and $A
+				sprintf(str,"$J,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$A,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",
+					gyroTime,
+					(int32_t)(accelISUNEDBODY.x*10000.0), (int32_t)(accelISUNEDBODY.y*10000.0), (int32_t)(accelISUNEDBODY.z*10000.0),
+					(int32_t)(gyroISUNEDBODY.x*100000.0), (int32_t)(gyroISUNEDBODY.y*100000.0),(int32_t)(gyroISUNEDBODY.z*100000.0),
+					(int32_t)(UiPrim*10000.0), (int32_t)(ViPrim*10000.0),(int32_t)(WiPrim*10000.0),
+					(int32_t)(UbiPrim*10000.0), (int32_t)(VbiPrim*10000.0),(int32_t)(WbiPrim*10000.0),
+					(int32_t)(gravISUNEDBODY.x*10000.0), (int32_t)(gravISUNEDBODY.y*10000.0), (int32_t)(gravISUNEDBODY.z*10000.0),
+					(int32_t)(q0*100000.0), (int32_t)(q1*100000.0),(int32_t)(q2*100000.0),(int32_t)(q3*100000.0),
+					(int32_t)(CurrentBeta*10000.0), (int32_t)(dynP*10.0),(int32_t)(TAS*100.0),(int32_t)(AoA*1000.0),(int32_t)(AoB*1000.0),
+					(int32_t)(Speed2Fly.cw( CAS.ABfilt() )*100.0), (int32_t)(Speed2Fly.getN()*100.0),(int32_t)(WingLoad*100.0),(int32_t)(fcVelbi1*10000.0),
+					(int32_t)(UbPrimS*10000.0), (int32_t)(VbPrimS*10000.0),(int32_t)(WbPrimS*10000.0)				
+					); 
+				xSemaphoreTake( BTMutex, 2/portTICK_PERIOD_MS ); // prevent BT conflicts for 2ms max.
+				Router::sendXCV(str);
+				xSemaphoreGive( BTMutex );
+			} else {
+				if ( AHRSstream ) {
+					// Send $J
+					sprintf(str,"$J,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",
+						gyroTime,
+						(int32_t)(accelISUNEDBODY.x*10000.0), (int32_t)(accelISUNEDBODY.y*10000.0), (int32_t)(accelISUNEDBODY.z*10000.0),
+						(int32_t)(gyroISUNEDBODY.x*100000.0), (int32_t)(gyroISUNEDBODY.y*100000.0),(int32_t)(gyroISUNEDBODY.z*100000.0),
+						(int32_t)(UiPrim*10000.0), (int32_t)(ViPrim*10000.0),(int32_t)(WiPrim*10000.0),
+						(int32_t)(UbiPrim*10000.0), (int32_t)(VbiPrim*10000.0),(int32_t)(WbiPrim*10000.0),
+						(int32_t)(gravISUNEDBODY.x*10000.0), (int32_t)(gravISUNEDBODY.y*10000.0), (int32_t)(gravISUNEDBODY.z*10000.0),
+						(int32_t)(q0*100000.0), (int32_t)(q1*100000.0),(int32_t)(q2*100000.0),(int32_t)(q3*100000.0)
+						);
+					xSemaphoreTake( BTMutex, 2/portTICK_PERIOD_MS ); // prevent BT conflicts for 2ms max.
+					Router::sendXCV(str);
+					xSemaphoreGive( BTMutex );						
+				} else {
+					if ( IMUstream ) {
+					// Send $I
+					sprintf(str,"$I,%lld,%i,%i,%i,%i,%i,%i\r\n",
+						gyroTime,
+						(int32_t)(accelISUNEDBODY.x*10000.0), (int32_t)(accelISUNEDBODY.y*10000.0), (int32_t)(accelISUNEDBODY.z*10000.0),
+						(int32_t)(gyroISUNEDBODY.x*100000.0), (int32_t)(gyroISUNEDBODY.y*100000.0),(int32_t)(gyroISUNEDBODY.z*100000.0)
+					);						
+					xSemaphoreTake( BTMutex, 2/portTICK_PERIOD_MS ); // prevent BT conflicts for 2ms max.
+					Router::sendXCV(str);
+					xSemaphoreGive( BTMutex );
+					}
+				}
+			}				
 		}
 		
-				// If required stream IMU data
-		if ( AHRSstream  ) {
-			/*
-			gyroTime
-			dt * 1000
-			CurrentBeta * 10000
-			gyroCorr.x * 100000
-			gyroCorr.y * 100000 
-			gyroCorr.z * 100000
-			gravISUNEDBODY.x * 10000
-			gravISUNEDBODY.y * 10000
-			gravISUNEDBODY.z * 10000
-			accelNEDBODYx.ABfilt() * 10000
-			accelNEDBODYy.ABfilt() * 10000
-			accelNEDBODYz.ABfilt() * 10000
-			dynP * 10
-			TAS * 100
-			AoA * 1000
-			AoB * 1000
-			WingLoad * 10
-			fcVelbi1 * 10000 
-			UbiPrim * 10000
-			VbiPrim * 10000
-			WbiPrim * 10000
-			UiPrimF.ABprim() * 10000
-			ViPrimF.ABprim() * 10000
-			WiPrimF.ABprim() * 10000
-			UbPrimS * 10000
-			VbPrimS * 10000
-			WbPrimS * 10000
-			qo * 100000
-			q1 * 100000
-			q2 * 100000
-			q3 * 100000	
-			*/
-
-			sprintf(str,"$A,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",
-				gyroTime,
-				(int32_t)(dtGyr*1000.0), (int32_t)(CurrentBeta*10000.0),				
-				(int32_t)(gyroCorr.x*100000.0), (int32_t)(gyroCorr.y*100000.0), (int32_t)(gyroCorr.z*100000.0),
-				(int32_t)(gravISUNEDBODY.x*10000.0), (int32_t)(gravISUNEDBODY.y*10000.0),(int32_t)(gravISUNEDBODY.z*10000.0),
-				(int32_t)(accelNEDBODYx.ABfilt()*10000.0), (int32_t)(accelNEDBODYy.ABfilt()*10000.0),(int32_t)(accelNEDBODYz.ABfilt()*10000.0),				
-				(int32_t)(dynP*10.0), (int32_t)(TAS*100.0),(int32_t)(AoA*1000.0),(int32_t)(AoB*1000.0),(int32_t)(WingLoad*10.0),(int32_t)(fcVelbi1*10000.0),				
-				(int32_t)(UbiPrim*10000.0), (int32_t)(VbiPrim*10000.0),(int32_t)(WbiPrim*10000.0),
-				(int32_t)(UiPrimF.ABprim()*10000.0), (int32_t)(ViPrimF.ABprim()*10000.0),(int32_t)(WiPrimF.ABprim()*10000.0),				
-				(int32_t)(UbPrimS*10000.0), (int32_t)(VbPrimS*10000.0),(int32_t)(WbPrimS*10000.0),
-				(int32_t)(q0*100000.0), (int32_t)(q1*100000.0),(int32_t)(q2*100000.0),(int32_t)(q3*100000.0)				
-				); 
-			xSemaphoreTake( BTMutex, 2/portTICK_PERIOD_MS ); // prevent BT conflicts for 2ms max.
-			Router::sendXCV(str);
-			xSemaphoreGive( BTMutex );
-		}
-
 		ProcessTimeIMU = (esp_timer_get_time()/1000.0) - gyroTime;
 		if ( ProcessTimeIMU > 8 && TAS < 15.0 ) {
 			ESP_LOGI(FNAME,"processIMU: %i / 25", (int16_t)(ProcessTimeIMU) );
