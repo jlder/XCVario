@@ -1181,6 +1181,9 @@ static void processIMU(void *pvParameters)
 	UiPgain = UiP_gain.get(); // get last UiPrim gain for bi calc from NV memory
 	WiPgain = WiP_gain.get(); // get last WiPrim gain for bi calc from NV memory
 	
+	AHRSstream = true;
+	IMUstream = false;
+	
 	while (1) {
 		countIMU++;
 		TickType_t xLastWakeTime_mpu =xTaskGetTickCount();
@@ -1688,7 +1691,7 @@ static void processIMU(void *pvParameters)
 				<CR><LF>				
 			*/			
 			
-		if ( countIMU % 40 && AHRSstream ) {
+		if ( !(countIMU % 40) && AHRSstream ) {
 			// Send $I and $A
 			sprintf(str,"$K,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$A,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",
 				gyroTime,
@@ -1712,7 +1715,7 @@ static void processIMU(void *pvParameters)
 			Router::sendXCV(str);
 			xSemaphoreGive( BTMutex );
 		} else {
-			if ( countIMU % 4 && AHRSstream  ) {
+			if ( !(countIMU % 4) && AHRSstream  ) {
 				// Send $J and $A
 				sprintf(str,"$J,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$A,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",
 					gyroTime,
@@ -1966,7 +1969,9 @@ void readSensors(void *pvParameters){
 	
 	opt_TE = te_opt.get(); // get last d(TE)/dt calculation option
 	
-	statTime = (esp_timer_get_time()/1000) - 25 ; // initialize statTime to get a 25ms dtStat at startup	
+	statTime = (esp_timer_get_time()/1000) - 25 ; // initialize statTime to get a 25ms dtStat at startup
+
+	SENstream = false;
 	
 	while (1)
 	{ 
