@@ -7,10 +7,10 @@
 //
 //!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 //
-#define FTVERSION 12
-#define SOFTVERSION 29
+#define FTVERSION 13
+#define SOFTVERSION 01
 //
-//#define COMPUTEBIAS   // code to estimate gyro bias
+#define COMPUTEBIAS   // code to estimate gyro bias
 //
 //#define COMPUTEWIND1   // code to compute wind with GNSS
 //

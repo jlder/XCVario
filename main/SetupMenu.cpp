@@ -155,13 +155,15 @@ int upd_screens( SetupMenuSelect * p ){
 
 
 void build_streams(){
-	if( nmea_streams.get() & FT_IMU )
+	if( nmea_streams.get() & FT_IMU ) {
 		IMUstream = true;
-	else
+		AHRSstream = false;
+	} else
 		IMUstream = false;
-	if( nmea_streams.get() & FT_SENSOR )
+	if( nmea_streams.get() & FT_SENSOR ) {
 		SENstream = true;
-	else
+		AHRSstream = false;
+	} else
 		SENstream = false;
 	if( nmea_streams.get() & FT_AHRS ) {
 		IMUstream = false;
