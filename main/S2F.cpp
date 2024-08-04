@@ -164,6 +164,14 @@ double S2F::sink( double v_in ) {
 	return s;
 }
 
+double S2F::D_over_L( double v ) { // v in m/s
+	double v_stall = Units::Airspeed2Kmh( stall_speed.get() * 0.9 );
+	if ( v < v_stall || !IsValid() ) return 0.0;
+	double s = (a0 + a1*v + a2*v*v);
+	if ( s <= 0 ) return 0.0;
+	return (s/v);
+}
+
 float S2F::cw( float v ){  // in m/s
 	float cw = 0;
 	if( v > 14.0 ) {

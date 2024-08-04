@@ -458,6 +458,6 @@ SetupNG<float> 			te_filt( "TE FILTER",0.5, true, SYNC_FROM_MASTER, PERSISTENT, 
 SetupNG<float>			te_opt( "TE OPTION",2, true, SYNC_FROM_MASTER, PERSISTENT, change_teopt );
 SetupNG<float> 			velbi_period( "VELBI_PERIOD",8.0, true, SYNC_FROM_MASTER, PERSISTENT, change_bifilt );
 SetupNG<float>			kp_Mahony("KP Mahony", 0.0, true, SYNC_FROM_MASTER, PERSISTENT, change_kpMahony );
-SetupNG<float>			Beta_Magdwick("Beta Magdwick", 0.002, true, SYNC_FROM_MASTER, PERSISTENT, change_BetaMagdwick );
+SetupNG<float>			Beta_Magdwick("Beta Magdwick", 0.0005, true, SYNC_FROM_MASTER, PERSISTENT, change_BetaMagdwick );
 SetupNG<float>			UiP_gain("UIPGAIN",1.2, true, SYNC_FROM_MASTER, PERSISTENT, change_UiPgain );
 SetupNG<float>			WiP_gain("WIPGAIN",1.0, true, SYNC_FROM_MASTER, PERSISTENT, change_WiPgain );

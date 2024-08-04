@@ -91,7 +91,7 @@
 	float KAoB = -3.5; // MOD#1 Latest signs
 	float KGx = 4.1;
  	float SURFACE = 10.53;
-	float WEIGHT = 353;
+	float WEIGHT = 273;
 	float WINGLOAD = WEIGHT / SURFACE;
 	float SPEED1 = 90;
 	float SINK1 = -0.6;
@@ -107,7 +107,7 @@
 	float KAoB = -2.97; // MOD#1 Latest signs
 	float KGx = 12.0;
  	float SURFACE = 10.5;
-	float WEIGHT = 488;
+	float WEIGHT = 408;
 	float WINGLOAD = WEIGHT / SURFACE;
 	float SPEED1 = 27.2 * 3.6;
 	float SINK1 = -0.52;
@@ -206,6 +206,7 @@ float AccelModulePrimLevel = 0.0;
 float dynKp = 0.1;
 float DynPeriodVelbi = 4.0;
 float WingLoad = 40.0;
+float GravModuleLP = 0.0;
 
 
 // Magnetic sensor / compass
@@ -1352,7 +1353,9 @@ static void processIMU(void *pvParameters)
 					#define BetaRollMax 0.12 // Roll max to consider Beta increase 0.012 rad ~7°
 					#define BetaRollx10 0.0 // Roll at which Beta is 10 times MagdwickBeta
 					#define BetaGain  (BetaRollMax - BetaRollx10)
-					if ( RollModuleLevel < BetaRollMax ) {
+					#define MaxGravityError 0.12					
+					GravModuleLP = 0.9 * GravModuleLP  + 0.1 * abs( GravityModule - GRAVITY );					
+					if ( (RollModuleLevel < BetaRollMax) && ( GravModuleLP < MaxGravityError ) ) {
 						CurrentBeta = MagdwickBeta * pow( 10.0, (BetaRollMax - RollModuleLevel) / BetaGain );
 					} else {
 						CurrentBeta = MagdwickBeta;
@@ -1708,7 +1711,7 @@ static void processIMU(void *pvParameters)
 				TAS * 100
 				AoA * 1000
 				AoB * 1000
-				Speed2Fly.cw( CAS.ABfilt() ) * 100
+				Speed2Fly.cw( CAS.ABfilt() ) * 10000
 				Speed2Fly.getN() * 100
 				WingLoad * 10
 				fcVelbi1 * 10000 
@@ -1717,13 +1720,19 @@ static void processIMU(void *pvParameters)
 				WbPrimS * 10000
 				RTKNproj*1000
 				RTKEproj*1000
-				-RTKUproj*1000			
+				-RTKUproj*1000
+				temperatureLP.LowPass1()*10.0
+				statTime
+				statP*100.0
+				GnssVx.ABfilt()*100
+				GnssVy.ABfilt()*100				
+				GnssVz.ABfilt()*100				
 				<CR><LF>				
 			*/			
 			
 		if ( !(countIMU % 40) && AHRSstream ) {
 			// Send $I and $A
-			sprintf(str,"$K,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$A,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",
+			sprintf(str,"$K,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$A,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%lld,%i,%i,%i,%i\r\n",
 				gyroTime,
 				(int32_t)(accelISUNEDBODY.x*10000.0), (int32_t)(accelISUNEDBODY.y*10000.0), (int32_t)(accelISUNEDBODY.z*10000.0),
 				(int32_t)(gyroISUNEDBODY.x*100000.0), (int32_t)(gyroISUNEDBODY.y*100000.0),(int32_t)(gyroISUNEDBODY.z*100000.0),
@@ -1738,9 +1747,10 @@ static void processIMU(void *pvParameters)
 				(int32_t)(UiPrimF.ABfilt()*10000.0), (int32_t)(ViPrimF.ABfilt()*10000.0), (int32_t)(WiPrimF.ABfilt()*10000.0),
 				(int32_t)(UiPrimF.ABprim()*10000.0), (int32_t)(ViPrimF.ABprim()*10000.0), (int32_t)(WiPrimF.ABprim()*10000.0),
 				(int32_t)(CurrentBeta*10000.0), (int32_t)(dynP*10.0),(int32_t)(TAS*100.0),(int32_t)(AoA*1000.0),(int32_t)(AoB*1000.0),
-				(int32_t)(Speed2Fly.cw( CAS.ABfilt() )*100.0), (int32_t)(Speed2Fly.getN()*100.0),(int32_t)(WingLoad*100.0),(int32_t)(fcVelbi1*10000.0),
+				(int32_t)(Speed2Fly.cw( CAS.ABfilt() )*10000.0), (int32_t)(Speed2Fly.getN()*100.0),(int32_t)(WingLoad*100.0),(int32_t)(fcVelbi1*10000.0),
 				(int32_t)(UbPrimS*10000.0), (int32_t)(VbPrimS*10000.0),(int32_t)(WbPrimS*10000.0),
-				(int32_t)(RTKNproj*1000),(int32_t)(RTKEproj*1000),(int32_t)(-RTKUproj*1000)				
+				(int32_t)(RTKNproj*1000),(int32_t)(RTKEproj*1000),(int32_t)(-RTKUproj*1000),
+				(int32_t)(temperatureLP.LowPass1()*10.0), statTime, (int32_t)(statP*100.0), (int32_t)(GnssVx.ABfilt()*100), (int32_t)(GnssVy.ABfilt()*100), (int32_t)(GnssVz.ABfilt()*100)
 				); 
 			xSemaphoreTake( BTMutex, 2/portTICK_PERIOD_MS ); // prevent BT conflicts for 2ms max.
 			Router::sendXCV(str);
@@ -1748,7 +1758,7 @@ static void processIMU(void *pvParameters)
 		} else {
 			if ( !(countIMU % 4) && AHRSstream  ) {
 				// Send $J and $A
-				sprintf(str,"$J,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$A,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",
+				sprintf(str,"$J,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$A,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%lld,%i,%i,%i,%i\r\n",
 					gyroTime,
 					(int32_t)(accelISUNEDBODY.x*10000.0), (int32_t)(accelISUNEDBODY.y*10000.0), (int32_t)(accelISUNEDBODY.z*10000.0),
 					(int32_t)(gyroISUNEDBODY.x*100000.0), (int32_t)(gyroISUNEDBODY.y*100000.0),(int32_t)(gyroISUNEDBODY.z*100000.0),
@@ -1757,9 +1767,10 @@ static void processIMU(void *pvParameters)
 					(int32_t)(gravISUNEDBODY.x*10000.0), (int32_t)(gravISUNEDBODY.y*10000.0), (int32_t)(gravISUNEDBODY.z*10000.0),
 					(int32_t)(q0*100000.0), (int32_t)(q1*100000.0),(int32_t)(q2*100000.0),(int32_t)(q3*100000.0),
 					(int32_t)(CurrentBeta*10000.0), (int32_t)(dynP*10.0),(int32_t)(TAS*100.0),(int32_t)(AoA*1000.0),(int32_t)(AoB*1000.0),
-					(int32_t)(Speed2Fly.cw( CAS.ABfilt() )*100.0), (int32_t)(Speed2Fly.getN()*100.0),(int32_t)(WingLoad*100.0),(int32_t)(fcVelbi1*10000.0),
+					(int32_t)(Speed2Fly.cw( CAS.ABfilt() )*10000.0), (int32_t)(Speed2Fly.getN()*100.0),(int32_t)(WingLoad*100.0),(int32_t)(fcVelbi1*10000.0),
 					(int32_t)(UbPrimS*10000.0), (int32_t)(VbPrimS*10000.0),(int32_t)(WbPrimS*10000.0),
-					(int32_t)(RTKNproj*1000),(int32_t)(RTKEproj*1000),(int32_t)(-RTKUproj*1000)				
+					(int32_t)(RTKNproj*1000),(int32_t)(RTKEproj*1000),(int32_t)(-RTKUproj*1000),
+					(int32_t)(temperatureLP.LowPass1()*10.0), statTime, (int32_t)(statP*100.0), (int32_t)(GnssVx.ABfilt()*100), (int32_t)(GnssVy.ABfilt()*100), (int32_t)(GnssVz.ABfilt()*100)				
 					); 
 				xSemaphoreTake( BTMutex, 2/portTICK_PERIOD_MS ); // prevent BT conflicts for 2ms max.
 				Router::sendXCV(str);

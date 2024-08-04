@@ -25,6 +25,7 @@ public:
 	void setPolar();
 	double speed( double st, bool circling=false );
 	double sink( double v );
+	double D_over_L( double v );
 	inline double minsink() { return _min_speed; };
 	void recalcSinkNSpeeds();
 	static float getBallastPercent();
