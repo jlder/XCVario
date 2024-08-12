@@ -2020,9 +2020,7 @@ int teopt_adj( SetupMenuValFloat * p ){
 }
 
 int tefilt_adj( SetupMenuValFloat * p ){
-		NEnergy = te_filt.get() / PERIOD10HZ; // Total Energy alpha/beta filter coeff (period ~ delay * 10)
-		alphaEnergy = (2.0 * (2.0 * NEnergy - 1.0) / NEnergy / (NEnergy + 1.0));
-		betaEnergy = (6.0 / NEnergy / (NEnergy + 1.0) );
+		NEnergy = te_filt.get(); // Total Energy alpha/beta filter N
 	return 0;
 }
 
@@ -2060,8 +2058,8 @@ void SetupMenu::flighttest_menu_create( MenuEntry *top ){
 	teopt->setPrecision(1);
 	top->addEntry( teopt );
 
-	SetupMenuValFloat * tefilt = new SetupMenuValFloat( "TE period", "S",	0.2, 2.9, 0.1, tefilt_adj, true, &te_filt );
-	tefilt->setHelp(PROGMEM"TE filter time");
+	SetupMenuValFloat * tefilt = new SetupMenuValFloat( "TE A/B N", "unit",	4, 20, 1, tefilt_adj, true, &te_filt );
+	tefilt->setHelp(PROGMEM"TE A/B filter N");
 	tefilt->setPrecision(1);
 	top->addEntry( tefilt );
 	

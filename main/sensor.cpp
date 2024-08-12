@@ -412,6 +412,7 @@ static float Vxbi = 0.0;
 static float Vybi = 0.0;
 static float Vzbi = 0.0;
 static float ALTbi = 0.0;
+static float Vztotbi = 0.0;
 
 // TODO event counter
 int16_t Event = 0;
@@ -833,10 +834,10 @@ void drawDisplay(void *pvParameters){
 				// ESP_LOGI(FNAME,"TE=%2.3f", te_vario.get() );
 // modif gfm affichage d'une tension batterie nulle tant que les biais gyros n'ont pas été initialisés
 				if (  (BIAS_Init > 0)  || (TAS > 15.0) ){
-					display->drawDisplay( airspeed, TotalEnergy.LowPass1() /*te_vario.get()*/, AverageTotalEnergy.LowPass1()/*aTE*/, polar_sink, altitude.get(), t, battery, s2f_delta, as2f, average_climb.get(), Switch::getCruiseState(), gflags.standard_setting, flap_pos.get() );
+					display->drawDisplay( airspeed, Vztotbi /*te_vario.get()*/, AverageTotalEnergy.LowPass1()/*aTE*/, polar_sink, altitude.get(), t, battery, s2f_delta, as2f, average_climb.get(), Switch::getCruiseState(), gflags.standard_setting, flap_pos.get() );
 				}	
 				else {
-					display->drawDisplay( airspeed,  TotalEnergy.LowPass1() /*te_vario.get()*/, AverageTotalEnergy.LowPass1() /*aTE*/, polar_sink, altitude.get(), t, 0.0, s2f_delta, as2f, average_climb.get(), Switch::getCruiseState(), gflags.standard_setting, flap_pos.get() );
+					display->drawDisplay( airspeed,  Vztotbi /*te_vario.get()*/, AverageTotalEnergy.LowPass1() /*aTE*/, polar_sink, altitude.get(), t, 0.0, s2f_delta, as2f, average_climb.get(), Switch::getCruiseState(), gflags.standard_setting, flap_pos.get() );
 				}
 // fin modif gfm
 				}
@@ -859,18 +860,18 @@ void drawDisplay(void *pvParameters){
 // depending on mode calculate value for Audio and set values accordingly
 void doAudio(){
 	polar_sink = Speed2Fly.sink( ias.get() );
-	float netto = TotalEnergy.LowPass1() /*te_vario.get()*/ - polar_sink; // TODO clean new energt calcul / audio
+	float netto = Vztotbi /*te_vario.get()*/ - polar_sink; // TODO clean new energt calcul / audio
 	as2f = Speed2Fly.speed( netto, !Switch::getCruiseState() );
 	s2f_delta = s2f_delta + ((as2f - ias.get()) - s2f_delta)* (1/(s2f_delay.get()*10)); // low pass damping moved to the correct place
 	// ESP_LOGI( FNAME, "te: %f, polar_sink: %f, netto %f, s2f: %f  delta: %f", aTES2F, polar_sink, netto, as2f, s2f_delta );
 	if( vario_mode.get() == VARIO_NETTO || (Switch::getCruiseState() &&  (vario_mode.get() == CRUISE_NETTO)) ){
 		if( netto_mode.get() == NETTO_RELATIVE )
-			Audio::setValues( TotalEnergy.LowPass1() /*te_vario.get()*/ - polar_sink + Speed2Fly.circlingSink( ias.get() ), s2f_delta );// TODO clean new energt calcul / audio
+			Audio::setValues( Vztotbi /*te_vario.get()*/ - polar_sink + Speed2Fly.circlingSink( ias.get() ), s2f_delta );// TODO clean new energt calcul / audio
 		else if( netto_mode.get() == NETTO_NORMAL )
-			Audio::setValues( TotalEnergy.LowPass1() /*te_vario.get()*/ - polar_sink, s2f_delta );// TODO clean new energt calcul / audio
+			Audio::setValues( Vztotbi /*te_vario.get()*/ - polar_sink, s2f_delta );// TODO clean new energt calcul / audio
 	}
 	else {
-		Audio::setValues( TotalEnergy.LowPass1() /*te_vario.get()*/, s2f_delta ); // TODO add 1.5 factor to vario audio to make sound more "nervous"
+		Audio::setValues( Vztotbi /*te_vario.get()*/, s2f_delta ); // TODO add 1.5 factor to vario audio to make sound more "nervous"
 	}
 }
 
@@ -1485,12 +1486,11 @@ static void processIMU(void *pvParameters)
 				
 				// Compute baro interial velocity ( complementary filter between baro inertial acceleration and baro speed )
 				Ubi = fcVelbi1 * ( Ubi + UiPgain * UbiPrim * dtGyr ) + fcVelbi2 * Ub;
-				// Vbi = fcVelbi1 * ( Vbi + VbiPrim * dtGyr ) + fcVelbi2 * Vb;
-				Vbi = Vb;
+				Vbi = fcVelbi1 * ( Vbi + VbiPrim * dtGyr ) + fcVelbi2 * Vb;
 				Wbi = fcVelbi1 * ( Wbi + WiPgain * WbiPrim * dtGyr ) + fcVelbi2 * Wb;
 
 				// baro inertial TAS & TAS square in any frame
-				TASbiSquare = Ubi * Ubi + Vbi * Vbi + Wbi * Wbi;
+				TASbiSquare = Ubi * Ubi + Vb * Vb + Wbi * Wbi;
 				TASbi = sqrt( TASbiSquare );
 				
 				xSemaphoreGive( dataMutex );
@@ -1810,15 +1810,15 @@ static void processIMU(void *pvParameters)
 			if ( SEN50DataReady ) {
 				SEN50DataReady = false;
 				// send $S1 and $S2 every 50 cycles = 5 seconds
-				sprintf(str,"$S1,%lld,%i,%i,%i,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$S3,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$S2,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",				
-				// $S1 stream
+				sprintf(str,"$S1,%lld,%i,%i,%i,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$S3,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$S2,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",				
+					// $S1 stream
 					statTime, (int32_t)(statP*100.0),(int32_t)(teP*100.0), (int16_t)(dynP*10), 
 					(int64_t)(chosenGnss->time*1000.0), (int16_t)(GnssVx.ABfilt()*100), (int16_t)(GnssVy.ABfilt()*100), (int16_t)(GnssVz.ABfilt()*100),
 					(int32_t)(Pitch*1000.0), (int32_t)(Roll*1000.0), (int32_t)(Yaw*1000.0),
 					(int32_t)(Vzbaro*100),
 					(int32_t)(AoA*1000), (int32_t)(AoB*1000),
 					(int32_t)(Ubi*100), (int32_t)(Vbi*100),(int32_t)(Wbi*100), (int32_t)(Vzbi*100),				
-					(int32_t)(TotalEnergy.LowPass1()*100),
+					(int32_t)(Vztotbi*100),
 					(int32_t)(dynKp*1000), 
 					(int32_t)rint(MPU.mpu_heat_pwm),
 					(int32_t)(DynPeriodVelbi*1000),
@@ -1830,7 +1830,7 @@ static void processIMU(void *pvParameters)
 					(int32_t)(Bias_AoB*1000),
 					(int32_t)(RTKNproj*1000),(int32_t)(RTKEproj*1000),(int32_t)(-RTKUproj*1000),(int32_t)(RTKheading*10),(int32_t)(ALTbi*100),
 					(int32_t)(DHeading*1000),(int32_t)(UbFS*100),(int32_t)(VbFS*100),(int32_t)(WbFS*100),
-					(int32_t)(AccelModulePrimLevel*100),(int32_t)(GyroModulePrimLevel*100), (int32_t)(GravityModuleErrLevel*1000), (int32_t)(Event),
+					(int32_t)(AccelModulePrimLevel*100),(int32_t)(GyroModulePrimLevel*100), (int32_t)(GravityModuleErrLevel*1000), (int32_t)(Event), (int32_t)(Vb*100),
 					// $S2 stream
 					(int16_t)(temperatureLP.LowPass1()*10.0), (int16_t)(MPUtempcel*10.0), chosenGnss->fix, chosenGnss->numSV,
 					(int32_t)(GroundGyroBias.x*100000.0), (int32_t)(GroundGyroBias.y*100000.0), (int32_t)(GroundGyroBias.z*100000.0),				
@@ -1846,14 +1846,14 @@ static void processIMU(void *pvParameters)
 				if ( SENDataReady ) {
 					SENDataReady = false;
 					// send $S1 only every 100ms
-					sprintf(str,"$S1,%lld,%i,%i,%i,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$S3,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",
+					sprintf(str,"$S1,%lld,%i,%i,%i,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$S3,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",
 						statTime, (int32_t)(statP*100.0),(int32_t)(teP*100.0), (int16_t)(dynP*10), 
 						(int64_t)(chosenGnss->time*1000.0), (int16_t)(GnssVx.ABfilt()*100), (int16_t)(GnssVy.ABfilt()*100), (int16_t)(GnssVz.ABfilt()*100),
 						(int32_t)(Pitch*1000.0), (int32_t)(Roll*1000.0), (int32_t)(Yaw*1000.0),
 						(int32_t)(Vzbaro*100),
 						(int32_t)(AoA*1000), (int32_t)(AoB*1000),
 						(int32_t)(Ubi*100), (int32_t)(Vbi*100),(int32_t)(Wbi*100), (int32_t)(Vzbi*100),				
-						(int32_t)(TotalEnergy.LowPass1()*100),
+						(int32_t)(Vztotbi*100),
 						(int32_t)(dynKp*1000), 
 						(int32_t)rint(MPU.mpu_heat_pwm),
 						(int32_t)(DynPeriodVelbi*1000),
@@ -1865,7 +1865,7 @@ static void processIMU(void *pvParameters)
 						(int32_t)(Bias_AoB*1000),
 						(int32_t)(RTKNproj*1000),(int32_t)(RTKEproj*1000),(int32_t)(-RTKUproj*1000),(int32_t)(RTKheading*10),(int32_t)(ALTbi*100),
 						(int32_t)(DHeading*1000),(int32_t)(UbFS*100),(int32_t)(VbFS*100),(int32_t)(WbFS*100),
-						(int32_t)(AccelModulePrimLevel*100),(int32_t)(GyroModulePrimLevel*100), (int32_t)(GravityModuleErrLevel*1000),(int32_t)(Event)			
+						(int32_t)(AccelModulePrimLevel*100),(int32_t)(GyroModulePrimLevel*100), (int32_t)(GravityModuleErrLevel*1000),(int32_t)(Event),(int32_t)(Vb*100)	
 					);
 					xSemaphoreTake( BTMutex, 2/portTICK_PERIOD_MS );				
 					Router::sendXCV(str);
@@ -2031,6 +2031,7 @@ void readSensors(void *pvParameters){
 	float VhAvg = 0.0;
 	float VhHeading = 0.0;
 	bool ALTbiFirstPass = true;
+
 	
 	// alpha beta GNSS parameters
 	#define NGNSS 6 //  Filter parameter
@@ -2048,7 +2049,7 @@ void readSensors(void *pvParameters){
 	#define EnergyOutliers 10.0 // 10 m/s maximum variation sample to sample
 	#define EnergyPrimMin -30.0
 	#define EnergyPrimMax 30.0
-	KinEnergy.ABinit(  NTOTENR,  ENRdt, EnergyOutliers, 0.0, 0.0, EnergyPrimMin, EnergyPrimMax );
+	KinEnergy.ABinit(  NEnergy,  ENRdt, EnergyOutliers, 0.0, 0.0, EnergyPrimMin, EnergyPrimMax );
 
 	// alpha beta parameters for CAS and TAS
 	#define NCAS 6 // CAS alpha/beta filter coeff
@@ -2070,9 +2071,7 @@ void readSensors(void *pvParameters){
 	int16_t tickDSR = 1;
 	
 	// compute once the filter parameters in functions of values in FLASH
-	NEnergy = te_filt.get() / PERIOD10HZ; // Total Energy alpha/beta filter coeff (period ~ delay * 10)
-	alphaEnergy = (2.0 * (2.0 * NEnergy - 1.0) / NEnergy / (NEnergy + 1.0));
-	betaEnergy = (6.0 / NEnergy / (NEnergy + 1.0) );
+	NEnergy = te_filt.get(); // Total Energy alpha/beta N
 	
 	opt_TE = te_opt.get(); // get last d(TE)/dt calculation option
 	
@@ -2301,9 +2300,9 @@ void readSensors(void *pvParameters){
 		WbFS = WbFS + alphaBaroAccS * deltaWbS + WbPrimS * dtStat;
 			
 		// baro interial speed in earth frame
-		Vxbi = cosPitch * Ubi + sinRoll * sinPitch * Vbi + cosRoll * sinPitch * Wbi;
-		Vybi = cosRoll * Vbi - sinRoll * Wbi;
-		Vzbi = -sinPitch * Ubi + sinRoll * cosPitch * Vbi + cosRoll * cosPitch * Wbi;
+		Vxbi = cosPitch * Ubi + sinRoll * sinPitch * Vb + cosRoll * sinPitch * Wbi;
+		Vybi = cosRoll * Vb - sinRoll * Wbi;
+		Vzbi = -sinPitch * Ubi + sinRoll * cosPitch * Vb + cosRoll * cosPitch * Wbi;
 
 		// baro inertial altitude
 		// ALTbi is computed using a complementary filter with baro altitude and baro inertial vertical speed in earth frame
@@ -2320,17 +2319,19 @@ void readSensors(void *pvParameters){
 			// update kinetic energy filter
 			KinEnergy.ABupdate( dtStat, ( TASbiSquare / GRAVITY / 2.0 ) );
 			// filter total energy variation for display to pilot
-			TotalEnergy.LPupdate( te_filt.get(), dtStat, (-Vzbi + KinEnergy.ABprim()) );		
+			//TotalEnergy.LPupdate( te_filt.get(), dtStat, (-Vzbi + KinEnergy.ABprim()) );
+			Vztotbi = -Vzbi + KinEnergy.ABprim();
 		} else {
 			// option 2
 			// energy variation calculation d(E/mg)/dt = d(ALT + 1/2 1/g TAS²)/dt
 			// compute and filter with AB the total energy
 			KinEnergy.ABupdate( dtStat, ( ALTbi + TASbiSquare / GRAVITY / 2.0 ) );
 			// filter derivative of total energy for display to pilot		
-			TotalEnergy.LPupdate( te_filt.get(), dtStat, KinEnergy.ABprim() );
+			//TotalEnergy.LPupdate( te_filt.get(), dtStat, KinEnergy.ABprim() );
+			Vztotbi = KinEnergy.ABprim();
 		}		
 		// long term average filter
-		AverageTotalEnergy.LPupdate( 20, 0.1, TotalEnergy.LowPass1() );		
+		AverageTotalEnergy.LPupdate( 20, 0.1, Vztotbi );		
 
 		#ifdef COMPUTEWIND1
 		// TODO test and optimze wind calculation
@@ -2710,6 +2711,7 @@ void readSensors(void *pvParameters){
 				GyroModulePrimLevel  in hundredth of m/s3,
 				GravityModuleErrLevel in thousandth of m/s2
 				Event Event counter in unit
+				Vb in cm/s
 			*/		
 
 			if ( !(count % 50) ) { 

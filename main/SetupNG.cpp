@@ -42,9 +42,7 @@ void change_mc() {
 }
 
 void change_tefilter() {
-		NEnergy = te_filt.get() / PERIOD10HZ; // Total Energy alpha/beta filter coeff (period ~ delay * 10)
-		alphaEnergy = (2.0 * (2.0 * NEnergy - 1.0) / NEnergy / (NEnergy + 1.0));
-		betaEnergy = (6.0 / NEnergy / (NEnergy + 1.0) );	
+		NEnergy = te_filt.get(); // Total Energy alpha/beta filter N
 }
 
 void change_teopt(){
@@ -454,10 +452,10 @@ SetupNG<mpud::float_axes_t>	gyro_gain("GYRO_GAIN", load_float_axes_t( 0.0, 0.0, 
 
 SetupNG<float>			gravity("LOCAL_GRAVITY", 9.804);
 
-SetupNG<float> 			te_filt( "TE FILTER",0.5, true, SYNC_FROM_MASTER, PERSISTENT, change_tefilter );
+SetupNG<float> 			te_filt( "TE A/B N",15, true, SYNC_FROM_MASTER, PERSISTENT, change_tefilter );
 SetupNG<float>			te_opt( "TE OPTION",2, true, SYNC_FROM_MASTER, PERSISTENT, change_teopt );
 SetupNG<float> 			velbi_period( "VELBI_PERIOD",8.0, true, SYNC_FROM_MASTER, PERSISTENT, change_bifilt );
 SetupNG<float>			kp_Mahony("KP Mahony", 0.0, true, SYNC_FROM_MASTER, PERSISTENT, change_kpMahony );
 SetupNG<float>			Beta_Magdwick("Beta Magdwick", 0.0005, true, SYNC_FROM_MASTER, PERSISTENT, change_BetaMagdwick );
-SetupNG<float>			UiP_gain("UIPGAIN",1.2, true, SYNC_FROM_MASTER, PERSISTENT, change_UiPgain );
+SetupNG<float>			UiP_gain("UIPGAIN",1.0, true, SYNC_FROM_MASTER, PERSISTENT, change_UiPgain );
 SetupNG<float>			WiP_gain("WIPGAIN",1.0, true, SYNC_FROM_MASTER, PERSISTENT, change_WiPgain );
