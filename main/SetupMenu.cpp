@@ -2058,7 +2058,7 @@ void SetupMenu::flighttest_menu_create( MenuEntry *top ){
 	teopt->setPrecision(1);
 	top->addEntry( teopt );
 
-	SetupMenuValFloat * tefilt = new SetupMenuValFloat( "TE A/B N", "unit",	4, 20, 1, tefilt_adj, true, &te_filt );
+	SetupMenuValFloat * tefilt = new SetupMenuValFloat( "TE A/B N", "unit",	10, 30, 1, tefilt_adj, true, &te_filt );
 	tefilt->setHelp(PROGMEM"TE A/B filter N");
 	tefilt->setPrecision(1);
 	top->addEntry( tefilt );

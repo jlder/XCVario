@@ -452,7 +452,7 @@ SetupNG<mpud::float_axes_t>	gyro_gain("GYRO_GAIN", load_float_axes_t( 0.0, 0.0, 
 
 SetupNG<float>			gravity("LOCAL_GRAVITY", 9.804);
 
-SetupNG<float> 			te_filt( "TE A/B N",15, true, SYNC_FROM_MASTER, PERSISTENT, change_tefilter );
+SetupNG<float> 			te_filt( "TE A/B N",20, true, SYNC_FROM_MASTER, PERSISTENT, change_tefilter );
 SetupNG<float>			te_opt( "TE OPTION",2, true, SYNC_FROM_MASTER, PERSISTENT, change_teopt );
 SetupNG<float> 			velbi_period( "VELBI_PERIOD",8.0, true, SYNC_FROM_MASTER, PERSISTENT, change_bifilt );
 SetupNG<float>			kp_Mahony("KP Mahony", 0.0, true, SYNC_FROM_MASTER, PERSISTENT, change_kpMahony );
