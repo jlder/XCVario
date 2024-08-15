@@ -482,7 +482,7 @@ private:
 	bool firstpass = true;
 	int zicket = 0;
 	bool writing = false;
-	float mstime = 0.0;
+	float gettime = 0.0;
 public:
 	void ABinit( int16_t N, float dtTypical ) {
 		ABinit( N, dtTypical, 0.0, 0.0, 0.0, 0.0, 0.0 );
@@ -514,6 +514,7 @@ public:
 		if ( dt > dtMin && dt < dtMax  ) {
 			if ( firstpass ) { // initialize filter variables when first called
 				writing = true;
+				gettime = esp_timer_get_time();
 				filt = RawData;
 				_filt = RawData;
 				prim = 0.0;
@@ -528,6 +529,7 @@ public:
 					if ( (abs(delta) < Threshold ) || (Threshold == 0.0) ) {
 						// new data below threshold
 						writing = true;
+						gettime = esp_timer_get_time();
 						prim = prim + beta * delta / dt;
 						if ( primMin != 0.0 || primMax != 0.0 ) {
 							if ( prim < primMin ) prim = primMin;
@@ -561,6 +563,7 @@ public:
 					if ( zicket <= MaxZicket ) {
 						// if number of zicket below stability criteria, arm and switch to primary filter
 						writing = true;
+						gettime = esp_timer_get_time();
 						prim = _prim;
 						filt = _filt;
 						writing = false;
@@ -571,16 +574,14 @@ public:
 		}
 	}
 	float ABfilt(void) {
-		mstime = esp_timer_get_time();		
 		while( writing ) {
-			if ( abs( esp_timer_get_time() - mstime ) > 0.001 ) break; // wait for 1 ms max if writing is in process
+			if ( abs( esp_timer_get_time() - gettime ) > 0.001 ) break; // wait for 1 ms max if writing is in process
 		}
 		return filt;
 	}
 	float ABprim(void) {
-		mstime = esp_timer_get_time();		
 		while( writing ) {
-			if ( abs( esp_timer_get_time() - mstime ) > 0.001 ) break; // wait for 1 ms max if writing is in process
+			if ( abs( esp_timer_get_time() - gettime ) > 0.001 ) break; // wait for 1 ms max if writing is in process
 		}
 		return prim;
 	}
@@ -597,7 +598,7 @@ private:
 	float alpha = 1.0; // Filter coefficients
 	float beta = 0.0;
 	bool writing = false;
-	float mstime = 0.0;
+	float gettime = 0.0;
 public:
 	void LPinit( float cutoffperiod, float dt ) {
 		alpha = cutoffperiod / (cutoffperiod + dt);
@@ -605,21 +606,20 @@ public:
 	}
     void LPupdate( float input ) {
 		writing = true;
+		gettime = esp_timer_get_time();
 		output1 = alpha * output1 + beta * input;
 		output2 = alpha * output2 + beta * output1;
 		writing = false;
     }
 	float LowPass1(void) {
-		mstime = esp_timer_get_time();
 		while( writing ) {
-			if ( abs( esp_timer_get_time() - mstime ) > 0.001 ) break; // wait for 1 ms max if writing is in process
+			if ( abs( esp_timer_get_time() - gettime ) > 0.001 ) break; // wait for 1 ms max if writing is in process
 		}		
 		return output1;
 	}
 	float LowPass2(void) {
-		mstime = esp_timer_get_time();
 		while( writing ) {
-			if ( abs( esp_timer_get_time() - mstime ) > 0.001 ) break; // wait for 1 ms max if writing is in process
+			if ( abs( esp_timer_get_time() - gettime ) > 0.001 ) break; // wait for 1 ms max if writing is in process
 		}		
 		return output2;
 	}
@@ -630,17 +630,17 @@ class SetGet {
 private:
 	bool writing = false;
 	float data = 0.0;
-	float mstime = 0.0;
+	float gettime = 0.0;
 public:
 	void Set( float value ) {
 		writing = true;
+		gettime = esp_timer_get_time();		
 		data = value;
 		writing = false;
 	}
     float Get( void ) {
-		mstime = esp_timer_get_time();
 		while( writing ) {
-			if ( abs( esp_timer_get_time() - mstime ) > 0.001 ) break; // wait for 1 ms max if writing is in process
+			if ( abs( esp_timer_get_time() - gettime ) > 0.001 ) break; // wait for 1 ms max if writing is in process
 		}
 		return data; 
     }
