@@ -8,7 +8,7 @@
 //!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 //
 #define FTVERSION 13
-#define SOFTVERSION 23
+#define SOFTVERSION 24
 //
 #define COMPUTEBIAS   // code to estimate gyro bias
 //
@@ -191,5 +191,6 @@ extern float Allyvel3D;
 extern float Allyvel2D;
 // MOD#5 add Allystar TAU1201 velocity
 
+extern float accelNEDBODYzNorm;
 
 #endif

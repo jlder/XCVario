@@ -647,50 +647,51 @@ public:
  };
 
 // alpha beta class for gyros
-static AlphaBeta gyroNEDx, gyroNEDy, gyroNEDz;
+AlphaBeta gyroNEDx, gyroNEDy, gyroNEDz;
 
 // alpha beta class for accels
-static AlphaBeta accelNEDBODYx, accelNEDBODYy, accelNEDBODYz;
+AlphaBeta accelNEDBODYx, accelNEDBODYy, accelNEDBODYz;
+float accelNEDBODYzNorm;
 
 // alpha beta class for gyro and accel module
-static AlphaBeta GyroModule, AccelModule;
+AlphaBeta GyroModule, AccelModule;
 
 // alpha beta filters classes for AHRS roll and pitch
-static AlphaBeta RollAHRS, PitchAHRS;
+AlphaBeta RollAHRS, PitchAHRS;
 
 // alpha beta class for kinetic accels
-static AlphaBeta UiPrimF, ViPrimF, WiPrimF;
+AlphaBeta UiPrimF, ViPrimF, WiPrimF;
 
 // alpha beta filters classes for GNSS vector coordinates
-static AlphaBeta GnssVx, GnssVy, GnssVz;
+AlphaBeta GnssVx, GnssVy, GnssVz;
 
 // alpha beta filters for Energy and average Energy calculations
-static AlphaBeta KinEnergy;
+AlphaBeta KinEnergy;
 
 // declare alpha beta for CAS and ALT
-static AlphaBeta CAS, ALT;
+AlphaBeta CAS, ALT;
 
 // Outside temp alpha beta class 
-static AlphaBeta OATemp;
+AlphaBeta OATemp;
 
 // declare low pass for TotalEnergy and AverageTotalEnergy
-static LowPassFilter TotalEnergy, AverageTotalEnergy;
+LowPassFilter TotalEnergy, AverageTotalEnergy;
 
 // declare low pass filter for GyroBiasx,y and z
-static LowPassFilter GyroBiasx, GyroBiasy, GyroBiasz;
+LowPassFilter GyroBiasx, GyroBiasy, GyroBiasz;
 
 // declare low pass filters for motor glider
-static LowPassFilter AccelMotor1, AccelMotor2;
+LowPassFilter AccelMotor1, AccelMotor2;
 
 // declare low pass for outside temperature
-static LowPassFilter temperatureLP;
+LowPassFilter temperatureLP;
 
 // declare low pass for AoB bias
-static LowPassFilter BiasAoB;
+LowPassFilter BiasAoB;
 
 
 // declare SetGet class to reduce read write conflicts between tasks
-static SetGet statP, teP, dynP, TAS, Vztotbi, TASbi, AoA, AoB, gyroCorrx;
+SetGet statP, teP, dynP, TAS, Vztotbi, TASbi, AoA, AoB, gyroCorrx;
 
 #define GYRO_FS (mpud::GYRO_FS_250DPS)
 
@@ -1312,6 +1313,7 @@ static void processIMU(void *pvParameters)
 			accelNEDBODYy.ABupdate( dtGyr, accelISUNEDBODY.y  );
 			accelISUNEDBODY.z = -S_T * RawaccelISUNEDMPU.x + SSmultCT * RawaccelISUNEDMPU.y + CTmultCS * RawaccelISUNEDMPU.z ;
 			accelNEDBODYz.ABupdate( dtGyr, accelISUNEDBODY.z );
+			accelNEDBODYzNorm = accelNEDBODYz.ABfilt() / GRAVITY;
 			//xSemaphoreGive( dataMutex );
 			
 			// motor glider protection
@@ -1391,15 +1393,20 @@ static void processIMU(void *pvParameters)
 					MahonyUpdateIMU( dtGyr, gyroCorr.x, gyroCorr.y, gyroCorr.z, -gravISUNEDBODY.x, -gravISUNEDBODY.y, -gravISUNEDBODY.z, GravityModule );								
 				} else {
 					// Compute dynamic Beta
-					#define BetaRollMax 0.12 // Roll max to consider Beta increase 0.012 rad ~7°
-					#define BetaRollx10 0.0 // Roll at which Beta is 10 times MagdwickBeta
-					#define BetaGain  (BetaRollMax - BetaRollx10)
-					#define MaxGravityError 0.12					
-					GravModuleLP = 0.9 * GravModuleLP  + 0.1 * abs( GravityModule - GRAVITY );					
-					if ( (RollModuleLevel < BetaRollMax) && ( GravModuleLP < MaxGravityError ) ) {
-						CurrentBeta = MagdwickBeta * pow( 10.0, (BetaRollMax - RollModuleLevel) / BetaGain );
+					if ( TAS.Get() > 15.0 ) {	// Compute dynamic Beta only when centrifugal forces are active, TAS > 15 m/s
+						#define BetaRollMax 0.12 // Roll max to consider Beta increase 0.012 rad ~7°
+						#define BetaRollx10 0.0 // Roll at which Beta is 10 times MagdwickBeta
+						#define BetaGain  (BetaRollMax - BetaRollx10)
+						#define MaxGravityError 0.12					
+						GravModuleLP = 0.9 * GravModuleLP  + 0.1 * abs( GravityModule - GRAVITY );					
+						if ( (RollModuleLevel < BetaRollMax) && ( GravModuleLP < MaxGravityError ) ) {
+							CurrentBeta = MagdwickBeta * pow( 10.0, (BetaRollMax - RollModuleLevel) / BetaGain );
+						} else {
+							CurrentBeta = MagdwickBeta;
+						}
 					} else {
-						CurrentBeta = MagdwickBeta;
+						// When static use standard Beta = 0.03 to let AHRS synchronize with accels attitude
+						CurrentBeta = 0.03;
 					}
 					MagdwickUpdateIMU( dtGyr, CurrentBeta, gyroCorr.x, gyroCorr.y, gyroCorr.z, -gravISUNEDBODY.x, -gravISUNEDBODY.y, -gravISUNEDBODY.z, GravityModule );
 				}	
@@ -2250,6 +2257,8 @@ void readSensors(void *pvParameters){
 		#endif
 		
 		// compute CAS, ALT and Vzbaro using alpha/beta filters.  TODO consider using atmospher.h functions
+		
+		// compute Rho at current pressure and OAT
 		if (statP.Get() > 500.0) {
 			Rho = (100.0 * statP.Get() / 287.058 / (273.15 + temperatureLP.LowPass1()));
 		} else {
@@ -2259,7 +2268,7 @@ void readSensors(void *pvParameters){
 		// update CAS filter
 		CAS.ABupdate( dtdynP, sqrt(2 * dynP.Get() / RhoSLISA) );
 		
-		// update TAS
+		// update TAS filter
 		Rhocorr = sqrt(RhoSLISA/Rho);
 		TAS.Set( Rhocorr * CAS.ABfilt() );
 
