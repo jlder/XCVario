@@ -62,8 +62,8 @@ void change_BetaMagdwick(){
 		MagdwickBeta = Beta_Magdwick.get(); // unit for Mahony Ki adjustement
 }
 
-void change_UiPgain() {
-		UiPgain = UiP_gain.get();
+void change_ALTbiN() {
+		ALTbiN = ALTbi_N.get();
 }
 
 void change_WiPgain() {
@@ -452,10 +452,10 @@ SetupNG<mpud::float_axes_t>	gyro_gain("GYRO_GAIN", load_float_axes_t( 0.0, 0.0, 
 
 SetupNG<float>			gravity("LOCAL_GRAVITY", 9.804);
 
-SetupNG<float> 			te_filt( "TE A/B N",20, true, SYNC_FROM_MASTER, PERSISTENT, change_tefilter );
+SetupNG<float> 			te_filt( "TE LP filter",1.0, true, SYNC_FROM_MASTER, PERSISTENT, change_tefilter );
 SetupNG<float>			te_opt( "TE OPTION",2, true, SYNC_FROM_MASTER, PERSISTENT, change_teopt );
-SetupNG<float> 			velbi_period( "VELBI_PERIOD",8.0, true, SYNC_FROM_MASTER, PERSISTENT, change_bifilt );
+SetupNG<float> 			velbi_period( "VELBI_PERIOD",12.0, true, SYNC_FROM_MASTER, PERSISTENT, change_bifilt );
 SetupNG<float>			kp_Mahony("KP Mahony", 0.0, true, SYNC_FROM_MASTER, PERSISTENT, change_kpMahony );
 SetupNG<float>			Beta_Magdwick("Beta Magdwick", 0.0005, true, SYNC_FROM_MASTER, PERSISTENT, change_BetaMagdwick );
-SetupNG<float>			UiP_gain("UIPGAIN",1.0, true, SYNC_FROM_MASTER, PERSISTENT, change_UiPgain );
-SetupNG<float>			WiP_gain("WIPGAIN",1.0, true, SYNC_FROM_MASTER, PERSISTENT, change_WiPgain );
+SetupNG<float>			ALTbi_N("ALTbi N",8.0, true, SYNC_FROM_MASTER, PERSISTENT, change_ALTbiN );
+SetupNG<float>			WiP_gain("TASbi N Delta",5.0, true, SYNC_FROM_MASTER, PERSISTENT, change_WiPgain );

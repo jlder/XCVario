@@ -166,7 +166,7 @@ extern float PeriodVelbi;
 extern float LastPeriodVelbi;
 extern float Mahonykp;
 extern float MagdwickBeta;
-extern float UiPgain;
+extern float ALTbiN;
 extern float WiPgain;
 extern float opt_TE;
 

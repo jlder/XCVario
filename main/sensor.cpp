@@ -395,7 +395,7 @@ float LastPeriodVelbi = 7.0;
 float fcVelbi1;
 float fcVelbi2;
 
-float UiPgain = 1.0;
+float ALTbiN = 8.0;
 float WiPgain = 1.0;
 
 static float Ubi = 0.0;
@@ -1227,7 +1227,7 @@ static void processIMU(void *pvParameters)
 	
 	Mahonykp = kp_Mahony.get(); // get last kp value from NV memory
 	MagdwickBeta = Beta_Magdwick.get(); // get last ki value from NV memory
-	UiPgain = UiP_gain.get(); // get last UiPrim gain for bi calc from NV memory
+	ALTbiN = ALTbi_N.get(); // get last N for ALTbi A/B filter from NV memory
 	WiPgain = WiP_gain.get(); // get last WiPrim gain for bi calc from NV memory
 	
 	SENDataReady = false;
@@ -1532,7 +1532,7 @@ static void processIMU(void *pvParameters)
 				WbiPrim = fcVelbi1 * ( WbiPrim + WiPrimF.ABprim() * dtGyr ) + fcVelbi2 * WbPrimS;
 				
 				// Compute baro interial velocity ( complementary filter between baro inertial acceleration and baro speed )
-				Ubi = fcVelbi1 * ( Ubi + UiPgain * UbiPrim * dtGyr ) + fcVelbi2 * Ub;
+				Ubi = fcVelbi1 * ( Ubi + UbiPrim * dtGyr ) + fcVelbi2 * Ub;
 				Vbi = fcVelbi1 * ( Vbi + VbiPrim * dtGyr ) + fcVelbi2 * Vb;
 				Wbi = fcVelbi1 * ( Wbi + WiPgain * WbiPrim * dtGyr ) + fcVelbi2 * Wb;
 
@@ -1884,7 +1884,7 @@ static void processIMU(void *pvParameters)
 					(int32_t)(GroundGyroBias.x*100000.0), (int32_t)(GroundGyroBias.y*100000.0), (int32_t)(GroundGyroBias.z*100000.0),				
 					(int32_t)(BiasQuatGx*100000.0), (int32_t)(BiasQuatGy*100000.0), (int32_t)(BiasQuatGz*100000.0),
 					(int16_t)(XCVTemp*10.0), (int16_t) (PeriodVelbi*10),
-					(int32_t)(te_filt.get()*10),(int32_t)(Mahonykp*10000),(int32_t)(MagdwickBeta*10000), (int32_t)(UiPgain*100), (int32_t)(WiPgain*100), (int32_t)(opt_TE),
+					(int32_t)(te_filt.get()*10),(int32_t)(Mahonykp*10000),(int32_t)(MagdwickBeta*10000), (int32_t)(ALTbiN*10), (int32_t)(WiPgain*100), (int32_t)(opt_TE),
 					(int32_t)(FTVERSION),(int32_t)(SOFTVERSION)
 					);
 				xSemaphoreTake( BTMutex, 2/portTICK_PERIOD_MS );				
@@ -2725,10 +2725,10 @@ void readSensors(void *pvParameters){
 				IMU Gyro bias z in hundredth of milli rad/s,
 				XCVtemp (temperature inside vario) in tenth of °C,
 				PeriodVelbi (Baro Inertial period in tenth of seconds),
-				te_filt (Total Energy low pass filter period) in tenth of second,
+				te_filt (TE filter period in tenth of second),
 				Mahonykp in tenthousandth of unit,
 				MagdwickBeta in tenthousandth of unit,
-				UiPgain in hundredth of unit,
+				ALTbiN ALTbi N A/B filter in tenth of unit,
 				WiPgain in hunderdth of unit,
 				opt_TE 1 or 2,
 				FTVERSION,

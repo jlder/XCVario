@@ -2040,8 +2040,8 @@ int beta_adj( SetupMenuValFloat * p ){
 	return 0;
 }
 
-int UiP_gain_adj( SetupMenuValFloat * p ){
-		UiPgain = UiP_gain.get(); // gain on UiPrim for baro inertial calculation
+int ALTbi_N_adj( SetupMenuValFloat * p ){
+		ALTbiN = ALTbi_N.get(); // gain on UiPrim for baro inertial calculation
 	return 0;
 }
 
@@ -2058,12 +2058,12 @@ void SetupMenu::flighttest_menu_create( MenuEntry *top ){
 	teopt->setPrecision(1);
 	top->addEntry( teopt );
 
-	SetupMenuValFloat * tefilt = new SetupMenuValFloat( "TE A/B N", "unit",	10, 30, 1, tefilt_adj, true, &te_filt );
-	tefilt->setHelp(PROGMEM"TE A/B filter N");
-	tefilt->setPrecision(1);
+	SetupMenuValFloat * tefilt = new SetupMenuValFloat( "TE LP filter", "S", 0.3, 5, 0.1, tefilt_adj, true, &te_filt );
+	tefilt->setHelp(PROGMEM"TE LP filter Sec.");
+	tefilt->setPrecision(3);
 	top->addEntry( tefilt );
 	
-	SetupMenuValFloat * velbiperiod = new SetupMenuValFloat( "Baro Inert Vel period", "S",	4.0, 9.9, 0.1, bifilt_adj, true, &velbi_period );
+	SetupMenuValFloat * velbiperiod = new SetupMenuValFloat( "Baro Inert Vel period", "S",	4.0, 20.0, 1.0, bifilt_adj, true, &velbi_period );
 	velbiperiod->setHelp(PROGMEM"TE filter time");
 	velbiperiod->setPrecision(1);
 	top->addEntry( velbiperiod );
@@ -2078,13 +2078,13 @@ void SetupMenu::flighttest_menu_create( MenuEntry *top ){
 	BetaMagdwick->setPrecision(4);
 	top->addEntry( BetaMagdwick );
 	
-	SetupMenuValFloat * gainUiP = new SetupMenuValFloat( "UiP bi gain.", "unit",	0.6, 1.4, 0.05, UiP_gain_adj, true, &UiP_gain );
-	gainUiP->setHelp(PROGMEM"UiPrim gain value");
-	gainUiP->setPrecision(3);
-	top->addEntry( gainUiP );	
+	SetupMenuValFloat * NALTbi = new SetupMenuValFloat( "ALTbi N", "unit",	5.0, 25.0, 1.0, ALTbi_N_adj, true, &ALTbi_N );
+	NALTbi->setHelp(PROGMEM"ALTbi A/B filter N");
+	NALTbi->setPrecision(3);
+	top->addEntry( NALTbi );	
 	
-	SetupMenuValFloat * gainWiP = new SetupMenuValFloat( "WiP bi gain.", "unit",	0.6, 1.4, 0.05, WiP_gain_adj, true, &WiP_gain );
-	gainWiP->setHelp(PROGMEM"WiPrim gain value");
+	SetupMenuValFloat * gainWiP = new SetupMenuValFloat( "TASbi N Delta", "unit",	-10.0, 10.0, 0.5, WiP_gain_adj, true, &WiP_gain );
+	gainWiP->setHelp(PROGMEM"TASbi filter N Delta");
 	gainWiP->setPrecision(3);
 	top->addEntry( gainWiP );	
 }
