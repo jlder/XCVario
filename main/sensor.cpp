@@ -1313,7 +1313,7 @@ static void processIMU(void *pvParameters)
 			accelNEDBODYy.ABupdate( dtGyr, accelISUNEDBODY.y  );
 			accelISUNEDBODY.z = -S_T * RawaccelISUNEDMPU.x + SSmultCT * RawaccelISUNEDMPU.y + CTmultCS * RawaccelISUNEDMPU.z ;
 			accelNEDBODYz.ABupdate( dtGyr, accelISUNEDBODY.z );
-			accelNEDBODYzNorm = accelNEDBODYz.ABfilt() / GRAVITY;
+			accelNEDBODYzNorm = -accelNEDBODYz.ABfilt() / GRAVITY;
 			//xSemaphoreGive( dataMutex );
 			
 			// motor glider protection
