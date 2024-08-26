@@ -2041,12 +2041,14 @@ int beta_adj( SetupMenuValFloat * p ){
 }
 
 int ALTbi_N_adj( SetupMenuValFloat * p ){
-		ALTbiN = ALTbi_N.get(); // gain on UiPrim for baro inertial calculation
+		ALTbiN = ALTbi_N.get(); // N for ALTbi A/B filter
+		NALTbiTASbiChanged = true;		
 	return 0;
 }
 
-int WiP_gain_adj( SetupMenuValFloat * p ){
-		WiPgain = WiP_gain.get(); // gain on UiPrim for baro inertial calculation
+int TASbi_N_adj( SetupMenuValFloat * p ){
+		TASbiN = TASbi_N.get(); // delta N (from ALTbi N) for TASbi A/B filter
+		NALTbiTASbiChanged = true;		
 	return 0;
 }
 
@@ -2083,10 +2085,10 @@ void SetupMenu::flighttest_menu_create( MenuEntry *top ){
 	NALTbi->setPrecision(3);
 	top->addEntry( NALTbi );	
 	
-	SetupMenuValFloat * gainWiP = new SetupMenuValFloat( "TASbi N Delta", "unit",	-10.0, 10.0, 0.5, WiP_gain_adj, true, &WiP_gain );
-	gainWiP->setHelp(PROGMEM"TASbi filter N Delta");
-	gainWiP->setPrecision(3);
-	top->addEntry( gainWiP );	
+	SetupMenuValFloat * NTASbi = new SetupMenuValFloat( "TASbi N Delta", "unit",	-10.0, 10.0, 0.5, TASbi_N_adj, true, &TASbi_N );
+	NTASbi->setHelp(PROGMEM"TASbi filter N Delta");
+	NTASbi->setPrecision(3);
+	top->addEntry( NTASbi );	
 }
 
 void SetupMenu::setup_create_root(MenuEntry *top ){

@@ -395,8 +395,9 @@ float LastPeriodVelbi = 7.0;
 float fcVelbi1;
 float fcVelbi2;
 
-float ALTbiN = 8.0;
-float WiPgain = 1.0;
+float ALTbiN = 9.0;
+float TASbiN = 5.0;
+bool NALTbiTASbiChanged = true;
 
 static float Ubi = 0.0;
 static float Vbi = 0.0;
@@ -666,7 +667,7 @@ AlphaBeta UiPrimF, ViPrimF, WiPrimF;
 AlphaBeta GnssVx, GnssVy, GnssVz;
 
 // alpha beta filters for Energy and average Energy calculations
-AlphaBeta KinEnergy;
+AlphaBeta KinEnergy, ALTbiEnergy, TASbiEnergy;
 
 // declare alpha beta for CAS and ALT
 AlphaBeta CAS, ALT;
@@ -1228,7 +1229,7 @@ static void processIMU(void *pvParameters)
 	Mahonykp = kp_Mahony.get(); // get last kp value from NV memory
 	MagdwickBeta = Beta_Magdwick.get(); // get last ki value from NV memory
 	ALTbiN = ALTbi_N.get(); // get last N for ALTbi A/B filter from NV memory
-	WiPgain = WiP_gain.get(); // get last WiPrim gain for bi calc from NV memory
+	TASbiN = TASbi_N.get(); // get last N delta between ALTbi and TASbi from NV memory
 	
 	SENDataReady = false;
 	SEN50DataReady = false;
@@ -1534,7 +1535,7 @@ static void processIMU(void *pvParameters)
 				// Compute baro interial velocity ( complementary filter between baro inertial acceleration and baro speed )
 				Ubi = fcVelbi1 * ( Ubi + UbiPrim * dtGyr ) + fcVelbi2 * Ub;
 				Vbi = fcVelbi1 * ( Vbi + VbiPrim * dtGyr ) + fcVelbi2 * Vb;
-				Wbi = fcVelbi1 * ( Wbi + WiPgain * WbiPrim * dtGyr ) + fcVelbi2 * Wb;
+				Wbi = fcVelbi1 * ( Wbi + WbiPrim * dtGyr ) + fcVelbi2 * Wb;
 
 				// baro inertial TAS & TAS square in any frame
 				// TASbiSquare = Ubi * Ubi + Vbi * Vbi + Wbi * Wbi;
@@ -1884,7 +1885,7 @@ static void processIMU(void *pvParameters)
 					(int32_t)(GroundGyroBias.x*100000.0), (int32_t)(GroundGyroBias.y*100000.0), (int32_t)(GroundGyroBias.z*100000.0),				
 					(int32_t)(BiasQuatGx*100000.0), (int32_t)(BiasQuatGy*100000.0), (int32_t)(BiasQuatGz*100000.0),
 					(int16_t)(XCVTemp*10.0), (int16_t) (PeriodVelbi*10),
-					(int32_t)(te_filt.get()*10),(int32_t)(Mahonykp*10000),(int32_t)(MagdwickBeta*10000), (int32_t)(ALTbiN*10), (int32_t)(WiPgain*100), (int32_t)(opt_TE),
+					(int32_t)(te_filt.get()*10),(int32_t)(Mahonykp*10000),(int32_t)(MagdwickBeta*10000), (int32_t)(ALTbiN*10), (int32_t)(TASbiN*10), (int32_t)(opt_TE),
 					(int32_t)(FTVERSION),(int32_t)(SOFTVERSION)
 					);
 				xSemaphoreTake( BTMutex, 2/portTICK_PERIOD_MS );				
@@ -2374,12 +2375,22 @@ void readSensors(void *pvParameters){
 			Vztotbi.Set( -Vzbi + KinEnergy.ABprim() );
 		} else {
 			// option 2
-			// energy variation calculation d(E/mg)/dt = d(ALT + 1/2 1/g TAS²)/dt
-			// compute and filter with AB the total energy
-			KinEnergy.ABupdate( dtStat, ( ALTbi + TASbiSquare / GRAVITY / 2.0 ) );
-			// filter derivative of total energy for display to pilot		
-			//TotalEnergy.LPupdate( te_filt.get(), dtStat, KinEnergy.ABprim() );
-			Vztotbi.Set( KinEnergy.ABprim() );
+			// energy variation calculation d(E/mg)/dt = d(ALT)/dt + d(1/2 1/g TAS²)/dt
+			// compute and filter with AB using different N value both terms of equation
+			// check if A/B filters N has changed and update
+			if ( NALTbiTASbiChanged ) {
+				#define ALTbiTASbiEnergdt 0.1 // average Energy dt
+				#define ALTbiTASbiEnergyOutliers 10.0 // 10 m/s maximum variation sample to sample
+				#define ALTbiTASbiEnergyPrimMin -50.0
+				#define ALTbiTASbiEnergyPrimMax 50.0
+				ALTbiEnergy.ABinit(  ALTbiN,  ALTbiTASbiEnergdt, ALTbiTASbiEnergyOutliers, 0.0, 0.0, ALTbiTASbiEnergyPrimMin, ALTbiTASbiEnergyPrimMax );
+				TASbiEnergy.ABinit(  ALTbiN + TASbiN,  ALTbiTASbiEnergdt, ALTbiTASbiEnergyOutliers, 0.0, 0.0, ALTbiTASbiEnergyPrimMin, ALTbiTASbiEnergyPrimMax );
+				NALTbiTASbiChanged = false;
+			}
+			ALTbiEnergy.ABupdate( dtStat, ALTbi );
+			TASbiEnergy.ABupdate( dtStat, ( TASbiSquare / GRAVITY / 2.0 ) );			
+			// Total Energy is sum of both potential and kinetic energies variations
+			Vztotbi.Set( ALTbiEnergy.ABprim() + TASbiEnergy.ABprim() );
 		}		
 		// long term average filter
 		AverageTotalEnergy.LPupdate( Vztotbi.Get() );		
@@ -2729,7 +2740,7 @@ void readSensors(void *pvParameters){
 				Mahonykp in tenthousandth of unit,
 				MagdwickBeta in tenthousandth of unit,
 				ALTbiN ALTbi N A/B filter in tenth of unit,
-				WiPgain in hunderdth of unit,
+				TASbiN delta between ALTbi and TASbi N in tenth of unit,
 				opt_TE 1 or 2,
 				FTVERSION,
 				SOFTVERSION

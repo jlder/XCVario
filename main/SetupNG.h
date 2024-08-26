@@ -508,7 +508,7 @@ extern SetupNG<float>  		velbi_period;
 extern SetupNG<float>		kp_Mahony;
 extern SetupNG<float>		Beta_Magdwick;
 extern SetupNG<float>		ALTbi_N;
-extern SetupNG<float>		WiP_gain;
+extern SetupNG<float>		TASbi_N;
 
 extern SetupNG<int>  		display_type;
 extern SetupNG<int>  		display_orientation;

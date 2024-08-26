@@ -8,7 +8,7 @@
 //!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 //
 #define FTVERSION 13
-#define SOFTVERSION 24
+#define SOFTVERSION 25
 //
 #define COMPUTEBIAS   // code to estimate gyro bias
 //
@@ -167,7 +167,8 @@ extern float LastPeriodVelbi;
 extern float Mahonykp;
 extern float MagdwickBeta;
 extern float ALTbiN;
-extern float WiPgain;
+extern float TASbiN;
+extern bool NALTbiTASbiChanged;
 extern float opt_TE;
 
 extern double RTKtime;

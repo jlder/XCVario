@@ -64,10 +64,12 @@ void change_BetaMagdwick(){
 
 void change_ALTbiN() {
 		ALTbiN = ALTbi_N.get();
+		NALTbiTASbiChanged = true;		
 }
 
-void change_WiPgain() {
-		WiPgain = WiP_gain.get();
+void change_TASbiN() {
+		TASbiN = TASbi_N.get();
+		NALTbiTASbiChanged = true;		
 }
 
 void change_ballast() {
@@ -436,6 +438,8 @@ SetupNG<float>			tilt("XCV_TILT", -0.223);
 SetupNG<float>			sway("XCV_SWAY", 0.024);
 SetupNG<float>			distCG("DIST_CG_XCVARIO", 1.42);
 SetupNG<float>          mpu_temperature("MPUTEMP", 45.0, true, SYNC_FROM_MASTER, PERSISTENT, chg_mpu_target );    // default for AHRS chip temperature (XCV 2023)
+SetupNG<float>			ALTbi_N("ALTbi N",9.0, true, SYNC_FROM_MASTER, PERSISTENT, change_ALTbiN );
+SetupNG<float>			TASbi_N("TASbi N Delta",1.0, true, SYNC_FROM_MASTER, PERSISTENT, change_TASbiN );
 #endif	
 
 #ifdef VENTUS3
@@ -445,6 +449,8 @@ SetupNG<float>			tilt("XCV_TILT", -0.063);
 SetupNG<float>			sway("XCV_SWAY", 0.024);
 SetupNG<float>			distCG("DIST_CG_XCVARIO", 1.4);
 SetupNG<float>          mpu_temperature("MPUTEMP", 50.0, true, SYNC_FROM_MASTER, PERSISTENT, chg_mpu_target );    // default for AHRS chip temperature (XCV 2023)
+SetupNG<float>			ALTbi_N("ALTbi N",9.0, true, SYNC_FROM_MASTER, PERSISTENT, change_ALTbiN );
+SetupNG<float>			TASbi_N("TASbi N Delta",5.0, true, SYNC_FROM_MASTER, PERSISTENT, change_TASbiN );
 #endif
 
 SetupNG<mpud::float_axes_t>	gyro_bias("GYRO_BIAS", load_float_axes_t( 0.0, 0.0, 0.0) );
@@ -454,8 +460,6 @@ SetupNG<float>			gravity("LOCAL_GRAVITY", 9.804);
 
 SetupNG<float> 			te_filt( "TE LP filter",1.0, true, SYNC_FROM_MASTER, PERSISTENT, change_tefilter );
 SetupNG<float>			te_opt( "TE OPTION",2, true, SYNC_FROM_MASTER, PERSISTENT, change_teopt );
-SetupNG<float> 			velbi_period( "VELBI_PERIOD",12.0, true, SYNC_FROM_MASTER, PERSISTENT, change_bifilt );
+SetupNG<float> 			velbi_period( "VELBI_PERIOD",8.0, true, SYNC_FROM_MASTER, PERSISTENT, change_bifilt );
 SetupNG<float>			kp_Mahony("KP Mahony", 0.0, true, SYNC_FROM_MASTER, PERSISTENT, change_kpMahony );
 SetupNG<float>			Beta_Magdwick("Beta Magdwick", 0.0005, true, SYNC_FROM_MASTER, PERSISTENT, change_BetaMagdwick );
-SetupNG<float>			ALTbi_N("ALTbi N",8.0, true, SYNC_FROM_MASTER, PERSISTENT, change_ALTbiN );
-SetupNG<float>			WiP_gain("TASbi N Delta",5.0, true, SYNC_FROM_MASTER, PERSISTENT, change_WiPgain );
