@@ -204,7 +204,8 @@ float AccelModulePrimFilt = 0.0;
 float AccelModuleFilt = 0.0;
 float AccelModulePrimLevel = 0.0;
 float dynKp = 0.1;
-float DynPeriodVelbi = 4.0;
+float DynPeriodVelbi = 8.0;
+float DynPeriodVelbiLow = 2.0;
 float WingLoad = 40.0;
 float GravModuleLP = 0.0;
 
@@ -390,10 +391,12 @@ static float Vzbaro = 0.0;
 float NEnergy = 20.0;
 float alphaEnergy;
 float betaEnergy;
-float PeriodVelbi = 7.0;
+float PeriodVelbi = 8.0;
 float LastPeriodVelbi = 7.0;
 float fcVelbi1;
 float fcVelbi2;
+float fcVelbiLow1;
+float fcVelbiLow2;
 
 float ALTbiN = 9.0;
 float TASbiN = 5.0;
@@ -1525,21 +1528,40 @@ static void processIMU(void *pvParameters)
 				}
 				fcVelbi1 = ( DynPeriodVelbi / ( DynPeriodVelbi + dtGyr ));
 				fcVelbi2 = ( 1.0 - fcVelbi1 );
+				#define VelbiLow 4.0
+				DynPeriodVelbiLow = DynPeriodVelbi / VelbiLow;
+				fcVelbiLow1 = ( DynPeriodVelbiLow / ( DynPeriodVelbiLow + dtGyr ));
+				fcVelbiLow2 = ( 1.0 - fcVelbi1 );				
 				
 				// Compute baro interial acceleration ( complementary filter between inertial accel derivatives and baro accels )
 				//xSemaphoreTake( dataMutex, 3/portTICK_PERIOD_MS ); // prevent data conflicts for 3ms max.			
 				UbiPrim = fcVelbi1 * ( UbiPrim + UiPrimF.ABprim() * dtGyr ) + fcVelbi2 * UbPrimS;
-				VbiPrim = fcVelbi1 * ( VbiPrim + ViPrimF.ABprim() * dtGyr ) + fcVelbi2 * VbPrimS;			
-				WbiPrim = fcVelbi1 * ( WbiPrim + WiPrimF.ABprim() * dtGyr ) + fcVelbi2 * WbPrimS;
+				if( opt_TE == 1 ) {
+					VbiPrim = fcVelbiLow1 * ( VbiPrim + ViPrimF.ABprim() * dtGyr ) + fcVelbiLow2 * VbPrimS;			
+					WbiPrim = fcVelbiLow1 * ( WbiPrim + WiPrimF.ABprim() * dtGyr ) + fcVelbiLow2 * WbPrimS;					
+				} else {
+					VbiPrim = fcVelbi1 * ( VbiPrim + ViPrimF.ABprim() * dtGyr ) + fcVelbi2 * VbPrimS;			
+					WbiPrim = fcVelbi1 * ( WbiPrim + WiPrimF.ABprim() * dtGyr ) + fcVelbi2 * WbPrimS;
+				}
 				
 				// Compute baro interial velocity ( complementary filter between baro inertial acceleration and baro speed )
 				Ubi = fcVelbi1 * ( Ubi + UbiPrim * dtGyr ) + fcVelbi2 * Ub;
-				Vbi = fcVelbi1 * ( Vbi + VbiPrim * dtGyr ) + fcVelbi2 * Vb;
-				Wbi = fcVelbi1 * ( Wbi + WbiPrim * dtGyr ) + fcVelbi2 * Wb;
+				if( opt_TE == 1 ) {
+					Vbi = fcVelbiLow1 * ( Vbi + VbiPrim * dtGyr ) + fcVelbiLow2 * Vb;
+					Wbi = fcVelbiLow1 * ( Wbi + WbiPrim * dtGyr ) + fcVelbiLow2 * Wb;
+					
+				} else {
+					Vbi = Vb;
+					Wbi = fcVelbi1 * ( Wbi + WbiPrim * dtGyr ) + fcVelbi2 * Wb;
+				}				
 
 				// baro inertial TAS & TAS square in any frame
 				// TASbiSquare = Ubi * Ubi + Vbi * Vbi + Wbi * Wbi;
-				TASbiSquare = Ubi * Ubi + Wbi * Wbi; // TODO removed Vbi from calculation due to unexplained high Vbi variations			
+				if ( opt_TE == 1 ) {
+					TASbiSquare = Ubi * Ubi + Vbi * Vbi + Wbi * Wbi;
+				} else {
+					TASbiSquare = Ubi * Ubi + Wbi * Wbi; // TODO removed Vbi from calculation due to unexplained high Vbi variations					
+				}
 				TASbi.Set( sqrt( TASbiSquare ) );
 				
 				//xSemaphoreGive( dataMutex );
@@ -2364,7 +2386,7 @@ void readSensors(void *pvParameters){
 		ALTbi = fcAltbi1 * ( ALTbi - Vzbi * dtStat ) + fcAltbi2	* ALT.ABfilt();
 
 		// Energy variation d(TE)/dt options
-
+		/*
 		if (opt_TE == 1.0 ) {
 			// option 1
 			// energy variation calculation d(E/mg)/dt = - Vzbi + d(1/2 1/g TASbi²)/dt
@@ -2391,7 +2413,26 @@ void readSensors(void *pvParameters){
 			TASbiEnergy.ABupdate( dtStat, ( TASbiSquare / GRAVITY / 2.0 ) );			
 			// Total Energy is sum of both potential and kinetic energies variations
 			Vztotbi.Set( ALTbiEnergy.ABprim() + TASbiEnergy.ABprim() );
-		}		
+		} */
+		// TODO only use second solution to compute total energy variation
+		// energy variation calculation d(E/mg)/dt = d(ALT)/dt + d(1/2 1/g TAS²)/dt
+		// compute and filter with AB using different N value both terms of equation
+		// check if A/B filters N has changed and update
+		if ( NALTbiTASbiChanged ) {
+			#define ALTbiTASbiEnergdt 0.1 // average Energy dt
+			#define ALTbiTASbiEnergyOutliers 10.0 // 10 m/s maximum variation sample to sample
+			#define ALTbiTASbiEnergyPrimMin -50.0
+			#define ALTbiTASbiEnergyPrimMax 50.0
+			ALTbiEnergy.ABinit(  ALTbiN,  ALTbiTASbiEnergdt, ALTbiTASbiEnergyOutliers, 0.0, 0.0, ALTbiTASbiEnergyPrimMin, ALTbiTASbiEnergyPrimMax );
+			TASbiEnergy.ABinit(  ALTbiN + TASbiN,  ALTbiTASbiEnergdt, ALTbiTASbiEnergyOutliers, 0.0, 0.0, ALTbiTASbiEnergyPrimMin, ALTbiTASbiEnergyPrimMax );
+			NALTbiTASbiChanged = false;
+		}
+		ALTbiEnergy.ABupdate( dtStat, ALTbi );
+		TASbiEnergy.ABupdate( dtStat, ( TASbiSquare / GRAVITY / 2.0 ) );			
+		// Total Energy is sum of both potential and kinetic energies variations
+		Vztotbi.Set( ALTbiEnergy.ABprim() + TASbiEnergy.ABprim() );
+
+		
 		// long term average filter
 		AverageTotalEnergy.LPupdate( Vztotbi.Get() );		
 
