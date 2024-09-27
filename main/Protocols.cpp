@@ -745,6 +745,7 @@ void Protocols::parseNMEA( const char *str ){
 			IMUstream = false;
 			SENstream = false;			
 			CALstream = true; // Accel calibration stream
+			CALfirstpass = true;
 		} else {
 			sprintf(strx,"$CAL format error. Need to type: $CAL, local_gravity_value\r\n");
 			Router::sendXCV(strx);

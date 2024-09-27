@@ -8,7 +8,7 @@
 //!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 //
 #define FTVERSION 13
-#define SOFTVERSION 26
+#define SOFTVERSION 27
 //
 #define COMPUTEBIAS   // code to estimate gyro bias
 //
@@ -155,6 +155,7 @@ extern MPU_t MPU;
 extern bool IMUstream;
 extern bool SENstream;
 extern bool CALstream;
+extern bool CALfirstpass;
 extern bool TSTstream;
 extern bool LABtest;
 extern bool AHRSstream;
