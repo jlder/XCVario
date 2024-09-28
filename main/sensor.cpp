@@ -1343,13 +1343,13 @@ static void processIMU(void *pvParameters)
 		}
 		// Adjust Accel A/B filter N value in function of accel module prim level
 		// asysmetric filter with fast rise ~0.5 second and slow decay ~3 seconds period
-		#define fcNRAccel 2.0 // 2.0Hz rise low pass to filter 
+		#define fcNRAccel 10.0 // 10.0Hz rise low pass to filter 
 		#define fcNRA1 (40.0/(40.0+fcNRAccel))
 		#define fcNRA2 (1.0-fcNRA1)
-		#define fcNDAccel 0.3 // 0.3Hz decay low pass to filter 
+		#define fcNDAccel 1.0 // 1.0Hz decay low pass to filter 
 		#define fcNDA1 (40.0/(40.0+fcNDAccel))
 		#define fcNDA2 (1.0-fcNDA1)
-		float NAccelupdt = AccelModulePrimLevel;
+		float NAccelupdt = AccelModulePrimLevel / 3.0;
 		if (NAccelupdt < 6.0 ) NAccelupdt = 6.0;
 		if (NAccelupdt > 30.0 ) NAccelupdt = 30.0;		
 		if ( NAccel < NAccelupdt ) {
