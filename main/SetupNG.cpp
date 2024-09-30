@@ -448,7 +448,7 @@ SetupNG<mpud::float_axes_t>	accl_gain("ACCL_GAIN", load_float_axes_t(0.9739,1.00
 SetupNG<float>			tilt("XCV_TILT", -0.063);
 SetupNG<float>			sway("XCV_SWAY", 0.024);
 SetupNG<float>			distCG("DIST_CG_XCVARIO", 1.4);
-SetupNG<float>          mpu_temperature("MPUTEMP", 40.0, true, SYNC_FROM_MASTER, PERSISTENT, chg_mpu_target );    // default for AHRS chip temperature (XCV 2023)
+SetupNG<float>          mpu_temperature("MPUTEMP", 50.0, true, SYNC_FROM_MASTER, PERSISTENT, chg_mpu_target );    // 
 SetupNG<float>			ALTbi_N("ALTbi N",9.0, true, SYNC_FROM_MASTER, PERSISTENT, change_ALTbiN );
 SetupNG<float>			TASbi_N("TASbi N Delta",5.0, true, SYNC_FROM_MASTER, PERSISTENT, change_TASbiN );
 #endif

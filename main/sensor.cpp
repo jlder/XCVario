@@ -1923,7 +1923,7 @@ static void processIMU(void *pvParameters)
 					(int32_t)(AoA.Get()*1000), (int32_t)(AoB.Get()*1000),
 					(int32_t)(Ubi*100), (int32_t)(Vbi*100),(int32_t)(Wbi*100), (int32_t)(Vzbi*100),				
 					(int32_t)(Vztotbi.Get()*100),
-					(int32_t)(dynKp*1000), 
+					(int32_t)(CurrentBeta*10000), 
 					(int32_t)(NAccel * 10),
 					(int32_t)(DynPeriodVelbi*1000),
 					// $S3 stream
@@ -1958,7 +1958,7 @@ static void processIMU(void *pvParameters)
 						(int32_t)(AoA.Get()*1000), (int32_t)(AoB.Get()*1000),
 						(int32_t)(Ubi*100), (int32_t)(Vbi*100),(int32_t)(Wbi*100), (int32_t)(Vzbi*100),				
 						(int32_t)(Vztotbi.Get()*100),
-						(int32_t)(dynKp*1000), 
+						(int32_t)(CurrentBeta*10000), 
 						(int32_t)NAccel * 10,
 						(int32_t)(DynPeriodVelbi*1000),
 						// $S3 stream
@@ -2793,7 +2793,7 @@ void readSensors(void *pvParameters){
 				Wbi in cm/s,
 				Vzbi in cm/s,			
 				TotalEnergy in cm/s,
-				dynKp in thousands of unit,
+				CurrentBeta in tenthousand of unit,
 				NAccel in ten of unit,
 				DynPeriodVelbi in thousands of second
 				<CR><LF>		
