@@ -1228,9 +1228,13 @@ static void processIMU(void *pvParameters)
 	WiPrimF.ABinit( NIPRIM, IPrimdt );
 	
 	// LP filter initialization
-	GyroBiasx.LPinit( 700.0, 0.025 ); // LP period 700 seconds and sample period 0.025 second
-	GyroBiasy.LPinit( 700.0, 0.025 ); // LP period 700 seconds and sample period 0.025 second
-	GyroBiasz.LPinit( 700.0, 0.025 ); // LP period 700 seconds and sample period 0.025 second	
+	#define GyroCutoffPeriod 500 //  very long term average ~500 seconds
+	GyroBiasx.LPinit( GyroCutoffPeriod, Gyrodt ); // LP period GyroCutoffPeriod seconds and sample period Gyrodt second
+	GyroBiasy.LPinit( GyroCutoffPeriod, Gyrodt ); // LP period GyroCutoffPeriod seconds and sample period Gyrodt second
+	GyroBiasz.LPinit( GyroCutoffPeriod, Gyrodt ); // LP period GyroCutoffPeriod seconds and sample period Gyrodt second
+	float PitchPrim;
+	float RollPrim;
+	float HeadingPrim;
 	
 	// compute once the filter parameters in functions of values in FLASH
 	PeriodVelbi = velbi_period.get(); // period in second for baro/inertial velocity. period long enough to reduce effect of baro wind gradients
@@ -1482,17 +1486,19 @@ static void processIMU(void *pvParameters)
 				// z gyro bias is computed by long term average of gyro value minus heading variation estimation
 				#define RollLimit 0.175 // max lateral gravity acceleration (normalized acceleration) for 10° roll
 				#define PitchLimit 0.175 // max longitudinal gravity acceleration (normalized acceleration) for 10° pitch
+				#define HeadingPrimLimit 0.175 // max heading variation to avoid outliers,0.175 rad/s ~ 10°/s
 				#define GMaxBias 0.005 // limit biais correction to 5 mrad/s
-				#define GyroCutoffPeriod 200 //  very long term average ~ 200 seconds
 				if ( (TAS.Get() > 15.0) && (abs(Roll) < RollLimit)  && (abs(Pitch) < PitchLimit) ) {
-					// compute Gx - d(roll)/dt and Gy - d(pitch)/dt long term average.
-					GyroBiasx.LPupdate( gyroCorr.x - RollAHRS.ABprim() );
-					GyroBiasy.LPupdate( gyroCorr.y - PitchAHRS.ABprim() );		
+					// When there is no outliers from d(roll)/dt and d(pitch)/dt, compute bias as Gx - d(roll)/dt and Gy - d(pitch)/dt long term average.
+					RollPrim = RollAHRS.ABprim();
+					if ( abs(RollPrim) < RollLimit ) GyroBiasx.LPupdate( gyroCorr.x - RollPrim );
+					PitchPrim = PitchAHRS.ABprim();
+					if ( abs(PitchPrim) < PitchLimit ) GyroBiasy.LPupdate( gyroCorr.y - PitchPrim );					
 					// compute pseudo heading from GNSS
 					GnssTrack = atan2( GnssVy.ABfilt(), GnssVx.ABfilt() );
-					PseudoHeadingPrim = ( GnssVy.ABprim() * cos(GnssTrack) - GnssVx.ABprim() * sin(GnssTrack) ) / TAS.Get();
+					PseudoHeadingPrim = ( GnssVy.ABprim() * cos(GnssTrack) - GnssVx.ABprim() * sin(GnssTrack) ) / TASbi.Get();
 					// compute Gz - pseudo heading variation long term average.		
-					GyroBiasz.LPupdate( gyroCorr.z - PseudoHeadingPrim );
+					if ( abs(PseudoHeadingPrim) < HeadingPrimLimit ) GyroBiasz.LPupdate( gyroCorr.z - PseudoHeadingPrim );
 					// update gyros biases variables
 					BiasQuatGx = GyroBiasx.LowPass2();
 					BiasQuatGy = GyroBiasy.LowPass2();
@@ -1911,13 +1917,93 @@ static void processIMU(void *pvParameters)
 		}
 		
 		if ( SENstream ) {
+			/* Sensor data
+				$S1,			
+				static time in milli second,
+				static pressure in Pa,
+				TE pressure in Pa,
+				Dynamic pressure in tenth of Pa,
+				GNSS time in milli second,
+				GNSS speed x or north in centimeters/s,
+				GNSS speed y or east in centimeters/s,
+				GNSS speed z or down in centimeters/s,
+				Pitch in milli rad,
+				Roll in milli rad,
+				Yaw in milli rad,
+				Vzbaro in cm/s,
+				AoA angle in mrad,
+				AoB  angle in mrad,
+				Ubi in cm/s,
+				Vbi in cm/s,
+				Wbi in cm/s,
+				Vzbi in cm/s,			
+				TotalEnergy in cm/s,
+				CurrentBeta in tenthousand of unit,
+				NAccel in ten of unit,
+				DynPeriodVelbi in thousands of second
+				<CR><LF>		
+			*/
+			/* 
+				$S2,
+				Outside Air Temperature in tenth of °C,
+				MPU temperature in tenth °C,
+				GNSS fix 0 to 6   3=3D   4= 3D diff  5= RTK Float  6 = RTK integer
+				GNSS number of satelites used  or  RTK ratio * 10 
+				Ground Gyro bias x in hundredth of milli rad/s,
+				Ground Gyro bias y in hundredth of milli rad/s,
+				Ground Gyro bias z in hundredth of milli rad/s,			
+				IMU Gyro bias x in hundredth of milli rad/s,
+				IMU Gyro bias y in hundredth of milli rad/s,
+				IMU Gyro bias z in hundredth of milli rad/s,
+				XCVtemp (temperature inside vario) in tenth of °C,
+				PeriodVelbi (Baro Inertial period in tenth of seconds),
+				te_filt (TE filter period in tenth of second),
+				Mahonykp in tenthousandth of unit,
+				MagdwickBeta in tenthousandth of unit,
+				ALTbiN ALTbi N A/B filter in tenth of unit,
+				TASbiN delta between ALTbi and TASbi N in tenth of unit,
+				opt_TE 1 or 2,
+				FTVERSION,
+				SOFTVERSION
+			*/	
+			/* 
+				$S3,
+				UiPrim in hundred of m/s²,
+				ViPrim,
+				Wiprim,
+				UbPrimS in hubdred of m/s²,
+				VbPrimS,
+				WbPrimS,
+				UiPrimF.ABprim() in hundred of m/s3,
+				ViPrimF.ABprim(),
+				WiPrimF.ABprim(),			
+				UbiPrim in hundred of m/s²,
+				VbiPrim,
+				WbiPrim,
+				Bias_AoB in mrad
+				RTKNproj in thousandths of meter;
+				RTKEproj in thousandths of meter;
+				RTKDproj in thousandths of meter;
+				RTKheading in tenth of degre;
+				ALTbi in cm,
+				DHeading in mrad,
+				UbFS in cm/s,
+				VbFS in cm/s,
+				WbFS in cm/s,
+				AccelModulePrimLevel in hundredth of m/s3,
+				GyroModulePrimLevel  in hundredth of m/s3,
+				GravityModuleErrLevel in thousandth of m/s2
+				Event Event counter in unit
+				Vb in cm/s
+				PseudoHeadingPrim in hundredth of milli rad/s,			
+			*/				
 			if ( SEN50DataReady ) {
 				SEN50DataReady = false;
 				// send $S1 and $S2 every 50 cycles = 5 seconds
-				sprintf(str,"$S1,%lld,%i,%i,%i,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$S3,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$S2,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",				
+				sprintf(str,"$S1,%lld,%i,%i,%i,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$S3,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$S2,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",				
 					// $S1 stream
 					statTime, (int32_t)(statP.Get()*100.0),(int32_t)(teP.Get()*100.0), (int16_t)(dynP.Get()*10), 
-					(int64_t)(chosenGnss->time*1000.0), (int16_t)(GnssVx.ABfilt()*100), (int16_t)(GnssVy.ABfilt()*100), (int16_t)(GnssVz.ABfilt()*100),
+					(int64_t)(chosenGnss->time*1000.0), (int16_t)(chosenGnss->speed.x*100), (int16_t)(chosenGnss->speed.y*100), (int16_t)(chosenGnss->speed.z*100),
 					(int32_t)(Pitch*1000.0), (int32_t)(Roll*1000.0), (int32_t)(Yaw*1000.0),
 					(int32_t)(Vzbaro*100),
 					(int32_t)(AoA.Get()*1000), (int32_t)(AoB.Get()*1000),
@@ -1935,6 +2021,7 @@ static void processIMU(void *pvParameters)
 					(int32_t)(RTKNproj*1000),(int32_t)(RTKEproj*1000),(int32_t)(-RTKUproj*1000),(int32_t)(RTKheading*10),(int32_t)(ALTbi*100),
 					(int32_t)(DHeading*1000),(int32_t)(UbFS*100),(int32_t)(VbFS*100),(int32_t)(WbFS*100),
 					(int32_t)(AccelModulePrimLevel*100),(int32_t)(GyroModulePrimLevel*100), (int32_t)(GravityModuleErrLevel*1000), (int32_t)(Event), (int32_t)(Vb*100),
+					(int32_t)(PseudoHeadingPrim*100000),
 					// $S2 stream
 					(int16_t)(temperatureLP.LowPass1()*10.0), (int16_t)(MPUtempcel*10.0), chosenGnss->fix, chosenGnss->numSV,
 					(int32_t)(GroundGyroBias.x*100000.0), (int32_t)(GroundGyroBias.y*100000.0), (int32_t)(GroundGyroBias.z*100000.0),				
@@ -1950,9 +2037,9 @@ static void processIMU(void *pvParameters)
 				if ( SENDataReady ) {
 					SENDataReady = false;
 					// send $S1 only every 100ms
-					sprintf(str,"$S1,%lld,%i,%i,%i,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$S3,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",
+					sprintf(str,"$S1,%lld,%i,%i,%i,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$S3,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",
 						statTime, (int32_t)(statP.Get()*100.0),(int32_t)(teP.Get()*100.0), (int16_t)(dynP.Get()*10), 
-						(int64_t)(chosenGnss->time*1000.0), (int16_t)(GnssVx.ABfilt()*100), (int16_t)(GnssVy.ABfilt()*100), (int16_t)(GnssVz.ABfilt()*100),
+						(int64_t)(chosenGnss->time*1000.0), (int16_t)(chosenGnss->speed.x*100), (int16_t)(chosenGnss->speed.y*100), (int16_t)(chosenGnss->speed.z*100),
 						(int32_t)(Pitch*1000.0), (int32_t)(Roll*1000.0), (int32_t)(Yaw*1000.0),
 						(int32_t)(Vzbaro*100),
 						(int32_t)(AoA.Get()*1000), (int32_t)(AoB.Get()*1000),
@@ -1969,7 +2056,8 @@ static void processIMU(void *pvParameters)
 						(int32_t)(Bias_AoB*1000),
 						(int32_t)(RTKNproj*1000),(int32_t)(RTKEproj*1000),(int32_t)(-RTKUproj*1000),(int32_t)(RTKheading*10),(int32_t)(ALTbi*100),
 						(int32_t)(DHeading*1000),(int32_t)(UbFS*100),(int32_t)(VbFS*100),(int32_t)(WbFS*100),
-						(int32_t)(AccelModulePrimLevel*100),(int32_t)(GyroModulePrimLevel*100), (int32_t)(GravityModuleErrLevel*1000),(int32_t)(Event),(int32_t)(Vb*100)	
+						(int32_t)(AccelModulePrimLevel*100),(int32_t)(GyroModulePrimLevel*100), (int32_t)(GravityModuleErrLevel*1000),(int32_t)(Event),(int32_t)(Vb*100),
+						(int32_t)(PseudoHeadingPrim*100000)						
 					);
 					xSemaphoreTake( BTMutex, 2/portTICK_PERIOD_MS );				
 					Router::sendXCV(str);
@@ -2139,7 +2227,7 @@ void readSensors(void *pvParameters){
 
 	
 	// alpha beta GNSS parameters
-	#define NGNSS 6 //  Filter parameter
+	#define NGNSS 4 //  Filter parameter
 	#define GNSSdt 0.25 // typical GNSS dt
 	#define GNSSOutliers 30.0 // 30 m/s maximum variation sample to sample
 	#define Vgnssmin -100.0
@@ -2772,86 +2860,7 @@ void readSensors(void *pvParameters){
 		}	
 
 		if ( SENstream ) {
-			/* Sensor data
-				$S1,			
-				static time in milli second,
-				static pressure in Pa,
-				TE pressure in Pa,
-				Dynamic pressure in tenth of Pa,
-				GNSS time in milli second,
-				GNSS speed x or north in centimeters/s,
-				GNSS speed y or east in centimeters/s,
-				GNSS speed z or down in centimeters/s,
-				Pitch in milli rad,
-				Roll in milli rad,
-				Yaw in milli rad,
-				Vzbaro in cm/s,
-				AoA angle in mrad,
-				AoB  angle in mrad,
-				Ubi in cm/s,
-				Vbi in cm/s,
-				Wbi in cm/s,
-				Vzbi in cm/s,			
-				TotalEnergy in cm/s,
-				CurrentBeta in tenthousand of unit,
-				NAccel in ten of unit,
-				DynPeriodVelbi in thousands of second
-				<CR><LF>		
-			*/
-			/* 
-				$S2,
-				Outside Air Temperature in tenth of °C,
-				MPU temperature in tenth °C,
-				GNSS fix 0 to 6   3=3D   4= 3D diff  5= RTK Float  6 = RTK integer
-				GNSS number of satelites used  or  RTK ratio * 10 
-				Ground Gyro bias x in hundredth of milli rad/s,
-				Ground Gyro bias y in hundredth of milli rad/s,
-				Ground Gyro bias z in hundredth of milli rad/s,			
-				IMU Gyro bias x in hundredth of milli rad/s,
-				IMU Gyro bias y in hundredth of milli rad/s,
-				IMU Gyro bias z in hundredth of milli rad/s,
-				XCVtemp (temperature inside vario) in tenth of °C,
-				PeriodVelbi (Baro Inertial period in tenth of seconds),
-				te_filt (TE filter period in tenth of second),
-				Mahonykp in tenthousandth of unit,
-				MagdwickBeta in tenthousandth of unit,
-				ALTbiN ALTbi N A/B filter in tenth of unit,
-				TASbiN delta between ALTbi and TASbi N in tenth of unit,
-				opt_TE 1 or 2,
-				FTVERSION,
-				SOFTVERSION
-			*/	
-			/* 
-				$S3,
-				UiPrim in hundred of m/s²,
-				ViPrim,
-				Wiprim,
-				UbPrimS in hubdred of m/s²,
-				VbPrimS,
-				WbPrimS,
-				UiPrimF.ABprim() in hundred of m/s3,
-				ViPrimF.ABprim(),
-				WiPrimF.ABprim(),			
-				UbiPrim in hundred of m/s²,
-				VbiPrim,
-				WbiPrim,
-				Bias_AoB in mrad
-				RTKNproj in thousandths of meter;
-				RTKEproj in thousandths of meter;
-				RTKDproj in thousandths of meter;
-				RTKheading in tenth of degre;
-				ALTbi in cm,
-				DHeading in mrad,
-				UbFS in cm/s,
-				VbFS in cm/s,
-				WbFS in cm/s,
-				AccelModulePrimLevel in hundredth of m/s3,
-				GyroModulePrimLevel  in hundredth of m/s3,
-				GravityModuleErrLevel in thousandth of m/s2
-				Event Event counter in unit
-				Vb in cm/s
-			*/		
-
+			// see definition of $S1, $S2, $S3 in IMU section
 			if ( !(count % 50) ) { 
 				// send $S1, $S2, $S3 stream
 				SEN50DataReady = true;
