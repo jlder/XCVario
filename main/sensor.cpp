@@ -1374,27 +1374,27 @@ static void processIMU(void *pvParameters)
 			GyroModulePrimLevel = fcGL1 * GyroModulePrimLevel +  fcGL2 * abs(GyroModule.ABprim());
 		}
 
-		// attitude initialization when XCVario starts during first 10 iterations 
-		if ( AttitudeInit < 100 ) { // initialize quaternions at xcvario start using first 100 samples
-			if ( AttitudeInit <= 50 ) { // initialize roll, pitch and yaw at first sample
-				// first iteration initialize attitude from accels
-				RollInit = atan2(-accelNEDBODYy.ABfilt(), -accelNEDBODYz.ABfilt());
-				PitchInit = asin( accelNEDBODYx.ABfilt()/ sqrt(accelNEDBODYx.ABfilt()* accelNEDBODYx.ABfilt()+ accelNEDBODYy.ABfilt()* accelNEDBODYy.ABfilt()+ accelNEDBODYz.ABfilt() * accelNEDBODYz.ABfilt() ));
-				YawInit   = 0.0;
-			} else { // filter roll, pitch and yaw over 50 samples
-				// following iterations average attitude from accels
-				RollInit = 0.9 * RollInit + 0.1 * atan2(-accelNEDBODYy.ABfilt(), -accelNEDBODYz.ABfilt());
-				PitchInit = 0.9 * PitchInit + 0.1 * asin( accelNEDBODYx.ABfilt()/ sqrt(accelNEDBODYx.ABfilt() * accelNEDBODYx.ABfilt() + accelNEDBODYy.ABfilt() * accelNEDBODYy.ABfilt() + accelNEDBODYz.ABfilt() * accelNEDBODYz.ABfilt() ));
+		// attitude initialization when XCVario starts during first 100 iterations 
+		if ( AttitudeInit <= 100 ) { // initialize quaternions at xcvario start using first 100 samples
+			if ( AttitudeInit >= 50 ) { // skip first 49 samples before calculating attitude from accels
+				if ( AttitudeInit == 50 ) {
+					RollInit = atan2(-accelNEDBODYy.ABfilt(), -accelNEDBODYz.ABfilt());
+					PitchInit = asin( accelNEDBODYx.ABfilt()/ sqrt(accelNEDBODYx.ABfilt()* accelNEDBODYx.ABfilt()+ accelNEDBODYy.ABfilt()* accelNEDBODYy.ABfilt()+ accelNEDBODYz.ABfilt() * accelNEDBODYz.ABfilt() ));
+					YawInit   = 0.0;
+				} else {
+					RollInit = RollInit + atan2(-accelNEDBODYy.ABfilt(), -accelNEDBODYz.ABfilt());
+					PitchInit = PitchInit + asin( accelNEDBODYx.ABfilt()/ sqrt(accelNEDBODYx.ABfilt()* accelNEDBODYx.ABfilt()+ accelNEDBODYy.ABfilt()* accelNEDBODYy.ABfilt()+ accelNEDBODYz.ABfilt() * accelNEDBODYz.ABfilt() ));
+					if ( AttitudeInit == 100 ) {
+						RollInit = RollInit / 50.0;
+						PitchInit = PitchInit / 50.0;
+						q0=((cos(RollInit/2.0)*cos(PitchInit/2.0)*cos(YawInit/2.0)+sin(RollInit/2.0)*sin(PitchInit/2.0)*sin(YawInit/2.0)));
+						q1=((sin(RollInit/2.0)*cos(PitchInit/2.0)*cos(YawInit/2.0)-cos(RollInit/2.0)*sin(PitchInit/2.0)*sin(YawInit/2.0)));
+						q2=((cos(RollInit/2.0)*sin(PitchInit/2.0)*cos(YawInit/2.0)+sin(RollInit/2.0)*cos(PitchInit/2.0)*sin(YawInit/2.0)));
+						q3=((cos(RollInit/2.0)*cos(PitchInit/2.0)*sin(YawInit/2.0)-sin(RollInit/2.0)*sin(PitchInit/2.0)*cos(YawInit/2.0)));						
+					}
+				}					
 			}
-			// compute quaternion corresponding to initial averaged accels attitude
-			AttitudeInit++;
-			if ( AttitudeInit == 100 ) {
-				q0=((cos(RollInit/2.0)*cos(PitchInit/2.0)*cos(YawInit/2.0)+sin(RollInit/2.0)*sin(PitchInit/2.0)*sin(YawInit/2.0)));
-				q1=((sin(RollInit/2.0)*cos(PitchInit/2.0)*cos(YawInit/2.0)-cos(RollInit/2.0)*sin(PitchInit/2.0)*sin(YawInit/2.0)));
-				q2=((cos(RollInit/2.0)*sin(PitchInit/2.0)*cos(YawInit/2.0)+sin(RollInit/2.0)*cos(PitchInit/2.0)*sin(YawInit/2.0)));
-				q3=((cos(RollInit/2.0)*cos(PitchInit/2.0)*sin(YawInit/2.0)-sin(RollInit/2.0)*sin(PitchInit/2.0)*cos(YawInit/2.0)));
-			}
-
+			AttitudeInit++;			
 		} else { // after xcvario is started and quaternion attitude initialized perform normal calculations
 			if (!CALstream) { // if not in calibration mode MOD#8
 				if ( TAS.Get() > 15.0 ) {	// Update IMU, only consider centrifugal forces if TAS > 15 m/s
