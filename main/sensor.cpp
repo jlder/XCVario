@@ -1593,11 +1593,10 @@ static void processIMU(void *pvParameters)
 								
 			}
 			
-			// When TAS < 15 m/s the vario is considered potentially stable on ground
-			// This is when bias and local gravity are estimated
+			// Gyro bias and local gravity estimates when TAS < 15 m/s and the vario is considered potentially stable on ground
 			if ( TAS.Get() < 15.0 ) {
-				// Estimate gyro bias and gravity up to 100 times, except if doing Lab test then only one estimation is performed
-				if ( (BIAS_Init < 100 && !LABtest) || BIAS_Init < 1 ) {
+				// Estimate gyro bias and gravity, except if doing Lab test then only one estimation is performed
+				if ( (!LABtest) || (BIAS_Init < 1 ) ) {
 					// When MPU temperature is controled and temperature is locked   or   when there is no temperature control
 					if ( (HAS_MPU_TEMP_CONTROL && (MPU.getSiliconTempStatus() == MPU_T_LOCKED)) || !HAS_MPU_TEMP_CONTROL ) {
 						// count cycles when temperature is locked
@@ -1611,7 +1610,6 @@ static void processIMU(void *pvParameters)
 								GxBias = gyroRPS.x;
 								GyBias = gyroRPS.y;
 								GzBias = gyroRPS.z;							
-								
 								Gravx = RawaccelISUNEDMPU.x;
 								Gravy = RawaccelISUNEDMPU.y;
 								Gravz = RawaccelISUNEDMPU.z;
@@ -1619,13 +1617,13 @@ static void processIMU(void *pvParameters)
 							} else {
 								// between 2.5 seconds and 22.5 seconds, accumulate gyro and gravity data
 								if ( gyrostable <900 ) {
-									averagecount++;
 									GxBias += gyroRPS.x;
 									GyBias += gyroRPS.y;
 									GzBias += gyroRPS.z;
 									Gravx += RawaccelISUNEDMPU.x;
 									Gravy += RawaccelISUNEDMPU.y;
 									Gravz += RawaccelISUNEDMPU.z;
+									averagecount++;
 								} else {
 									// wait for 2.5 seconds (900 to 1000) before updating bias and gravity (just in case glider starts to move, discard previous bias/gravity assesment)
 									// then compute updated bias/gravity
@@ -1641,8 +1639,10 @@ static void processIMU(void *pvParameters)
 										BIAS_Init++;
 										//sprintf(str,"$BIAS,%lld,%.6f,%.6f,%.6f,%.6f\r\n", gyroTime, NewGroundGyroBias.z, NewGroundGyroBias.y, NewGroundGyroBias.x, GRAVITY );					
 										//Router::sendXCV(str);										
-										// Store bias and gravity in non volatile memory if they have identified for the first time or every 10 times 								
-										if ( BIAS_Init == 1 ||  BIAS_Init % 10 ) {
+										// Store bias and gravity in non volatile memory if:
+										// - they have been identified for the first time
+										// - or every 10 times up to the first 100 bias identifications 
+										if ( BIAS_Init == 1 || ( (BIAS_Init < 100) && (BIAS_Init % 10 ) ) ) {
 											if ( MagdwickBeta != 0.0 || Mahonykp != 0.0 ) {											
 												gyro_bias.set(NewGroundGyroBias);
 												gravity.set(GRAVITY);
@@ -1661,9 +1661,9 @@ static void processIMU(void *pvParameters)
 				}
 				// Adjust progressively ground gyro bias with new ground bias estimate
 				if ( MagdwickBeta != 0.0 || Mahonykp != 0.0 ) {
-					if ( abs(GroundGyroBias.x - NewGroundGyroBias.x) > 0.0001 ) GroundGyroBias.x = 0.99 * GroundGyroBias.x + 0.01 * NewGroundGyroBias.x;
-					if ( abs(GroundGyroBias.y - NewGroundGyroBias.y) > 0.0001 ) GroundGyroBias.y = 0.99 * GroundGyroBias.y + 0.01 * NewGroundGyroBias.y;	
-					if ( abs(GroundGyroBias.z - NewGroundGyroBias.z) > 0.0001 ) GroundGyroBias.z = 0.99 * GroundGyroBias.z + 0.01 * NewGroundGyroBias.z;			
+					if ( abs(GroundGyroBias.x - NewGroundGyroBias.x) > 0.00001 ) GroundGyroBias.x = 0.99 * GroundGyroBias.x + 0.01 * NewGroundGyroBias.x;
+					if ( abs(GroundGyroBias.y - NewGroundGyroBias.y) > 0.00001 ) GroundGyroBias.y = 0.99 * GroundGyroBias.y + 0.01 * NewGroundGyroBias.y;	
+					if ( abs(GroundGyroBias.z - NewGroundGyroBias.z) > 0.00001 ) GroundGyroBias.z = 0.99 * GroundGyroBias.z + 0.01 * NewGroundGyroBias.z;			
 				} 				
 				// Only for laboratory calibration of the accelerometers
 				// stream accel data and compute offsts/gains
@@ -1949,9 +1949,9 @@ static void processIMU(void *pvParameters)
 				MPU temperature in tenth °C,
 				GNSS fix 0 to 6   3=3D   4= 3D diff  5= RTK Float  6 = RTK integer
 				GNSS number of satelites used  or  RTK ratio * 10 
-				Ground Gyro bias x in hundredth of milli rad/s,
-				Ground Gyro bias y in hundredth of milli rad/s,
-				Ground Gyro bias z in hundredth of milli rad/s,			
+				New Ground Gyro bias z in hundredth of milli rad/s,
+				New Ground Gyro bias y in hundredth of milli rad/s,
+				New Ground Gyro bias x in hundredth of milli rad/s,			
 				IMU Gyro bias x in hundredth of milli rad/s,
 				IMU Gyro bias y in hundredth of milli rad/s,
 				IMU Gyro bias z in hundredth of milli rad/s,
@@ -1963,6 +1963,7 @@ static void processIMU(void *pvParameters)
 				ALTbiN ALTbi N A/B filter in tenth of unit,
 				TASbiN delta between ALTbi and TASbi N in tenth of unit,
 				opt_TE 1 or 2,
+				BIAS_Init number of gyro bias estimates on ground,
 				FTVERSION,
 				SOFTVERSION
 			*/	
@@ -2000,7 +2001,7 @@ static void processIMU(void *pvParameters)
 			if ( SEN50DataReady ) {
 				SEN50DataReady = false;
 				// send $S1 and $S2 every 50 cycles = 5 seconds
-				sprintf(str,"$S1,%lld,%i,%i,%i,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$S3,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$S2,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",				
+				sprintf(str,"$S1,%lld,%i,%i,%i,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$S3,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$S2,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",				
 					// $S1 stream
 					statTime, (int32_t)(statP.Get()*100.0),(int32_t)(teP.Get()*100.0), (int16_t)(dynP.Get()*10), 
 					(int64_t)(chosenGnss->time*1000.0), (int16_t)(chosenGnss->speed.x*100), (int16_t)(chosenGnss->speed.y*100), (int16_t)(chosenGnss->speed.z*100),
@@ -2024,10 +2025,11 @@ static void processIMU(void *pvParameters)
 					(int32_t)(PseudoHeadingPrim*100000),
 					// $S2 stream
 					(int16_t)(temperatureLP.LowPass1()*10.0), (int16_t)(MPUtempcel*10.0), chosenGnss->fix, chosenGnss->numSV,
-					(int32_t)(GroundGyroBias.x*100000.0), (int32_t)(GroundGyroBias.y*100000.0), (int32_t)(GroundGyroBias.z*100000.0),				
+					(int32_t)(NewGroundGyroBias.x*100000.0), (int32_t)(NewGroundGyroBias.y*100000.0), (int32_t)(NewGroundGyroBias.z*100000.0),				
 					(int32_t)(BiasQuatGx*100000.0), (int32_t)(BiasQuatGy*100000.0), (int32_t)(BiasQuatGz*100000.0),
 					(int16_t)(XCVTemp*10.0), (int16_t) (PeriodVelbi*10),
 					(int32_t)(te_filt.get()*10),(int32_t)(Mahonykp*10000),(int32_t)(MagdwickBeta*10000), (int32_t)(ALTbiN*10), (int32_t)(TASbiN*10), (int32_t)(opt_TE),
+					(int32_t)BIAS_Init,
 					(int32_t)(FTVERSION),(int32_t)(SOFTVERSION)
 					);
 				xSemaphoreTake( BTMutex, 2/portTICK_PERIOD_MS );				
