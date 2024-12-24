@@ -1236,6 +1236,25 @@ static void processIMU(void *pvParameters)
 	float RollPrim;
 	float HeadingPrim;
 	
+	// alpha beta parameters for CAS and ALT
+	#define NCAS 8 // CAS alpha/beta filter coeff
+	#define CASdt 0.025 // average CAS dt	
+	#define SpeedOutliers 30.0 // 30 m/s maximum variation sample to sample
+	#define CASmin 0.0
+	#define CASmax 100.0
+	#define CASPrimmin -30.0
+	#define CASPrimmax 30.0
+	CAS.ABinit( NCAS, CASdt, SpeedOutliers, CASmin, CASmax, CASPrimmin, CASPrimmax );
+	#define NALT 8 // ALT alpha/beta coeff
+	#define ALTdt 0.025 // average ALT dt	
+	#define AltitudeOutliers 30.0 // 30 m maximum variation sample to sample
+	#define Altmin -500.0
+	#define Altmax 12000
+	ALT.ABinit( NALT, ALTdt, AltitudeOutliers, Altmin, Altmax );
+
+	float dp = 0.0;
+	bool ALTbiFirstPass = true;	
+	
 	// compute once the filter parameters in functions of values in FLASH
 	PeriodVelbi = velbi_period.get(); // period in second for baro/inertial velocity. period long enough to reduce effect of baro wind gradients
 	LastPeriodVelbi = PeriodVelbi;
@@ -1377,6 +1396,76 @@ static void processIMU(void *pvParameters)
 		} else {
 			GyroModulePrimLevel = fcGL1 * GyroModulePrimLevel +  fcGL2 * abs(GyroModule.ABprim());
 		}
+		
+		// get raw static pressure
+		bool ok=false;
+		float p = 0;
+		Prevp = statP.Get();
+		p = baroSensor->readPressure(ok);
+		if ( ok ) {			
+			prevstatTime = statTime;
+			statTime = esp_timer_get_time()/1000; // record static time in milli second
+			dtStat = (statTime - prevstatTime) / 1000.0; // period between last two valid static pressure samples in second	
+			if (dtStat == 0) dtStat = PERIOD10HZ;
+			statP.Set( p );
+			baroP = p;	// for compatibility with Eckhard code
+			Prevp = p;
+		} else {
+			statP.Set( Prevp );
+			baroP = Prevp;
+		}
+		
+		// get raw te pressure
+		// xSemaphoreTake(xMutex,portMAX_DELAY );
+		p = teSensor->readPressure(ok);
+		if ( ok ) {
+			teP.Set( p );
+			// not sure what is required for compatibility with Eckhard code
+		}
+		// xSemaphoreGive(xMutex);
+		
+		// get raw dynamic pressure
+		if( asSensor ) {
+			PrevdynP = dynP.Get();
+			xSemaphoreTake( I2CMutex, 3/portTICK_PERIOD_MS ); // prevent I2C conflicts for 3ms max.		
+			dp =  asSensor->readPascal(0, ok);
+			xSemaphoreGive( I2CMutex );
+		}
+		if( ok ) {			
+			prevdynPTime = dynPTime;
+			dynPTime = esp_timer_get_time()/1000.0; // record dynPTimeTE time in milli second		
+			dtdynP = (dynPTime - prevdynPTime) / 1000.0; // period between last two valid dynamic pressure samples in second
+			if (dtdynP == 0) dtdynP = PERIOD10HZ;
+			dynP.Set( dp );
+		}
+		else {
+			dynamicP = PrevdynP;
+			dynP.Set( PrevdynP );
+		}
+		if ( dynP.Get() <= 0.0 ) dynP.Set( 0.0 );
+		dynamicP = dynP.Get(); // for compatibility with Eckhard code
+		if ( dynamicP < 60.0 ) dynamicP = 0.0;
+
+		// update CAS filter
+		CAS.ABupdate( dtdynP, sqrt(2 * dynP.Get() / RhoSLISA) );
+		
+		// update TAS filter
+		Rhocorr = sqrt(RhoSLISA/Rho);
+		TAS.Set( Rhocorr * CAS.ABfilt() );
+
+		// update altitude filter
+		ALT.ABupdate( dtStat, (1.0 - pow( (statP.Get()-(QNH.get()-1013.25)) * 0.000986923 , 0.1902891634 ) ) * (273.15 + 15) * 153.846153846 );
+		
+		// Initialize ALTbi
+		if (ALTbiFirstPass) {
+			ALTbi = ALT.ABfilt();
+			ALTbiFirstPass = false;
+		}	
+		// update Vz baro
+		// in glider operation, gaining altitude and energy is considered positive. However in NED representation vertical axis is positive pointing down.
+		// therefore Vzbaro in NED is the opposite of altitude variation.
+		Vzbaro = -ALT.ABprim();
+		
 
 		// attitude initialization when XCVario starts during first 100 iterations 
 		if ( AttitudeInit <= 100 ) { // initialize quaternions at xcvario start using first 100 samples
@@ -1903,10 +1992,11 @@ static void processIMU(void *pvParameters)
 				} else {
 					if ( IMUstream ) {
 					// Send $I
-					sprintf(str,"$I,%lld,%i,%i,%i,%i,%i,%i\r\n",
+					sprintf(str,"$I,%lld,%i,%i,%i,%i,%i,%i,%lld,%i,%i,%i\r\n",
 						gyroTime,
 						(int32_t)(accelISUNEDBODY.x*10000.0), (int32_t)(accelISUNEDBODY.y*10000.0), (int32_t)(accelISUNEDBODY.z*10000.0),
-						(int32_t)(gyroISUNEDBODY.x*100000.0), (int32_t)(gyroISUNEDBODY.y*100000.0),(int32_t)(gyroISUNEDBODY.z*100000.0)
+						(int32_t)(gyroISUNEDBODY.x*100000.0), (int32_t)(gyroISUNEDBODY.y*100000.0),(int32_t)(gyroISUNEDBODY.z*100000.0),
+						statTime, (int32_t)(statP.Get()*100.0),(int32_t)(teP.Get()*100.0), (int32_t)(dynP.Get()*10)						
 					);						
 					xSemaphoreTake( BTMutex, 2/portTICK_PERIOD_MS ); // prevent BT conflicts for 2ms max.
 					Router::sendXCV(str);
@@ -1919,10 +2009,6 @@ static void processIMU(void *pvParameters)
 		if ( SENstream ) {
 			/* Sensor data
 				$S1,			
-				static time in milli second,
-				static pressure in Pa,
-				TE pressure in Pa,
-				Dynamic pressure in tenth of Pa,
 				GNSS time in milli second,
 				GNSS speed x or north in centimeters/s,
 				GNSS speed y or east in centimeters/s,
@@ -2039,8 +2125,7 @@ static void processIMU(void *pvParameters)
 				if ( SENDataReady ) {
 					SENDataReady = false;
 					// send $S1 only every 100ms
-					sprintf(str,"$S1,%lld,%i,%i,%i,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$S3,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",
-						statTime, (int32_t)(statP.Get()*100.0),(int32_t)(teP.Get()*100.0), (int16_t)(dynP.Get()*10), 
+					sprintf(str,"$S1,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$S3,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",
 						(int64_t)(chosenGnss->time*1000.0), (int16_t)(chosenGnss->speed.x*100), (int16_t)(chosenGnss->speed.y*100), (int16_t)(chosenGnss->speed.z*100),
 						(int32_t)(Pitch*1000.0), (int32_t)(Roll*1000.0), (int32_t)(Yaw*1000.0),
 						(int32_t)(Vzbaro*100),
@@ -2194,7 +2279,7 @@ void readSensors(void *pvParameters){
 	float dAoA = 0.0;
 	float AoARaw = 0.0;
 	float AccelzFiltAoA = 0.0;
-	float dp = 0.0;
+
 
 	// Wind speed variables
 	float Vgx = 0.0;
@@ -2225,7 +2310,7 @@ void readSensors(void *pvParameters){
 	float VhPrev = 0.0;
 	float VhAvg = 0.0;
 	float VhHeading = 0.0;
-	bool ALTbiFirstPass = true;
+	
 
 	
 	// alpha beta GNSS parameters
@@ -2245,22 +2330,6 @@ void readSensors(void *pvParameters){
 	#define EnergyPrimMin -30.0
 	#define EnergyPrimMax 30.0
 	KinEnergy.ABinit(  NEnergy,  ENRdt, EnergyOutliers, 0.0, 0.0, EnergyPrimMin, EnergyPrimMax );
-
-	// alpha beta parameters for CAS and TAS
-	#define NCAS 6 // CAS alpha/beta filter coeff
-	#define CASdt 0.1 // average CAS dt	
-	#define SpeedOutliers 30.0 // 30 m/s maximum variation sample to sample
-	#define CASmin 0.0
-	#define CASmax 100.0
-	#define CASPrimmin -30.0
-	#define CASPrimmax 30.0
-	CAS.ABinit( NCAS, CASdt, SpeedOutliers, CASmin, CASmax, CASPrimmin, CASPrimmax );
-	#define NALT 6 // ALT alpha/beta coeff
-	#define ALTdt 0.1 // average ALT dt	
-	#define AltitudeOutliers 30.0 // 30 m maximum variation sample to sample
-	#define Altmin -500.0
-	#define Altmax 12000
-	ALT.ABinit( NALT, ALTdt, AltitudeOutliers, Altmin, Altmax );
 
 	// LP filter initialization
 	BiasAoB.LPinit( 200.0, 0.1 ); // bias AoB LP filter initialization with 200 seconds filter period and 0.1 second sample period
@@ -2286,55 +2355,6 @@ void readSensors(void *pvParameters){
 		TickType_t xLastWakeTime = xTaskGetTickCount();
 		
 		ProcessTimeSensors = (esp_timer_get_time()/1000.0);
-		
-		// get raw static pressure
-		bool ok=false;
-		float p = 0;
-		Prevp = statP.Get();
-		p = baroSensor->readPressure(ok);
-		if ( ok ) {			
-			prevstatTime = statTime;
-			statTime = esp_timer_get_time()/1000; // record static time in milli second
-			dtStat = (statTime - prevstatTime) / 1000.0; // period between last two valid static pressure samples in second	
-			if (dtStat == 0) dtStat = PERIOD10HZ;
-			statP.Set( p );
-			baroP = p;	// for compatibility with Eckhard code
-			Prevp = p;
-		} else {
-			statP.Set( Prevp );
-			baroP = Prevp;
-		}
-		
-		// get raw te pressure
-		// xSemaphoreTake(xMutex,portMAX_DELAY );
-		p = teSensor->readPressure(ok);
-		if ( ok ) {
-			teP.Set( p );
-			// not sure what is required for compatibility with Eckhard code
-		}
-		// xSemaphoreGive(xMutex);
-		
-		// get raw dynamic pressure
-		if( asSensor ) {
-			PrevdynP = dynP.Get();
-			xSemaphoreTake( I2CMutex, 3/portTICK_PERIOD_MS ); // prevent I2C conflicts for 3ms max.		
-			dp =  asSensor->readPascal(0, ok);
-			xSemaphoreGive( I2CMutex );
-		}
-		if( ok ) {			
-			prevdynPTime = dynPTime;
-			dynPTime = esp_timer_get_time()/1000.0; // record dynPTimeTE time in milli second		
-			dtdynP = (dynPTime - prevdynPTime) / 1000.0; // period between last two valid dynamic pressure samples in second
-			if (dtdynP == 0) dtdynP = PERIOD10HZ;
-			dynP.Set( dp );
-		}
-		else {
-			dynamicP = PrevdynP;
-			dynP.Set( PrevdynP );
-		}
-		if ( dynP.Get() <= 0.0 ) dynP.Set( 0.0 );
-		dynamicP = dynP.Get(); // for compatibility with Eckhard code
-		if ( dynamicP < 60.0 ) dynamicP = 0.0;
 		
 		// get MPU temp
 		MPUtempcel = MPU.getTemperature();
@@ -2412,26 +2432,6 @@ void readSensors(void *pvParameters){
 			Rho = RhoSLISA;
 		}
 
-		// update CAS filter
-		CAS.ABupdate( dtdynP, sqrt(2 * dynP.Get() / RhoSLISA) );
-		
-		// update TAS filter
-		Rhocorr = sqrt(RhoSLISA/Rho);
-		TAS.Set( Rhocorr * CAS.ABfilt() );
-
-		// update altitude filter
-		ALT.ABupdate( dtStat, (1.0 - pow( (statP.Get()-(QNH.get()-1013.25)) * 0.000986923 , 0.1902891634 ) ) * (273.15 + 15) * 153.846153846 );
-		
-		// Initialize ALTbi
-		if (ALTbiFirstPass) {
-			ALTbi = ALT.ABfilt();
-			ALTbiFirstPass = false;
-		}	
-		// update Vz baro
-		// in glider operation, gaining altitude and energy is considered positive. However in NED representation vertical axis is positive pointing down.
-		// therefore Vzbaro in NED is the opposite of altitude variation.
-		Vzbaro = -ALT.ABprim();
-		
 		// compute AoA (Angle of attack) and AoB (Angle od slip)
 		#define FreqAlpha 0.66 // Hz
 		#define fcAoA1 (10.0/(10.0+FreqAlpha))
