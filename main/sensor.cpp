@@ -257,9 +257,6 @@ static float Wb = 0.0;
 static float UiPrim = 0.0;
 static float ViPrim = 0.0;
 static float WiPrim = 0.0;
-static float UiPrimPrimS = 0.0;
-static float ViPrimPrimS = 0.0;
-static float WiPrimPrimS = 0.0;
 static float TASbiSquare = 0.0;
 
 float GnssTrack;// MOD#4 gyro bias
@@ -299,7 +296,6 @@ static int64_t statTime; // time stamp for statP
 static int64_t prevstatTime;
 static float dtStat = PERIOD10HZ;
 static float Prevp = 0.0;
-static int64_t teTime; // time stamp for teP
 static int64_t dynPTime;
 static int64_t prevdynPTime;
 static float dtdynP = PERIOD10HZ;
@@ -1234,7 +1230,6 @@ static void processIMU(void *pvParameters)
 	GyroBiasz.LPinit( GyroCutoffPeriod, Gyrodt ); // LP period GyroCutoffPeriod seconds and sample period Gyrodt second
 	float PitchPrim;
 	float RollPrim;
-	float HeadingPrim;
 	
 	// alpha beta parameters for CAS and ALT
 	#define NCAS 8 // CAS alpha/beta filter coeff
