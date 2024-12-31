@@ -195,13 +195,9 @@ mpud::float_axes_t gyroDPS_Prev;
 #define MaxAccelVariation 10.0 // TDB if need to change for other gliders, in particular for motor gliders
 
 // Fligth Test
-float deltaGyroModule = 0.0;	// gyro module alfa/beta filter for gyro stability test
-float GyroModulePrimFilt = 0.0;
-float GyroModuleFilt = 0.0;
+
 float GyroModulePrimLevel = 0.0;
-float deltaAccelModule = 0.0;	// accel module alfa/beta filter for gyro stability test
-float AccelModulePrimFilt = 0.0;
-float AccelModuleFilt = 0.0;
+
 float AccelModulePrimLevel = 0.0;
 float dynKp = 0.1;
 float DynPeriodVelbi = 8.0;
@@ -225,7 +221,6 @@ mpud::float_axes_t gyroISUNEDBODY;
 mpud::float_axes_t gyroCorr;
 static float GravityModule = 0.0;
 static float GravityModuleErr = 0.0;
-static float GravityModuleErrLevel = 0.0;
 static float AccelGravModuleFilt = 0.0;
 static int32_t gyrobiastemptimer = 0;
 static float integralFBx = 0.0;
@@ -1284,9 +1279,7 @@ static void processIMU(void *pvParameters)
 		TickType_t xLastWakeTime_mpu =xTaskGetTickCount();
 		
 		// get raw gyro data
-		xSemaphoreTake( I2CMutex, 3/portTICK_PERIOD_MS ); // prevent I2C conflicts for 3ms max.		
 		esp_err_t errMPU = MPU.rotation(&gyroRaw);// read raw gyro data
-		xSemaphoreGive( I2CMutex );		
  		if( errMPU == ESP_OK ){ 
 			// compute precise dt between current and previous samples
 			prevgyroTime = gyroTime;
@@ -1324,9 +1317,7 @@ static void processIMU(void *pvParameters)
 			//xSemaphoreGive( dataMutex );
 		}
 		// get accel data
-		xSemaphoreTake( I2CMutex, 3/portTICK_PERIOD_MS ); // prevent I2C conflicts for 3ms max.		
 		errMPU = MPU.acceleration(&accelRaw);// read raw gyro data
-		xSemaphoreGive( I2CMutex );			
 		if( errMPU == ESP_OK ){ // read raw acceleration
 			accelG = mpud::accelGravity(accelRaw, mpud::ACCEL_FS_8G);  // For compatibility with Eckhard code only. Convert raw data to to 8G full scale
 			// convert accels coordinates to ISU : m/s² NED MPU
@@ -1401,7 +1392,7 @@ static void processIMU(void *pvParameters)
 			prevstatTime = statTime;
 			statTime = esp_timer_get_time()/1000; // record static time in milli second
 			dtStat = (statTime - prevstatTime) / 1000.0; // period between last two valid static pressure samples in second	
-			if (dtStat == 0) dtStat = PERIOD10HZ;
+			if (dtStat == 0) dtStat = PERIOD40HZ;
 			statP.Set( p );
 			baroP = p;	// for compatibility with Eckhard code
 			Prevp = p;
@@ -1411,26 +1402,21 @@ static void processIMU(void *pvParameters)
 		}
 		
 		// get raw te pressure
-		// xSemaphoreTake(xMutex,portMAX_DELAY );
 		p = teSensor->readPressure(ok);
 		if ( ok ) {
 			teP.Set( p );
-			// not sure what is required for compatibility with Eckhard code
 		}
-		// xSemaphoreGive(xMutex);
 		
 		// get raw dynamic pressure
 		if( asSensor ) {
 			PrevdynP = dynP.Get();
-			xSemaphoreTake( I2CMutex, 3/portTICK_PERIOD_MS ); // prevent I2C conflicts for 3ms max.		
 			dp =  asSensor->readPascal(0, ok);
-			xSemaphoreGive( I2CMutex );
 		}
 		if( ok ) {			
 			prevdynPTime = dynPTime;
 			dynPTime = esp_timer_get_time()/1000.0; // record dynPTimeTE time in milli second		
 			dtdynP = (dynPTime - prevdynPTime) / 1000.0; // period between last two valid dynamic pressure samples in second
-			if (dtdynP == 0) dtdynP = PERIOD10HZ;
+			if (dtdynP == 0) dtdynP = PERIOD40HZ;
 			dynP.Set( dp );
 		}
 		else {
@@ -1521,17 +1507,6 @@ static void processIMU(void *pvParameters)
 					}
 					MagdwickUpdateIMU( dtGyr, CurrentBeta, gyroCorr.x, gyroCorr.y, gyroCorr.z, -gravISUNEDBODY.x, -gravISUNEDBODY.y, -gravISUNEDBODY.z, GravityModule );
 				}	
-				// compute & filter GravityModule error
-				GravityModuleErr = abs( GravityModule - GRAVITY );
-				// asysmetric filter with fast raise and slow decay
-				#define fcGravModuleErr 3.0 // 3Hz low pass to filter noise
-				#define fcGME1 (40.0/(40.0+fcGravModuleErr))
-				#define fcGME2 (1.0-fcGME1)		
-				if ( GravityModuleErrLevel < GravityModuleErr ) {
-					GravityModuleErrLevel = GravityModuleErr;
-				} else {
-					GravityModuleErrLevel = fcGME1 * GravityModuleErrLevel +  fcGME2 * GravityModuleErr;
-				}
 
 				// Compute Euler angles from IMU quaternion
 				if ( abs(q1 * q3 - q0 * q2) < 0.5 ) {
@@ -1607,11 +1582,9 @@ static void processIMU(void *pvParameters)
 				GravIMU.z = -GRAVITY * (q0 * q0 - q1 * q1 - q2 * q2 + q3 * q3);
 				
 				// compute kinetic accelerations using accelerations, corrected with gravity and centrifugal accels
-				//xSemaphoreTake( dataMutex, 3/portTICK_PERIOD_MS ); // prevent data conflicts for 3ms max.
 				UiPrim = accelNEDBODYx.ABfilt()- GravIMU.x - gyroCorr.y * TASbi.Get() * AoA.Get() + gyroCorr.z * TASbi.Get() * AoB.Get();
 				ViPrim = accelNEDBODYy.ABfilt()- GravIMU.y - gyroCorr.z * TASbi.Get() + gyroCorr.x * TASbi.Get() * AoA.Get();			
 				WiPrim = accelNEDBODYz.ABfilt()- GravIMU.z + gyroCorr.y * TASbi.Get() - gyroCorr.x * TASbi.Get() * AoB.Get();
-				//xSemaphoreGive( dataMutex );			
 				
 				// alternate kinetic accel solution using 3D baro inertial speeds
 				// UiPrim = accelNEDBODYx.ABfilt()- GravIMU.x - gyroCorr.y * Wbi + gyroCorr.z * Vbi;
@@ -2074,7 +2047,6 @@ static void processIMU(void *pvParameters)
 				WbFS in cm/s,
 				AccelModulePrimLevel in hundredth of m/s3,
 				GyroModulePrimLevel  in hundredth of m/s3,
-				GravityModuleErrLevel in thousandth of m/s2
 				Event Event counter in unit
 				Vb in cm/s
 				PseudoHeadingPrim in hundredth of milli rad/s,			
@@ -2082,7 +2054,7 @@ static void processIMU(void *pvParameters)
 			if ( SEN50DataReady ) {
 				SEN50DataReady = false;
 				// send $S1 and $S2 every 50 cycles = 5 seconds
-				sprintf(str,"$S1,%lld,%i,%i,%i,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$S3,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$S2,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",				
+				sprintf(str,"$S1,%lld,%i,%i,%i,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$S3,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$S2,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",				
 					// $S1 stream
 					statTime, (int32_t)(statP.Get()*100.0),(int32_t)(teP.Get()*100.0), (int16_t)(dynP.Get()*10), 
 					(int64_t)(chosenGnss->time*1000.0), (int16_t)(chosenGnss->speed.x*100), (int16_t)(chosenGnss->speed.y*100), (int16_t)(chosenGnss->speed.z*100),
@@ -2102,7 +2074,7 @@ static void processIMU(void *pvParameters)
 					(int32_t)(Bias_AoB*1000),
 					(int32_t)(RTKNproj*1000),(int32_t)(RTKEproj*1000),(int32_t)(-RTKUproj*1000),(int32_t)(RTKheading*10),(int32_t)(ALTbi*100),
 					(int32_t)(DHeading*1000),(int32_t)(UbFS*100),(int32_t)(VbFS*100),(int32_t)(WbFS*100),
-					(int32_t)(AccelModulePrimLevel*100),(int32_t)(GyroModulePrimLevel*100), (int32_t)(GravityModuleErrLevel*1000), (int32_t)(Event), (int32_t)(Vb*100),
+					(int32_t)(AccelModulePrimLevel*100),(int32_t)(GyroModulePrimLevel*100), (int32_t)(Event), (int32_t)(Vb*100),
 					(int32_t)(PseudoHeadingPrim*100000),
 					// $S2 stream
 					(int16_t)(temperatureLP.LowPass1()*10.0), (int16_t)(MPUtempcel*10.0), chosenGnss->fix, chosenGnss->numSV,
@@ -2120,7 +2092,7 @@ static void processIMU(void *pvParameters)
 				if ( SENDataReady ) {
 					SENDataReady = false;
 					// send $S1 only every 100ms
-					sprintf(str,"$S1,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$S3,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",
+					sprintf(str,"$S1,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$S3,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",
 						(int64_t)(chosenGnss->time*1000.0), (int16_t)(chosenGnss->speed.x*100), (int16_t)(chosenGnss->speed.y*100), (int16_t)(chosenGnss->speed.z*100),
 						(int32_t)(Pitch*1000.0), (int32_t)(Roll*1000.0), (int32_t)(Yaw*1000.0),
 						(int32_t)(Vzbaro*100),
@@ -2138,7 +2110,7 @@ static void processIMU(void *pvParameters)
 						(int32_t)(Bias_AoB*1000),
 						(int32_t)(RTKNproj*1000),(int32_t)(RTKEproj*1000),(int32_t)(-RTKUproj*1000),(int32_t)(RTKheading*10),(int32_t)(ALTbi*100),
 						(int32_t)(DHeading*1000),(int32_t)(UbFS*100),(int32_t)(VbFS*100),(int32_t)(WbFS*100),
-						(int32_t)(AccelModulePrimLevel*100),(int32_t)(GyroModulePrimLevel*100), (int32_t)(GravityModuleErrLevel*1000),(int32_t)(Event),(int32_t)(Vb*100),
+						(int32_t)(AccelModulePrimLevel*100),(int32_t)(GyroModulePrimLevel*100), (int32_t)(Event),(int32_t)(Vb*100),
 						(int32_t)(PseudoHeadingPrim*100000)						
 					);
 					xSemaphoreTake( BTMutex, 2/portTICK_PERIOD_MS );				
@@ -2710,7 +2682,7 @@ void readSensors(void *pvParameters){
 		} */ // TODO replace Eckhard code with flight test values
 
 		cas = CAS.ABfilt() * 3.6;
-		if ( cas < 15.0 ) cas = 0.0;
+		if ( cas < 30.0 ) cas = 0.0;
 		if( (int( ias.get()+0.5 ) != int( cas+0.5 ) ) || !(count%20) ){
 			ias.set( cas );  // low pass filter
 		}		
