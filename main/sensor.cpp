@@ -457,196 +457,7 @@ AdaptUGC *egl = 0;
 extern UbloxGnssDecoder s1UbloxGnssDecoder;
 extern UbloxGnssDecoder s2UbloxGnssDecoder;
 
-// alpha beta filter class
-class AlphaBeta {
-private:
-	float dtMax = 0.0;
-	float dtMin = 0.0;
-	float delta = 0.0;
-	float prim = 0.0;
-	float filt = 0.0;
-	float _delta = 0.0;
-	float _prim = 0.0;
-	float _filt = 0.0;	
-	float alpha = 0.0;
-	float beta = 0.0;
-	float Threshold = 0.0;
-	float primMin = 0.0;
-	float primMax = 0.0;
-	float filtMin = 0.0;
-	float filtMax = 0.0;
-	bool firstpass = true;
-	int zicket = 0;
-	bool writing = false;
-	float gettime = 0.0;
-public:
-	void ABinit( float N, float dtTypical ) {
-		ABinit( N, dtTypical, 0.0, 0.0, 0.0, 0.0, 0.0 );
-	}
-	void ABinit( float N, float dtTypical, float _Threshold ) {
-		ABinit( N, dtTypical, _Threshold, 0.0, 0.0, 0.0, 0.0 );
-	}
-	void ABinit( float N, float dtTypical, float _Threshold, float _filtMin, float _filtMax ) {
-		ABinit( N, dtTypical, _Threshold, _filtMin, _filtMax, 0.0, 0.0 );
-	}
-	void ABinit( float N, float dtTypical, float _Threshold, float _filtMin, float _filtMax, float _primMin, float _primMax ) {
-		if ( N != 0.0  ) {
-			alpha =  (2.0 * (2.0 * N - 1.0) / N / (N + 1.0));
-			beta = (6.0 / N / (N + 1.0));
-			dtMax = dtTypical * 4.0;
-			dtMin = dtTypical / 4.0;
-		}
-		firstpass = true;
-		Threshold = _Threshold;
-		filtMin = _filtMin;
-		filtMax = _filtMax;
-		primMin = _primMin;
-		primMax = _primMax;
-	}
-	void ABNupdt( float N ) {
-		if ( N > 0.0  ) {
-			alpha =  (2.0 * (2.0 * N - 1.0) / N / (N + 1.0));
-			beta = (6.0 / N / (N + 1.0));
-		}
-	}		
-	void ABupdate(float dt, float RawData ) {
-		#define MaxZicket 2 // maximum number of concecuitives zickets to let the filter track the signal. If zicket is higher a step change in signal is suspected
-		// process sample if dt above dtMin and below dtMax (dtMin typicaly average dt / 4 and dtMax typicaly 4 x average dt)
-		writing = false;
-		if ( dt > dtMin && dt < dtMax  ) {
-			if ( firstpass ) { // initialize filter variables when first called
-				writing = true;
-				gettime = esp_timer_get_time();
-				filt = RawData;
-				_filt = RawData;
-				prim = 0.0;
-				_prim = 0.0;
-				writing = false;
-				firstpass = false;
-				zicket = 4*MaxZicket;
-			} else {
-				if ( zicket <= MaxZicket ) { 
-					// if filter stable
-					delta = RawData - filt;
-					if ( (abs(delta) < Threshold ) || (Threshold == 0.0) ) {
-						// new data below threshold
-						writing = true;
-						gettime = esp_timer_get_time();
-						prim = prim + beta * delta / dt;
-						if ( primMin != 0.0 || primMax != 0.0 ) {
-							if ( prim < primMin ) prim = primMin;
-							if ( prim > primMax ) prim = primMax;
-						}
-						filt = filt + alpha * delta + prim * dt;
-						if ( filtMin != 0.0 || filtMax != 0.0 ) {
-							if ( filt < filtMin ) filt = filtMin;
-							if ( filt > filtMax ) filt = filtMax;
-						}
-						writing = false;
-						zicket = 0;
-					} else {
-						// new data above threshold, additional zicket
-						zicket++;
-						if ( zicket > MaxZicket ) {
-							// if new zicket makes filter unstable (step change), arm and switch to alternate AB filter
-							_prim = prim;
-							_filt = filt;
-							zicket = 4*MaxZicket;
-						}
-					}
-				} else {
-					// if filter unstable - step change
-					// update alternate filter to track step change
-					_delta = RawData - _filt;
-					_prim = _prim + beta * _delta / dt;
-					_filt = _filt + alpha * _delta + _prim * dt;
-					// if new data below threshold, reduce number of zicket
-					if ( abs(_delta) < Threshold || (Threshold == 0.0) ) zicket--; else zicket = 4*MaxZicket;
-					if ( zicket <= MaxZicket ) {
-						// if number of zicket below stability criteria, arm and switch to primary filter
-						writing = true;
-						gettime = esp_timer_get_time();
-						prim = _prim;
-						filt = _filt;
-						writing = false;
-						zicket = 0;
-					}						
-				}
-			}
-		}
-	}
-	float ABfilt(void) {
-		while( writing ) {
-			if ( abs( esp_timer_get_time() - gettime ) > 0.001 ) break; // wait for 1 ms max if writing is in process
-		}
-		return filt;
-	}
-	float ABprim(void) {
-		while( writing ) {
-			if ( abs( esp_timer_get_time() - gettime ) > 0.001 ) break; // wait for 1 ms max if writing is in process
-		}
-		return prim;
-	}
-	bool Stable(void) {
-		bool test = true;
-		if ( zicket == 0 ) return test; else return !test;
-	}
-};
 
-class LowPassFilter {
-private:
-	float output1 = 0.0;
-	float output2 = 0.0;
-	float alpha = 1.0; // Filter coefficients
-	float beta = 0.0;
-	bool writing = false;
-	float gettime = 0.0;
-public:
-	void LPinit( float cutoffperiod, float dt ) {
-		alpha = cutoffperiod / (cutoffperiod + dt);
-		beta = 1.0 - alpha;
-	}
-    void LPupdate( float input ) {
-		writing = true;
-		gettime = esp_timer_get_time();
-		output1 = alpha * output1 + beta * input;
-		output2 = alpha * output2 + beta * output1;
-		writing = false;
-    }
-	float LowPass1(void) {
-		while( writing ) {
-			if ( abs( esp_timer_get_time() - gettime ) > 0.001 ) break; // wait for 1 ms max if writing is in process
-		}		
-		return output1;
-	}
-	float LowPass2(void) {
-		while( writing ) {
-			if ( abs( esp_timer_get_time() - gettime ) > 0.001 ) break; // wait for 1 ms max if writing is in process
-		}		
-		return output2;
-	}
- };
- 
- 
-class SetGet {
-private:
-	bool writing = false;
-	float data = 0.0;
-	float gettime = 0.0;
-public:
-	void Set( float value ) {
-		writing = true;
-		gettime = esp_timer_get_time();		
-		data = value;
-		writing = false;
-	}
-    float Get( void ) {
-		while( writing ) {
-			if ( abs( esp_timer_get_time() - gettime ) > 0.001 ) break; // wait for 1 ms max if writing is in process
-		}
-		return data; 
-    }
- };
 
 // alpha beta class for gyros
 AlphaBeta gyroNEDx, gyroNEDy, gyroNEDz;
@@ -1115,16 +926,6 @@ static void processIMU(void *pvParameters)
 	GyroRPSPrim.z = 0.0;
 	GyroRPSFilt.z = 0.0;
 
-	mpud::float_axes_t deltaaccelISUNEDMPU;
-	mpud::float_axes_t accelISUNEDMPUPrim;
-	mpud::float_axes_t accelISUNEDMPU;
-	accelISUNEDMPUPrim.x = 0.0;
-	accelISUNEDMPU.x = 0.0;
-	accelISUNEDMPUPrim.y = 0.0;
-	accelISUNEDMPU.y = 0.0;
-	accelISUNEDMPUPrim.z = 0.0;
-	accelISUNEDMPU.z = -9.807;
-
 	#define GroundAccelprimlimit 2.5 // m/s3
 	#define	GroundGyroprimlimit 0.55// rad/s2
 	
@@ -1326,7 +1127,6 @@ static void processIMU(void *pvParameters)
 			RawaccelISUNEDMPU.z = ((-accelG.x*9.807) - currentAccelBias.z ) * currentAccelGain.z;
 
 			// convert from MPU to BODY and filter with A/B
-			//xSemaphoreTake( dataMutex, 3/portTICK_PERIOD_MS ); // prevent data conflicts for 3ms max.				
 			accelISUNEDBODY.x = C_T * RawaccelISUNEDMPU.x + STmultSS * RawaccelISUNEDMPU.y + STmultCS * RawaccelISUNEDMPU.z + ( gyroCorr.y * gyroCorr.y + gyroCorr.z * gyroCorr.z ) * DistCGVario ;
 			accelNEDBODYx.ABupdate( dtGyr, accelISUNEDBODY.x );
 			accelISUNEDBODY.y = C_S * RawaccelISUNEDMPU.y - S_S * RawaccelISUNEDMPU.z;
@@ -1334,8 +1134,6 @@ static void processIMU(void *pvParameters)
 			accelISUNEDBODY.z = -S_T * RawaccelISUNEDMPU.x + SSmultCT * RawaccelISUNEDMPU.y + CTmultCS * RawaccelISUNEDMPU.z ;
 			accelNEDBODYz.ABupdate( dtGyr, accelISUNEDBODY.z );
 			accelNEDBODYzNorm = -accelNEDBODYz.ABfilt() / GRAVITY;
-			//xSemaphoreGive( dataMutex );
-						
 		}
 
 		// compute acceleration module variation using unfiltered accels

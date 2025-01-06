@@ -57,6 +57,8 @@
 #include "BMPVario.h"
 #include "AirspeedSensor.h"
 
+#include "filter_data_classes.h"
+
 // Display 4 Wire SPI and Display CS
 #define RESET_Display  GPIO_NUM_5       // Reset pin for Display
 #define CS_Display     GPIO_NUM_13      // CS pin 13 is for Display
