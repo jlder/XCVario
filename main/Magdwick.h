@@ -1,7 +1,5 @@
 /**
-  *
   * Magdwick.h 
-  *
   */
 
 #ifndef Magdwick_H_

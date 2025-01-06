@@ -1,8 +1,6 @@
 /**
-  *
   * AlphaBetaFilter.h 
   * header for alpha/beta filter
-  *
   */
 
 #ifndef AlphaBetaFilter_H_

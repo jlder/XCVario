@@ -1,8 +1,6 @@
 /**
-  *
   * LowPass.h 
   * header for low pass filter
-  *
   */
 
 #ifndef LowPass_H_

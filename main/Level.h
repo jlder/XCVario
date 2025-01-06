@@ -13,13 +13,13 @@
 class Level {
 private:
 	bool InitDone = false;
-	float fclo1, fclo2;
-	float fchi1, fchi2;
-	float CurrentLevel;
+	float fcinc1, fcinc2;
+	float fcdec1, fcdec2;
+	float CurrentLevel = 0.0;
 	bool writing = false;
 	int64_t gettime;
 public:
-	void Init( float SampleRate, float LoPass, float HiPass);
+	void Init( float SampleRate, float LoPassInc, float LoPassDec );
 	void Update( float val );
 	float GetLevel();
 };

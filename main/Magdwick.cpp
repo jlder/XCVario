@@ -4,8 +4,9 @@
 #include <stdint.h>
 
 
-// Magdwick class implementation
+// Magdwick AHRS class implementation
 
+// force Initialisation of quaternion with attitude from accels
 void Magdwick::Init() {
 	InitDone = false;
 	SamplesCount = 0;
@@ -15,10 +16,12 @@ void Magdwick::Init() {
 	SumAz = 0.0;
 }	
 
+// set Beta for Magdwick 
 void Magdwick::SetBeta( float val ) {
 	Beta = val;
 }
 
+// Get Roll from quaternion
 float Magdwick::GetRoll() {
 	while( writing ) {
 		if ( abs( (int64_t)esp_timer_get_time() - gettime ) > 1000 ) break; // wait for 1 ms max if writing is in process
@@ -26,6 +29,7 @@ float Magdwick::GetRoll() {
 	return Roll;
 }
 
+// Get Pitch from quaternion
 float Magdwick::GetPitch() {
 	while( writing ) {
 		if ( abs( (int64_t)esp_timer_get_time() - gettime ) > 1000 ) break; // wait for 1 ms max if writing is in process
@@ -33,6 +37,7 @@ float Magdwick::GetPitch() {
 	return Pitch;
 }
 
+// Get Yaw from quaternion
 float Magdwick::GetYaw() {
 	while( writing ) {
 		if ( abs( (int64_t)esp_timer_get_time() - gettime ) > 1000 ) break; // wait for 1 ms max if writing is in process
@@ -40,10 +45,12 @@ float Magdwick::GetYaw() {
 	return Yaw;
 }
 
+// Set local gravity value
 void Magdwick::SetGravity( float val ) {
 	GRAVITY = val;
 }
 
+// Get gravity x component from attitude
 float Magdwick::Gravx() {
 	while( writing ) {
 		if ( abs( (int64_t)esp_timer_get_time() - gettime ) > 1000 ) break; // wait for 1 ms max if writing is in process
@@ -51,6 +58,7 @@ float Magdwick::Gravx() {
 	return GravIMUx;
 }
 
+// Get gravity y component from attitude
 float Magdwick::Gravy() {
 	while( writing ) {
 		if ( abs( (int64_t)esp_timer_get_time() - gettime ) > 1000 ) break; // wait for 1 ms max if writing is in process
@@ -58,6 +66,7 @@ float Magdwick::Gravy() {
 	return GravIMUy;
 }
 
+// Get gravity z component from attitude
 float Magdwick::Gravz() {
 	while( writing ) {
 		if ( abs( (int64_t)esp_timer_get_time() - gettime ) > 1000 ) break; // wait for 1 ms max if writing is in process
@@ -65,6 +74,7 @@ float Magdwick::Gravz() {
 	return GravIMUz;
 }
 
+// Get module of gravity from accelerometers
 float Magdwick::AccelGravityModule() {
 	while( writingaccelgravmodule ) {
 		if ( abs( (int64_t)esp_timer_get_time() - gettime ) > 1000 ) break; // wait for 1 ms max if writing is in process
@@ -72,21 +82,19 @@ float Magdwick::AccelGravityModule() {
 	return AccelGravModule;
 }
 
+// update AHRS 
 void Magdwick::Update(	float dt, float gx, float gy, float gz, float ax, float ay, float az ) {
-
 	float  recipNorm;
 	float s0, s1, s2, s3;
 	float qDot1, qDot2, qDot3, qDot4;
 	float _2q0, _2q1, _2q2, _2q3, _4q0, _4q1, _4q2, _8q1, _8q2, q0q0, q1q1, q2q2, q3q3;
 	float AverageAx, AverageAy, AverageAz;
-
 	if ( InitDone ) {
 		// Rate of change of quaternion from gyroscope
 		qDot1 = 0.5 * (-q1 * gx - q2 * gy - q3 * gz);
 		qDot2 = 0.5 * (q0 * gx + q2 * gz - q3 * gy);
 		qDot3 = 0.5 * (q0 * gy - q1 * gz + q3 * gx);
 		qDot4 = 0.5 * (q0 * gz + q1 * gy - q2 * gx);
-
 		// Compute feedback only if accelerometer measurement valid (avoids NaN in accelerometer normalisation)
 		writingaccelgravmodule = true;
 		gettime = esp_timer_get_time();		
@@ -170,6 +178,7 @@ void Magdwick::Update(	float dt, float gx, float gy, float gz, float ax, float a
 		writing = false;
 				
 	} else {
+		// initialization of quaternion with attitude from accelerometers
 		SamplesCount++;
 		if ( SamplesCount > SkipSamplesCount ) {
 			SumAx = SumAx + ax;

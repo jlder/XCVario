@@ -1,6 +1,7 @@
 #include "LowPass.h"
 #include <esp_timer.h>
 
+//
 // Low Pass filter class implementation
 // LP filter initialization
 void LowPassFilter::LPinit( float cutoffperiod, float dt ) {
