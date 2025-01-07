@@ -57,7 +57,11 @@
 #include "BMPVario.h"
 #include "AirspeedSensor.h"
 
-#include "filter_data_classes.h"
+#include "AlphaBetaFilter.h"
+#include "SetGet.h"
+#include "LowPass.h"
+#include "Magdwick.h"
+#include "Level.h"
 
 // Display 4 Wire SPI and Display CS
 #define RESET_Display  GPIO_NUM_5       // Reset pin for Display

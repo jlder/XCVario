@@ -5,8 +5,13 @@
 // Low Pass filter class implementation
 // LP filter initialization
 void LowPassFilter::LPinit( float cutoffperiod, float dt ) {
+	LowPassFilter::LPinit( cutoffperiod, dt, 2 );
+}
+
+void LowPassFilter::LPinit( float cutoffperiod, float dt, int16_t order ) {
 	alpha = cutoffperiod / (cutoffperiod + dt);
 	beta = 1.0 - alpha;
+	FilterOrder = order;
 }
 
 // LP filter update
@@ -16,6 +21,21 @@ void LowPassFilter::LPupdate( float input ) {
 	output1 = alpha * output1 + beta * input;
 	output2 = alpha * output2 + beta * output1;
 	writing = false;
+}
+
+// LP filter update
+float LowPassFilter::LowPassUpdate( float input ) {
+	writing = true;
+	gettime = esp_timer_get_time();
+	output1 = alpha * output1 + beta * input;
+	if (FilterOrder < 2 ) {
+		writing = false;
+		return output1;
+	} else {
+		output2 = alpha * output2 + beta * output1;
+		writing = false;
+		return output2;
+	}
 }
 
 // LP filter first order output
