@@ -16,7 +16,7 @@ void Magdwick::Init() {
 	SumAz = 0.0;
 }	
 
-// set Beta for Magdwick 
+// set Beta for Magdwick, parameters which allows attitude from gyros to converge toward attitude from acceleration
 void Magdwick::SetBeta( float val ) {
 	Beta = val;
 }
@@ -45,7 +45,7 @@ float Magdwick::GetYaw() {
 	return Yaw;
 }
 
-// Set local gravity value
+// Set local gravity value, which is used to compute gravity components in function of quaternion attitude
 void Magdwick::SetGravity( float val ) {
 	GRAVITY = val;
 }
@@ -82,7 +82,9 @@ float Magdwick::AccelGravityModule() {
 	return AccelGravModule;
 }
 
-// update AHRS 
+// Update AHRS. Update quaternion, compute Euler angles and Gravity components from attitude.
+// When Update is called for the first time, quarternion is initialized using averaged accelerometers
+//
 void Magdwick::Update(	float dt, float gx, float gy, float gz, float ax, float ay, float az ) {
 	float  recipNorm;
 	float s0, s1, s2, s3;

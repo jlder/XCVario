@@ -7,7 +7,8 @@
 
 #include <stdint.h>
 
-// alpha beta filter class
+// Magdwick AHRS implementation, including Euler angles, gravity components and gravity module
+//
 class Magdwick {
 private:
 	bool InitDone = false;

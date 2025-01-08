@@ -3,3 +3,5 @@
 .cproject
 build
 /Debug/
+sdkconfig
+

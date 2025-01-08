@@ -1,7 +1,7 @@
 /**
   *
   * SetGet.h 
-  * header for set & get data access between tasks
+  * header for set & get data access between independant tasks
   *
   */
 

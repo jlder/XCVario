@@ -3,7 +3,8 @@
 
 // Set / Get class implementation
 // Allows data exchange between independant tasks 
-// Set/write a value 
+// Set/write a value
+ 
 void SetGet::Set( float value ) {
 	writing = true;
 	gettime = esp_timer_get_time();		
