@@ -2,7 +2,7 @@
 #include <esp_timer.h>
 
 //
-// alpha beta filter class implementation
+// alpha beta filter class implementation and anti zicket protection
 // 
 // AB filter initialization
 void AlphaBeta::ABinit( float N, float dtTypical ) {

@@ -1,6 +1,6 @@
 /**
   * AlphaBetaFilter.h 
-  * header for alpha/beta filter
+  * header for alpha/beta filter and anti zicket protection
   */
 
 #ifndef AlphaBetaFilter_H_
