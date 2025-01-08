@@ -39,7 +39,7 @@ void AlphaBeta::ABNupdt( float N ) {
 
 // AB filter update		
 void AlphaBeta::ABupdate(float dt, float RawData ) {
-	#define MaxZicket 2 // maximum number of concecuitives zickets to let the filter track the signal. If zicket is higher a step change in signal is suspected
+	#define MaxZicket 3 // maximum number of concecuitives zickets to let the filter track the signal. If zicket is higher a step change in signal is suspected
 	// process sample if dt above dtMin and below dtMax (dtMin typicaly average dt / 4 and dtMax typicaly 4 x average dt)
 	writing = false;
 	if ( dt > dtMin && dt < dtMax  ) {
