@@ -16,8 +16,8 @@ private:
 	float data = 0.0;
 	int64_t gettime;
 public:
-	void Set( float value );
-    float Get( void );
+	void set( float value );
+    float get( void );
  };
  
  #endif /* SetGet_H_ */

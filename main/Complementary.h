@@ -22,11 +22,11 @@ private:
 	bool writing = false;
 	int64_t gettime;
 public:
-	void Init( float SamplingRate, float Period );
-	void SetPeriod( float Period );
-	float GetPeriod();
-	float Update( float dt, float Derivative, float Signal );
-	float Get();
+	void init( float SamplingRate, float Period );
+	void setPeriod( float Period );
+	float getPeriod();
+	float update( float dt, float Derivative, float Signal );
+	float get();
 };
 
  #endif /* Complementary_H_ */

@@ -36,17 +36,17 @@ private:
 	int64_t gettime = 0;
 	float GRAVITY = 9.807;
 public:
-	void Init();
-	void SetBeta( float val );
-	float GetRoll();
-	float GetPitch();
-	float GetYaw();
-	void SetGravity( float val );
+	void init();
+	void setBeta( float val );
+	float getRoll();
+	float getPitch();
+	float getYaw();
+	void setGravity( float val );
 	float Gravx();
 	float Gravy(); 
 	float Gravz();
 	float AccelGravityModule(); 
-	void Update( float dt, float gx, float gy, float gz, float ax, float ay, float az ); 
+	void update( float dt, float gx, float gy, float gz, float ax, float ay, float az ); 
 };
 
  #endif /* Magdwick_H_ */

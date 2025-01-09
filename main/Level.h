@@ -19,9 +19,9 @@ private:
 	bool writing = false;
 	int64_t gettime;
 public:
-	void Init( float SampleRate, float LoPassInc, float LoPassDec );
-	void Update( float val );
-	float GetLevel();
+	void init( float SampleRate, float LoPassInc, float LoPassDec );
+	void update( float val );
+	float get();
 };
 
  #endif /* Level_H_ */

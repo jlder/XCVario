@@ -7,7 +7,7 @@
 //
 
 // initialize with stream sample rate and complementary filter period
-void Complementary::Init( float SamplingRate, float Period ) {
+void Complementary::init( float SamplingRate, float Period ) {
 	SampleRate = SamplingRate;
 	FilterPeriod = Period;
 	fc1 = SampleRate * Period;
@@ -19,14 +19,14 @@ void Complementary::Init( float SamplingRate, float Period ) {
 }	
 
 // Change complementary filter period
-void Complementary::SetPeriod( float Period ) {
+void Complementary::setPeriod( float Period ) {
 	fc1 = SampleRate * Period;
 	fc1 = fc1 / ( fc1 + 1 );
 	fc2 = 1 - fc1;
 }
 
 // Get current filter Period
-float Complementary::GetPeriod() {
+float Complementary::getPeriod() {
 	while( writing ) {
 		if ( abs( (int64_t)esp_timer_get_time() - gettime ) > 1000 ) break; // wait for 1 ms max if writing is in process
 	}
@@ -34,7 +34,7 @@ float Complementary::GetPeriod() {
 }
 
 // Update Complementary filter output using current stream delta time betweenlast samples, derivative value and signal value
-float Complementary::Update( float dt, float Derivative, float Signal ) {
+float Complementary::update( float dt, float Derivative, float Signal ) {
 	writing = true;
 	gettime = esp_timer_get_time();
 	if ( InitDone ) {
@@ -48,7 +48,7 @@ float Complementary::Update( float dt, float Derivative, float Signal ) {
 }
 
 // Get Complementary Filter output
-float Complementary::Get() {
+float Complementary::get() {
 	while( writing ) {
 		if ( abs( (int64_t)esp_timer_get_time() - gettime ) > 1000 ) break; // wait for 1 ms max if writing is in process
 	}

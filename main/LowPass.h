@@ -21,7 +21,7 @@ public:
 	void LPinit( float cutoffperiod, float dt );
 	void LPinit( float cutoffperiod, float dt, int16_t order );	
     void LPupdate( float input );
-    float LowPassUpdate( float input );	
+    float LowPassupdate( float input );	
 	float LowPass1(void);
 	float LowPass2(void);
  };

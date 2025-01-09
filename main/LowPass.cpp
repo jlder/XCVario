@@ -24,7 +24,7 @@ void LowPassFilter::LPupdate( float input ) {
 }
 
 // LP filter update
-float LowPassFilter::LowPassUpdate( float input ) {
+float LowPassFilter::LowPassupdate( float input ) {
 	writing = true;
 	gettime = esp_timer_get_time();
 	output1 = alpha * output1 + beta * input;

@@ -30,7 +30,7 @@ void AlphaBeta::ABinit( float N, float dtTypical, float _Threshold, float _filtM
 }
 
 // AB filter depth N update
-void AlphaBeta::ABNupdt( float N ) {
+void AlphaBeta::ABNupdate( float N ) {
 	if ( N > 0.0  ) {
 		alpha =  (2.0 * (2.0 * N - 1.0) / N / (N + 1.0));
 		beta = (6.0 / N / (N + 1.0));
@@ -122,7 +122,7 @@ float AlphaBeta::ABprim(void) {
 }
 
 // AB filter stability check
-bool AlphaBeta::Stable(void) {
+bool AlphaBeta::ABstable(void) {
 	bool test = true;
 	if ( zicket == 0 ) return test; else return !test;
 }

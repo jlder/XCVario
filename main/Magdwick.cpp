@@ -7,7 +7,7 @@
 // Magdwick AHRS class implementation
 
 // force Initialisation of quaternion with attitude from accels
-void Magdwick::Init() {
+void Magdwick::init() {
 	InitDone = false;
 	SamplesCount = 0;
 	SumCount = 1;
@@ -17,12 +17,12 @@ void Magdwick::Init() {
 }	
 
 // set Beta for Magdwick, parameters which allows attitude from gyros to converge toward attitude from acceleration
-void Magdwick::SetBeta( float val ) {
+void Magdwick::setBeta( float val ) {
 	Beta = val;
 }
 
 // Get Roll from quaternion
-float Magdwick::GetRoll() {
+float Magdwick::getRoll() {
 	while( writing ) {
 		if ( abs( (int64_t)esp_timer_get_time() - gettime ) > 1000 ) break; // wait for 1 ms max if writing is in process
 	}
@@ -30,7 +30,7 @@ float Magdwick::GetRoll() {
 }
 
 // Get Pitch from quaternion
-float Magdwick::GetPitch() {
+float Magdwick::getPitch() {
 	while( writing ) {
 		if ( abs( (int64_t)esp_timer_get_time() - gettime ) > 1000 ) break; // wait for 1 ms max if writing is in process
 	}
@@ -38,7 +38,7 @@ float Magdwick::GetPitch() {
 }
 
 // Get Yaw from quaternion
-float Magdwick::GetYaw() {
+float Magdwick::getYaw() {
 	while( writing ) {
 		if ( abs( (int64_t)esp_timer_get_time() - gettime ) > 1000 ) break; // wait for 1 ms max if writing is in process
 	}
@@ -46,7 +46,7 @@ float Magdwick::GetYaw() {
 }
 
 // Set local gravity value, which is used to compute gravity components in function of quaternion attitude
-void Magdwick::SetGravity( float val ) {
+void Magdwick::setGravity( float val ) {
 	GRAVITY = val;
 }
 
@@ -85,7 +85,7 @@ float Magdwick::AccelGravityModule() {
 // Update AHRS. Update quaternion, compute Euler angles and Gravity components from attitude.
 // When Update is called for the first time, quarternion is initialized using averaged accelerometers
 //
-void Magdwick::Update(	float dt, float gx, float gy, float gz, float ax, float ay, float az ) {
+void Magdwick::update(	float dt, float gx, float gy, float gz, float ax, float ay, float az ) {
 	float  recipNorm;
 	float s0, s1, s2, s3;
 	float qDot1, qDot2, qDot3, qDot4;

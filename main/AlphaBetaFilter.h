@@ -35,11 +35,11 @@ public:
 	void ABinit( float N, float dtTypical, float _Threshold );
 	void ABinit( float N, float dtTypical, float _Threshold, float _filtMin, float _filtMax );
 	void ABinit( float N, float dtTypical, float _Threshold, float _filtMin, float _filtMax, float _primMin, float _primMax );
-	void ABNupdt( float N );
+	void ABNupdate( float N );
 	void ABupdate(float dt, float RawData );
 	float ABfilt(void);
 	float ABprim(void);
-	bool Stable(void);
+	bool ABstable(void);
 };
 
  #endif /* AlphaBetaFilter_H_ */
