@@ -165,7 +165,6 @@ extern bool SENstream;
 extern bool CALstream;
 extern bool CALfirstpass;
 extern bool TSTstream;
-extern bool LABtest;
 extern bool AHRSstream;
 extern float localGravity;
 extern float NEnergy;
@@ -201,6 +200,6 @@ extern float Allyvel3D;
 extern float Allyvel2D;
 // MOD#5 add Allystar TAU1201 velocity
 
-extern float accelNEDBODYzNorm;
+extern float accelNz;
 
 #endif

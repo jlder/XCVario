@@ -624,7 +624,6 @@ void Protocols::parseNMEA( const char *str ){
 			SENstream = true;
 			CALstream = false;			
 			TSTstream = false; 
-			LABtest = false;
 			sprintf(strx,"OK for $FT2\r\n");
 			Router::sendXCV(strx);			
 		}
@@ -652,11 +651,6 @@ void Protocols::parseNMEA( const char *str ){
 			sprintf(strx,"OK for $FT5\r\n");
 			Router::sendXCV(strx);			
 		}
-		else if (str[3] == '6') {
-			LABtest = true;
-			sprintf(strx,"OK for $FT6\r\n");
-			Router::sendXCV(strx);			
-		}		
 	} else if( !strncmp( str, "$SETACC", 7 ) ) {
 		mpud::float_axes_t AccBias;	
 		mpud::float_axes_t AccGain;

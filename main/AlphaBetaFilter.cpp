@@ -18,8 +18,9 @@ void AlphaBeta::ABinit( float N, float dtTypical, float _Threshold, float _filtM
 	if ( N != 0.0  ) {
 		alpha =  (2.0 * (2.0 * N - 1.0) / N / (N + 1.0));
 		beta = (6.0 / N / (N + 1.0));
-		dtMax = dtTypical * 4.0;
-		dtMin = dtTypical / 4.0;
+		dtAvg = dtTypical;
+		dtMax = dtTypical * 3.0;
+		dtMin = dtTypical / 3.0;
 	}
 	firstpass = true;
 	Threshold = _Threshold;
@@ -37,6 +38,18 @@ void AlphaBeta::ABNupdate( float N ) {
 	}
 }
 
+// AB filter init low pass filter period
+void AlphaBeta::ABlpinit( float lpperiod ) {
+	lp1 = lpperiod / ( lpperiod + dtAvg );
+	lp2 = 1 - lp1;
+}
+
+// AB filter low pass on filter
+float AlphaBeta::ABfiltlp( void ) {
+	return filtlp;
+}
+
+
 // AB filter update		
 void AlphaBeta::ABupdate(float dt, float RawData ) {
 	#define MaxZicket 2 // maximum number of concecuitives zickets to let the filter track the signal. If zicket is higher a step change in signal is suspected
@@ -48,6 +61,7 @@ void AlphaBeta::ABupdate(float dt, float RawData ) {
 			gettime = esp_timer_get_time();
 			unfiltered = RawData;
 			filt = RawData;
+			filtlp = filt;
 			_filt = RawData;
 			prim = 0.0;
 			_prim = 0.0;
@@ -73,6 +87,7 @@ void AlphaBeta::ABupdate(float dt, float RawData ) {
 						if ( filt < filtMin ) filt = filtMin;
 						if ( filt > filtMax ) filt = filtMax;
 					}
+					filtlp = filtlp * lp1 + filt * lp2;
 					writing = false;
 					zicket = 0;
 				} else {
@@ -100,6 +115,7 @@ void AlphaBeta::ABupdate(float dt, float RawData ) {
 					unfiltered = RawData;
 					prim = _prim;
 					filt = _filt;
+					filtlp = filt;
 					writing = false;
 					zicket = 0;
 				}						

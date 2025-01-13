@@ -13,12 +13,14 @@
 class TimeDt {
 private:
 	bool firstpass = true;
+	int64_t currentime;
 	int64_t previoustime;
 	int64_t dt;
 	int16_t dtmin, dtmax;
 public:
 	void update( float value );
     float get( void );
+	int64_t gettime( void );
  };
  
  #endif /* TimeDt_H_ */

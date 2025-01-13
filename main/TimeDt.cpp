@@ -23,3 +23,8 @@ void TimeDt::update( float val ) {
 float TimeDt::get() {
 	return dt;
 }
+
+// Get time
+int64_t TimeDt::gettime() {
+	return currentime;
+}

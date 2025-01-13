@@ -12,6 +12,7 @@
 class AlphaBeta {
 private:
 	float unfiltered = 0.0;
+	float dtAvg = 0.0;
 	float dtMax = 0.0;
 	float dtMin = 0.0;
 	float delta = 0.0;
@@ -30,6 +31,9 @@ private:
 	bool firstpass = true;
 	int zicket = 0;
 	bool writing = false;
+	float filtlp = 0.0;
+	float lp1 = 0.0;
+	float lp2 = 1.0;
 	int64_t gettime = 0.0;
 	int64_t currenttime = 0.0;
 public:
@@ -43,6 +47,8 @@ public:
 	float ABprim(void);
 	bool ABstable(void);
 	float ABraw(void);
+	void ABlpinit( float lpperiod );
+	float ABfiltlp( void );
 };
 
  #endif /* AlphaBetaFilter_H_ */
