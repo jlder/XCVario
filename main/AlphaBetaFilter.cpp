@@ -46,6 +46,7 @@ void AlphaBeta::ABupdate(float dt, float RawData ) {
 		if ( firstpass ) { // initialize filter variables when first called
 			writing = true;
 			gettime = esp_timer_get_time();
+			unfiltered = RawData;
 			filt = RawData;
 			_filt = RawData;
 			prim = 0.0;
@@ -61,6 +62,7 @@ void AlphaBeta::ABupdate(float dt, float RawData ) {
 					// new data below threshold
 					writing = true;
 					gettime = esp_timer_get_time();
+					unfiltered = RawData;
 					prim = prim + beta * delta / dt;
 					if ( primMin != 0.0 || primMax != 0.0 ) {
 						if ( prim < primMin ) prim = primMin;
@@ -95,6 +97,7 @@ void AlphaBeta::ABupdate(float dt, float RawData ) {
 					// if number of zicket below stability criteria, arm and switch to primary filter
 					writing = true;
 					gettime = esp_timer_get_time();
+					unfiltered = RawData;
 					prim = _prim;
 					filt = _filt;
 					writing = false;
@@ -107,16 +110,18 @@ void AlphaBeta::ABupdate(float dt, float RawData ) {
 
 // AB filter filtered output
 float AlphaBeta::ABfilt(void) {
+	currenttime = esp_timer_get_time();
 	while( writing ) {
-		if ( abs( (int64_t)esp_timer_get_time() - gettime ) > 1000 ) break; // wait for 1 ms max if writing is in process
+		if ( abs( currenttime - gettime ) > 1000 ) break; // wait for 1 ms max if writing is in process
 	}
 	return filt;
 }
 
 // AB filter derivative output
 float AlphaBeta::ABprim(void) {
+	currenttime = esp_timer_get_time();
 	while( writing ) {
-		if ( abs( (int64_t)esp_timer_get_time() - gettime ) > 1000 ) break; // wait for 1 ms max if writing is in process
+		if ( abs( currenttime - gettime ) > 1000 ) break; // wait for 1 ms max if writing is in process
 	}
 	return prim;
 }
@@ -125,4 +130,13 @@ float AlphaBeta::ABprim(void) {
 bool AlphaBeta::ABstable(void) {
 	bool test = true;
 	if ( zicket == 0 ) return test; else return !test;
+}
+
+// AB filter unfiltered output
+float AlphaBeta::ABraw(void) {
+	currenttime = esp_timer_get_time();	
+	while( writing ) {
+		if ( abs( currenttime - gettime ) > 1000 ) break; // wait for 1 ms max if writing is in process
+	}
+	return unfiltered;
 }

@@ -25,7 +25,7 @@ public:
 	void init( float SamplingRate, float Period );
 	void setPeriod( float Period );
 	float getPeriod();
-	float update( float dt, float Derivative, float Signal );
+	void update( float dt, float Derivative, float Signal );
 	float get();
 };
 

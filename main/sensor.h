@@ -62,6 +62,8 @@
 #include "LowPass.h"
 #include "Magdwick.h"
 #include "Level.h"
+#include "TimeDt.h"
+#include "Complementary.h"
 
 // Display 4 Wire SPI and Display CS
 #define RESET_Display  GPIO_NUM_5       // Reset pin for Display

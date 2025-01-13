@@ -45,7 +45,11 @@ public:
 	float Gravx();
 	float Gravy(); 
 	float Gravz();
-	float AccelGravityModule(); 
+	float AccelGravityModule();
+	float getq0();
+	float getq1();
+	float getq2();
+	float getq3();
 	void update( float dt, float gx, float gy, float gz, float ax, float ay, float az ); 
 };
 

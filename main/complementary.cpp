@@ -34,7 +34,7 @@ float Complementary::getPeriod() {
 }
 
 // Update Complementary filter output using current stream delta time betweenlast samples, derivative value and signal value
-float Complementary::update( float dt, float Derivative, float Signal ) {
+void Complementary::update( float dt, float Derivative, float Signal ) {
 	writing = true;
 	gettime = esp_timer_get_time();
 	if ( InitDone ) {
@@ -44,7 +44,6 @@ float Complementary::update( float dt, float Derivative, float Signal ) {
 		InitDone = true;
 	}
 	writing = false;
-	return CFValue;
 }
 
 // Get Complementary Filter output

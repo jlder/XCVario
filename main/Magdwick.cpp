@@ -82,6 +82,26 @@ float Magdwick::AccelGravityModule() {
 	return AccelGravModule;
 }
 
+// Get q0
+float Magdwick::getq0() {
+	return q0;
+}
+
+// Get q1
+float Magdwick::getq1() {
+	return q1;
+}
+
+// Get q2
+float Magdwick::getq2() {
+	return q2;
+}
+
+// Get q3
+float Magdwick::getq3() {
+	return q3;
+}
+
 // Update AHRS. Update quaternion, compute Euler angles and Gravity components from attitude.
 // When Update is called for the first time, quarternion is initialized using averaged accelerometers
 //
