@@ -2041,13 +2041,13 @@ int beta_adj( SetupMenuValFloat * p ){
 }
 
 int ALTbi_N_adj( SetupMenuValFloat * p ){
-		ALTbiN = ALTbi_N.get(); // N for ALTbi A/B filter
+		ALTbiEnergyN = ALTbi_N.get(); // N for ALTbi A/B filter
 		NALTbiTASbiChanged = true;		
 	return 0;
 }
 
 int TASbi_N_adj( SetupMenuValFloat * p ){
-		TASbiN = TASbi_N.get(); // delta N (from ALTbi N) for TASbi A/B filter
+		TASbiEnergyN = TASbi_N.get(); // delta N (from ALTbi N) for TASbi A/B filter
 		NALTbiTASbiChanged = true;		
 	return 0;
 }

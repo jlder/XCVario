@@ -174,8 +174,8 @@ extern float PeriodVelbi;
 extern float LastPeriodVelbi;
 extern float Mahonykp;
 extern float MagdwickBeta;
-extern float ALTbiN;
-extern float TASbiN;
+extern float ALTbiEnergyN;
+extern float TASbiEnergyN;
 extern bool NALTbiTASbiChanged;
 extern float opt_TE;
 

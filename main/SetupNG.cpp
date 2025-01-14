@@ -63,12 +63,12 @@ void change_BetaMagdwick(){
 }
 
 void change_ALTbiN() {
-		ALTbiN = ALTbi_N.get();
+		ALTbiEnergyN = ALTbi_N.get();
 		NALTbiTASbiChanged = true;		
 }
 
 void change_TASbiN() {
-		TASbiN = TASbi_N.get();
+		TASbiEnergyN = TASbi_N.get();
 		NALTbiTASbiChanged = true;		
 }
 
