@@ -11,17 +11,19 @@ void TimeDt::update( float val ) {
 		dtmin = val / 3.0;
 		dtmax = dt * 3.0;
 		dt = 0.0;
-		previoustime = esp_timer_get_time();
+		currentime = esp_timer_get_time();
+		previoustime = currentime;
 		firstpass = false;
 	} else {
-		dt = esp_timer_get_time() - previoustime;
+		currentime = esp_timer_get_time();
+		dt =  currentime - previoustime;
 		if ( (dt < dtmin) || (dt > dtmax) )  dt = 0.0;
 	}
 }
 
 // Get dt
-float TimeDt::get() {
-	return dt;
+float TimeDt::getdt() {
+	return (float)dt;
 }
 
 // Get time

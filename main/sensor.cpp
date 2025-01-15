@@ -189,6 +189,61 @@ MPU_t MPU;         // create an object
 mpud::float_axes_t accelG;
 mpud::float_axes_t gyroDPS;
 
+static float battery=0.0;
+
+float slipAngle = 0.0;
+
+// global color variables for adaptable display variant
+uint8_t g_col_background=255; // black
+uint8_t g_col_highlight=0;
+uint8_t g_col_header_r=101+g_col_background/5;
+uint8_t g_col_header_g=108+g_col_background/5;
+uint8_t g_col_header_b=g_col_highlight;
+uint8_t g_col_header_light_r=161-g_col_background/4;
+uint8_t g_col_header_light_g=168-g_col_background/3;
+uint8_t g_col_header_light_b=g_col_highlight;
+uint16_t gear_warning_holdoff = 0;
+uint8_t gyro_flash_savings=0;
+
+t_global_flags gflags = { true, false, false, false, false, false, false, false, false, false, false, false, false, false };
+
+int  ccp=60;
+float tas = 0;
+float cas = 0;
+float aTE = 0;
+float alt_external;
+float altSTD;
+float netto = 0;
+float as2f = 0;
+float s2f_delta = 0;
+float polar_sink = 0;
+
+float      stall_alarm_off_kmh=0;
+uint16_t   stall_alarm_off_holddown=0;
+
+int count=0;
+int countIMU=0;
+int flarm_alarm_holdtime=0;
+int the_can_mode = CAN_MODE_MASTER;
+int active_screen = 0;  // 0 = Vario
+
+float mpu_target_temp=45.0;
+
+AdaptUGC *egl = 0;
+
+static int mtick = 0; //counter to schedule specific tasks within a function*
+
+extern UbloxGnssDecoder s1UbloxGnssDecoder;
+extern UbloxGnssDecoder s2UbloxGnssDecoder;
+gnss_data_t *chosenGnss;
+
+// Magnetic sensor / compass
+Compass *compass = 0;
+BTSender btsender;
+
+char str[500]; 	// string for flight test message broadcast on wireless // TODO reduce size
+
+
 // Fligth Test
 
 // IMU variables	
@@ -246,12 +301,6 @@ float BiasQuatGz = 0.0;
 float DynPeriodVelbi = 8.0; // TODO replace with LP class
 float GravModuleLP = 0.0; // TODO replace with LP class
 float RollModule = 0.0; // TODO replace with LP class
-float ALTbiN; // TODO remove from menu
-float TASbiN; //  TODO remove from menu
-
-// Magnetic sensor / compass
-Compass *compass = 0;
-BTSender btsender;
 
 // variables to avoid repeated calculations
 float cosRoll = 1.0;
@@ -286,13 +335,8 @@ float STmultCS = 0.0; // ST * CS
 float SSmultCT = 0.0; // SS * CT
 float CTmultCS = 1.0; // CT * CS
 
-TimeDt dtGyr, dtAcc, dtStat, dtdynP;
-
-char str[500]; 	// string for flight test message broadcast on wireless // TODO reduce size
 int64_t ProcessTimeIMU = 0.0;
 int64_t ProcessTimeSensors = 0.0;
-int64_t gyroTime;  // time stamp for gyros
-int64_t statTime; // time stamp for statP
 
 float PrevdynP=0.0;
 float MPUtempcel; // MPU chip temperature
@@ -374,54 +418,8 @@ float Vzbi = 0.0;
 int16_t Event = 0;
 int16_t EventHoldTime = 0;
 
-static float battery=0.0;
+///// End FT variables 
 
-float slipAngle = 0.0;
-
-// global color variables for adaptable display variant
-uint8_t g_col_background=255; // black
-uint8_t g_col_highlight=0;
-uint8_t g_col_header_r=101+g_col_background/5;
-uint8_t g_col_header_g=108+g_col_background/5;
-uint8_t g_col_header_b=g_col_highlight;
-uint8_t g_col_header_light_r=161-g_col_background/4;
-uint8_t g_col_header_light_g=168-g_col_background/3;
-uint8_t g_col_header_light_b=g_col_highlight;
-uint16_t gear_warning_holdoff = 0;
-uint8_t gyro_flash_savings=0;
-
-t_global_flags gflags = { true, false, false, false, false, false, false, false, false, false, false, false, false, false };
-
-int  ccp=60;
-float tas = 0;
-float cas = 0;
-float aTE = 0;
-float alt_external;
-float altSTD;
-float netto = 0;
-float as2f = 0;
-float s2f_delta = 0;
-float polar_sink = 0;
-
-float      stall_alarm_off_kmh=0;
-uint16_t   stall_alarm_off_holddown=0;
-
-int count=0;
-int countIMU=0;
-int flarm_alarm_holdtime=0;
-int the_can_mode = CAN_MODE_MASTER;
-int active_screen = 0;  // 0 = Vario
-
-float mpu_target_temp=45.0;
-
-AdaptUGC *egl = 0;
-
-static int mtick = 0; //counter to schedule specific tasks within a function*
-
-extern UbloxGnssDecoder s1UbloxGnssDecoder;
-extern UbloxGnssDecoder s2UbloxGnssDecoder;
-gnss_data_t *chosenGnss;
-float GNSSstatus=0.0;
 
 // alpha beta class for gyros
 AlphaBeta gyrox, gyroy, gyroz;
@@ -477,6 +475,9 @@ SetGet Vh, DHeading;
 Complementary UbiPrim, VbiPrim, WbiPrim;
 Complementary Ubi, Vbi, Wbi;
 Complementary ALTbi;
+
+// time class
+TimeDt dtGyr, dtAcc, dtStat, dtdynP;
 
 #define GYRO_FS (mpud::GYRO_FS_250DPS)
 
@@ -849,7 +850,7 @@ void AccelCalibration() {
 			gflags.gload_alarm = false;
 		}					
 		sprintf(str,"$CAL,%lld,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f\r\n",
-			gyroTime, gyrox.ABfilt(), gyroy.ABfilt(), gyroz.ABfilt(), GyroModulePrimLevel.get(), GroundGyroprimlimit,
+			dtGyr.gettime(), gyrox.ABfilt(), gyroy.ABfilt(), gyroz.ABfilt(), GyroModulePrimLevel.get(), GroundGyroprimlimit,
 			accelAvgx, accelMaxx, accelMinx, accelAvgy, accelMaxy, accelMiny, accelAvgz, accelMaxz, accelMinz,
 			(accelMaxx+accelMinx)/2, (accelMaxy+accelMiny)/2, (accelMaxz+accelMinz)/2,
 			localGravity /((accelMaxx-accelMinx)/2), localGravity /((accelMaxy-accelMiny)/2), localGravity/((accelMaxz-accelMinz)/2) );
@@ -859,7 +860,7 @@ void AccelCalibration() {
 			gflags.gload_alarm = true;
 		}
 		sprintf(str,"$CAL,%lld,%.4f,%.4f,%.4f,%.4f,%.4f, - , - , - , - , - , - , - , - , - ,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f\r\n",
-			gyroTime, gyrox.ABfilt(), gyroy.ABfilt(), gyroz.ABfilt(), GyroModulePrimLevel.get(), GroundGyroprimlimit,
+			dtGyr.gettime(), gyrox.ABfilt(), gyroy.ABfilt(), gyroz.ABfilt(), GyroModulePrimLevel.get(), GroundGyroprimlimit,
 			(accelMaxx+accelMinx)/2, (accelMaxy+accelMiny)/2, (accelMaxz+accelMinz)/2,
 			localGravity /((accelMaxx-accelMinx)/2), localGravity /((accelMaxy-accelMiny)/2), localGravity/((accelMaxz-accelMinz)/2) );					
 	}
@@ -890,9 +891,6 @@ static void processIMU(void *pvParameters)
 	gyrox.ABinit( NGyro, processIMUperiod, GyroOutlier, Gyromin, Gyromax );
 	gyroy.ABinit( NGyro, processIMUperiod, GyroOutlier, Gyromin, Gyromax );
 	gyroz.ABinit( NGyro, processIMUperiod, GyroOutlier, Gyromin, Gyromax );
-	gyrox.ABlpinit( 0.1 );
-	gyroy.ABlpinit( 0.1 );
-	gyroz.ABlpinit( 0.1 );	
 
 	// alpha beta accels parameters
 	float NAccel = 5.0; //  AB Filter N parameter
@@ -902,9 +900,6 @@ static void processIMU(void *pvParameters)
 	accelx.ABinit( NAccel, processIMUperiod, AccelOutlier, Accelmin, Accelmax );
 	accely.ABinit( NAccel, processIMUperiod, AccelOutlier, Accelmin, Accelmax );	
 	accelz.ABinit( NAccel, processIMUperiod, AccelOutlier, Accelmin, Accelmax );
-	accelx.ABlpinit( 0.1 );
-	accely.ABlpinit( 0.1 );	
-	accelz.ABlpinit( 0.1 );	
 	
 	// alpha beta parameters for CAS and ALT
 	#define NCAS 10 // CAS alpha/beta filter coeff
@@ -992,7 +987,6 @@ static void processIMU(void *pvParameters)
  		if( errMPU == ESP_OK ){ 
 			// compute precise dt between current and previous samples
 			dtGyr.update( processIMUperiod );
-			gyroTime = dtGyr.gettime();
 			gyroDPS = mpud::gyroDegPerSec(gyroRaw, GYRO_FS); // For compatibility with Eckhard code only. Convert raw gyro to Gyro_FS full scale in degre per second 
 			gyroRPS = mpud::gyroRadPerSec(gyroRaw, GYRO_FS); // convert raw gyro to Gyro_FS full scale in radians per second
 			gyroMPU.x = -(gyroRPS.z - GroundGyroBias.z);
@@ -1003,9 +997,9 @@ static void processIMU(void *pvParameters)
 			gyroBODY.y = C_S * gyroMPU.y - S_S * gyroMPU.z; //+ BiasQuatGy;
 			gyroBODY.z = -S_T * gyroMPU.x + SSmultCT  * gyroMPU.y + CTmultCS * gyroMPU.z; // + BiasQuatGz;
 			// update gyro filters
-			gyrox.ABupdate(dtGyr.get(), gyroBODY.x );
-			gyroy.ABupdate(dtGyr.get(), gyroBODY.y );			
-			gyroz.ABupdate(dtGyr.get(), gyroBODY.z );			
+			gyrox.ABupdate(dtGyr.getdt(), gyroBODY.x );
+			gyroy.ABupdate(dtGyr.getdt(), gyroBODY.y );			
+			gyroz.ABupdate(dtGyr.getdt(), gyroBODY.z );			
 		}
 		// get accel data
 		errMPU = MPU.acceleration(&accelRaw);// read raw gyro data
@@ -1018,19 +1012,19 @@ static void processIMU(void *pvParameters)
 			accelMPU.z = ((-accelG.x*9.807) - currentAccelBias.z ) * currentAccelGain.z;
 			// convert from MPU to BODY and filter with A/B
 			accelBODY.x = C_T * accelMPU.x + STmultSS * accelMPU.y + STmultCS * accelMPU.z + ( gyroy.ABfilt() * gyroy.ABfilt() + gyroz.ABfilt() * gyroz.ABfilt() ) * DistCGVario ;
-			accelx.ABupdate( dtAcc.get(), accelBODY.x );
+			accelx.ABupdate( dtAcc.getdt(), accelBODY.x );
 			accelBODY.y = C_S * accelMPU.y - S_S * accelMPU.z;
-			accely.ABupdate( dtAcc.get(), accelBODY.y  );
+			accely.ABupdate( dtAcc.getdt(), accelBODY.y  );
 			accelBODY.z = -S_T * accelMPU.x + SSmultCT * accelMPU.y + CTmultCS * accelMPU.z ;
-			accelz.ABupdate( dtAcc.get(), accelBODY.z );
+			accelz.ABupdate( dtAcc.getdt(), accelBODY.z );
 			accelNz = -accelz.ABfilt()/GRAVITY;
 		}
 
 		// compute/filter acceleration module
-		AccelModule.ABupdate( dtAcc.get(), sqrt( accelx.ABfilt() * accelx.ABfilt() + accely.ABfilt() * accely.ABfilt() + accelz.ABfilt() * accelz.ABfilt() ) );
+		AccelModule.ABupdate( dtAcc.getdt(), sqrt( accelx.ABfilt() * accelx.ABfilt() + accely.ABfilt() * accely.ABfilt() + accelz.ABfilt() * accelz.ABfilt() ) );
 		
 		// compute/filter gyro module
-		GyroModule.ABupdate( dtGyr.get(), sqrt( gyrox.ABfilt() * gyrox.ABfilt() + gyroy.ABfilt() * gyroy.ABfilt() + gyroz.ABfilt() * gyroz.ABfilt() ) );		
+		GyroModule.ABupdate( dtGyr.getdt(), sqrt( gyrox.ABfilt() * gyrox.ABfilt() + gyroy.ABfilt() * gyroy.ABfilt() + gyroz.ABfilt() * gyroz.ABfilt() ) );		
 
 		// get static pressure
 		bool ok=false;
@@ -1039,7 +1033,6 @@ static void processIMU(void *pvParameters)
 		p = baroSensor->readPressure(ok);
 		if ( ok ) {			
 			dtStat.update( processIMUperiod );
-			statTime = dtStat.gettime();
 			statP.set( p );
 			baroP = p;	// for compatibility with Eckhard code
 			Prevp = p;
@@ -1073,13 +1066,13 @@ static void processIMU(void *pvParameters)
 		if ( dynamicP < 60.0 ) dynamicP = 0.0;
 
 		// compute/filter CAS
-		CAS.ABupdate( dtdynP.get(), sqrt(2 * dynP.get() / RhoSLISA) );
+		CAS.ABupdate( dtdynP.getdt(), sqrt(2 * dynP.get() / RhoSLISA) );
 		
 		// compute TAS
 		TAS.set( Rhocorr * CAS.ABfilt() );
 
 		// computer/filter altitude
-		ALT.ABupdate( dtStat.get(), (1.0 - pow( (statP.get()-(QNH.get()-1013.25)) * 0.000986923 , 0.1902891634 ) ) * (273.15 + 15) * 153.846153846 );
+		ALT.ABupdate( dtStat.getdt(), (1.0 - pow( (statP.get()-(QNH.get()-1013.25)) * 0.000986923 , 0.1902891634 ) ) * (273.15 + 15) * 153.846153846 );
 		
 		// update Vz baro
 		// in glider operation, gaining altitude and energy is considered positive. However in NED representation vertical axis is positive pointing down.
@@ -1102,11 +1095,11 @@ static void processIMU(void *pvParameters)
 			}
 
 			// Update quaternions
-			AHRS.update( dtGyr.get(), gyrox.ABfilt(), gyroy.ABfilt(), gyroz.ABfilt(), -gravBODY.x, -gravBODY.y, -gravBODY.z );
+			AHRS.update( dtGyr.getdt(), gyrox.ABfilt(), gyroy.ABfilt(), gyroz.ABfilt(), -gravBODY.x, -gravBODY.y, -gravBODY.z );
 			
 			// Update roll and pitch alpha beta filter. This provides Roll and Pitch derivatives for bias analysis 
-			RollAHRS.ABupdate( dtGyr.get(), AHRS.getRoll() );
-			PitchAHRS.ABupdate( dtGyr.get(), AHRS.getPitch() );
+			RollAHRS.ABupdate( dtGyr.getdt(), AHRS.getRoll() );
+			PitchAHRS.ABupdate( dtGyr.getdt(), AHRS.getPitch() );
 			
 			// compute sin and cos for Roll and Pitch from IMU quaternion since they are used in multiple calculations
 			cosRoll = cos( AHRS.getRoll() );
@@ -1115,9 +1108,9 @@ static void processIMU(void *pvParameters)
 			sinPitch = sin( AHRS.getPitch() );
 			
 			// compute kinetic accelerations using accelerations, corrected with gravity and centrifugal accels
-			UiPrim.ABupdate( dtAcc.get(), accelx.ABfilt()- AHRS.Gravx() - gyroy.ABfilt() * TASbi.get() * AoA.get() + gyroz.ABfilt() * TASbi.get() * AoB.get() );
-			ViPrim.ABupdate( dtAcc.get(), accely.ABfilt()- AHRS.Gravy() - gyroz.ABfilt() * TASbi.get() + gyrox.ABfilt() * TASbi.get() * AoA.get() );			
-			WiPrim.ABupdate( dtAcc.get(), accelz.ABfilt()- AHRS.Gravz() + gyroy.ABfilt() * TASbi.get() - gyrox.ABfilt() * TASbi.get() * AoB.get() );
+			UiPrim.ABupdate( dtAcc.getdt(), accelx.ABfilt()- AHRS.Gravx() - gyroy.ABfilt() * TASbi.get() * AoA.get() + gyroz.ABfilt() * TASbi.get() * AoB.get() );
+			ViPrim.ABupdate( dtAcc.getdt(), accely.ABfilt()- AHRS.Gravy() - gyroz.ABfilt() * TASbi.get() + gyrox.ABfilt() * TASbi.get() * AoA.get() );			
+			WiPrim.ABupdate( dtAcc.getdt(), accelz.ABfilt()- AHRS.Gravz() + gyroy.ABfilt() * TASbi.get() - gyrox.ABfilt() * TASbi.get() * AoB.get() );
 			
 			// alternate kinetic accel solution using 3D baro inertial speeds
 			// UiPrim.ABupdate( accelx.ABfilt()- AHRS.Gravx() - gyroy.ABfilt() * Wbi.get() + gyroz.ABfilt() * Vbi.get() );
@@ -1125,14 +1118,14 @@ static void processIMU(void *pvParameters)
 			// WiPrim.ABupdate( accelz.ABfilt()- AHRS.Gravz() + gyroy.ABfilt() * Ubi.get() - gyrox.ABfilt() * Vbi.get() );			
 
 			// Compute baro interial acceleration ( complementary filter between inertial accel derivatives and baro accels )
-			UbiPrim.update( dtAcc.get(), UiPrim.ABprim(), UbPrimS );
-			VbiPrim.update( dtAcc.get(), ViPrim.ABprim(), VbPrimS );
-			WbiPrim.update( dtAcc.get(), WiPrim.ABprim(), WbPrimS );
+			UbiPrim.update( dtAcc.getdt(), UiPrim.ABprim(), UbPrimS );
+			VbiPrim.update( dtAcc.getdt(), ViPrim.ABprim(), VbPrimS );
+			WbiPrim.update( dtAcc.getdt(), WiPrim.ABprim(), WbPrimS );
 			
 			// Compute baro interial velocity ( complementary filter between baro inertial acceleration and baro speed )
-			Ubi.update( dtAcc.get(), UbiPrim.get(), Ub );
-			Vbi.update( dtAcc.get(), VbiPrim.get(), Vb );
-			Wbi.update( dtAcc.get(), WbiPrim.get(), Wb );
+			Ubi.update( dtAcc.getdt(), UbiPrim.get(), Ub );
+			Vbi.update( dtAcc.getdt(), VbiPrim.get(), Vb );
+			Wbi.update( dtAcc.getdt(), WbiPrim.get(), Wb );
 			
 			// baro inertial TAS & TAS square in any frame
 			TASbiSquare = Ubi.get() * Ubi.get() + Vbi.get() * Vbi.get() + Wbi.get() * Wbi.get();
@@ -1181,10 +1174,10 @@ static void processIMU(void *pvParameters)
 		*/
 		// Send $I
 		sprintf(str,"$I,%lld,%i,%i,%i,%i,%i,%i,%lld,%i,%i,%i\r\n",
-			gyroTime,
+			dtGyr.gettime(),
 			(int32_t)(accelBODY.x*10000.0), (int32_t)(accelBODY.y*10000.0), (int32_t)(accelBODY.z*10000.0),
 			(int32_t)(gyroBODY.x*100000.0), (int32_t)(gyroBODY.y*100000.0),(int32_t)(gyroBODY.z*100000.0),
-			statTime, (int32_t)(statP.get()*100.0),(int32_t)(teP.get()*100.0), (int32_t)(dynP.get()*10)						
+			dtStat.gettime(), (int32_t)(statP.get()*100.0),(int32_t)(teP.get()*100.0), (int32_t)(dynP.get()*10)						
 		);						
 		xSemaphoreTake( BTMutex, 2/portTICK_PERIOD_MS ); // prevent BT conflicts for 2ms max.
 		Router::sendXCV(str);
@@ -1273,7 +1266,7 @@ static void processIMU(void *pvParameters)
 				// send $S1 and $S2 every 50 cycles = 5 seconds
 				sprintf(str,"$S1,%lld,%i,%i,%i,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$S3,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$S2,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",				
 					// $S1 stream
-					statTime, (int32_t)(statP.get()*100.0),(int32_t)(teP.get()*100.0), (int16_t)(dynP.get()*10), 
+					dtStat.gettime(), (int32_t)(statP.get()*100.0),(int32_t)(teP.get()*100.0), (int16_t)(dynP.get()*10), 
 					(int64_t)(chosenGnss->time*1000.0), (int16_t)(chosenGnss->speed.x*100), (int16_t)(chosenGnss->speed.y*100), (int16_t)(chosenGnss->speed.z*100),
 					(int32_t)(AHRS.getPitch()*1000.0), (int32_t)(AHRS.getRoll()*1000.0), (int32_t)(AHRS.getYaw()*1000.0),
 					(int32_t)(Vzbaro*100),
@@ -1339,7 +1332,7 @@ static void processIMU(void *pvParameters)
 
 		Router::routeXCV();
 		
-		ProcessTimeIMU = (esp_timer_get_time()/1000.0) - gyroTime;
+		ProcessTimeIMU = (esp_timer_get_time()/1000.0) - dtGyr.gettime();
 		if ( ProcessTimeIMU > 8 && TAS.get() < 15.0 ) {
 			ESP_LOGI(FNAME,"processIMU: %i / 25", (int16_t)(ProcessTimeIMU) );
 		}		
@@ -1658,7 +1651,6 @@ void readSensors(void *pvParameters){
 				if (RTKmode == 'D' ) chosenGnss->fix = 4; // GNSS 3D diff
 				if (RTKmode == 'F' ) chosenGnss->fix = 5; // GNSS RTK float
 				if (RTKmode == 'R' ) chosenGnss->fix = 6; // GNSS RTK Real Time Kinematic
-				GNSSstatus = chosenGnss->fix;
 				chosenGnss->numSV = RTKratio * 10;
 				chosenGnss->time = RTKtime;
 				chosenGnss->speed.x = RTKNvel;
@@ -1763,14 +1755,14 @@ void readSensors(void *pvParameters){
 		#define alphaBaroAccS (2.0 * (2.0 * NBaroAccS - 1.0) / NBaroAccS / (NBaroAccS + 1.0))
 		#define betaBaroAccS (6.0 / NBaroAccS / (NBaroAccS + 1.0) )			
 		deltaUbS = Ub - UbFS;
-		UbPrimS = UbPrimS + betaBaroAccS * deltaUbS / dtStat.get();
-		UbFS = UbFS + alphaBaroAccS * deltaUbS + UbPrimS * dtStat.get();
+		UbPrimS = UbPrimS + betaBaroAccS * deltaUbS / dtStat.getdt();
+		UbFS = UbFS + alphaBaroAccS * deltaUbS + UbPrimS * dtStat.getdt();
 		deltaVbS = Vb - VbFS;
-		VbPrimS = VbPrimS + betaBaroAccS * deltaVbS / dtStat.get();
-		VbFS = VbFS + alphaBaroAccS * deltaVbS + VbPrimS * dtStat.get();			
+		VbPrimS = VbPrimS + betaBaroAccS * deltaVbS / dtStat.getdt();
+		VbFS = VbFS + alphaBaroAccS * deltaVbS + VbPrimS * dtStat.getdt();			
 		deltaWbS = Wb - WbFS;
-		WbPrimS = WbPrimS + betaBaroAccS * deltaWbS / dtStat.get();
-		WbFS = WbFS + alphaBaroAccS * deltaWbS + WbPrimS * dtStat.get();
+		WbPrimS = WbPrimS + betaBaroAccS * deltaWbS / dtStat.getdt();
+		WbFS = WbFS + alphaBaroAccS * deltaWbS + WbPrimS * dtStat.getdt();
 			
 		// baro interial speed in earth frame
 		//Vxbi = cosPitch * Ubi.get() + sinRoll * sinPitch * Vb + cosRoll * sinPitch * Wbi.get(); // TODO might be required for wind calculation
@@ -1779,7 +1771,7 @@ void readSensors(void *pvParameters){
 
 		// baro inertial altitude
 		// ALTbi is computed using a complementary filter with baro altitude and baro inertial vertical speed in earth frame
-		ALTbi.update( dtStat.get(), - Vzbi, ALT.ABfilt() );
+		ALTbi.update( dtStat.getdt(), - Vzbi, ALT.ABfilt() );
 
 		// Energy variation d(TE)/dt
 		// energy variation calculation d(E/mg)/dt = d(ALT)/dt + d(1/2 1/g TAS²)/dt
@@ -1794,8 +1786,8 @@ void readSensors(void *pvParameters){
 			TASbiEnergy.ABinit(  ALTbiEnergyN + TASbiEnergyN,  ALTbiTASbiEnergdt, ALTbiTASbiEnergyOutliers, 0.0, 0.0, ALTbiTASbiEnergyPrimMin, ALTbiTASbiEnergyPrimMax );
 			NALTbiTASbiChanged = false;
 		}
-		ALTbiEnergy.ABupdate( dtStat.get(), ALTbi.get() );
-		TASbiEnergy.ABupdate( dtStat.get(), ( TASbiSquare / GRAVITY / 2.0 ) );			
+		ALTbiEnergy.ABupdate( dtStat.getdt(), ALTbi.get() );
+		TASbiEnergy.ABupdate( dtStat.getdt(), ( TASbiSquare / GRAVITY / 2.0 ) );			
 		// Total Energy is sum of both potential and kinetic energies variations
 		Vztotbi.set( ALTbiEnergy.ABprim() + TASbiEnergy.ABprim() );
 		

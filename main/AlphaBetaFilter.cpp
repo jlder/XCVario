@@ -38,17 +38,6 @@ void AlphaBeta::ABNupdate( float N ) {
 	}
 }
 
-// AB filter init low pass filter period
-void AlphaBeta::ABlpinit( float lpperiod ) {
-	lp1 = lpperiod / ( lpperiod + dtAvg );
-	lp2 = 1 - lp1;
-}
-
-// AB filter low pass on filter
-float AlphaBeta::ABfiltlp( void ) {
-	return filtlp;
-}
-
 
 // AB filter update		
 void AlphaBeta::ABupdate(float dt, float RawData ) {
@@ -61,7 +50,14 @@ void AlphaBeta::ABupdate(float dt, float RawData ) {
 			gettime = esp_timer_get_time();
 			unfiltered = RawData;
 			filt = RawData;
-			filtlp = filt;
+			filt_1 = filt;
+			filt_2 = filt;
+			filt_3 = filt;
+			filt_4 = filt;
+			dt_1 = dt;
+			dt_2 = dt;
+			dt_3 = dt;
+			dt_4 = dt;
 			_filt = RawData;
 			prim = 0.0;
 			_prim = 0.0;
@@ -87,7 +83,14 @@ void AlphaBeta::ABupdate(float dt, float RawData ) {
 						if ( filt < filtMin ) filt = filtMin;
 						if ( filt > filtMax ) filt = filtMax;
 					}
-					filtlp = filtlp * lp1 + filt * lp2;
+					filt_1 = filt_2;
+					filt_2 = filt_3;
+					filt_3 = filt_4;
+					filt_4 = filt;
+					dt_1 = dt_2;
+					dt_2 = dt_3;
+					dt_3 = dt_4;
+					dt_4 = dt;					
 					writing = false;
 					zicket = 0;
 				} else {
@@ -115,7 +118,14 @@ void AlphaBeta::ABupdate(float dt, float RawData ) {
 					unfiltered = RawData;
 					prim = _prim;
 					filt = _filt;
-					filtlp = filt;
+					filt_1 = filt;
+					filt_2 = filt;
+					filt_3 = filt;
+					filt_4 = filt;
+					dt_1 = dt;
+					dt_2 = dt;
+					dt_3 = dt;
+					dt_4 = dt;					
 					writing = false;
 					zicket = 0;
 				}						
@@ -155,4 +165,14 @@ float AlphaBeta::ABraw(void) {
 		if ( abs( currenttime - gettime ) > 1000 ) break; // wait for 1 ms max if writing is in process
 	}
 	return unfiltered;
+}
+
+// AB filter down scale x 4
+float AlphaBeta::ABfiltds( void ) {
+	return (( filt_1 + filt_2 + filt_3 + filt_4 ) / 4.0);
+}
+
+// AB dt down scale x 4
+float AlphaBeta::ABdtds( void ) {
+	return ( dt_1 + dt_2 + dt_3 + dt_4);
 }

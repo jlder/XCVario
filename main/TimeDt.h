@@ -15,11 +15,11 @@ private:
 	bool firstpass = true;
 	int64_t currentime;
 	int64_t previoustime;
-	int64_t dt;
+	int16_t dt;
 	int16_t dtmin, dtmax;
 public:
 	void update( float value );
-    float get( void );
+    float getdt( void );
 	int64_t gettime( void );
  };
  

@@ -31,9 +31,14 @@ private:
 	bool firstpass = true;
 	int zicket = 0;
 	bool writing = false;
-	float filtlp = 0.0;
-	float lp1 = 0.0;
-	float lp2 = 1.0;
+	float filt_1;
+	float filt_2;
+	float filt_3;
+	float filt_4;
+	float dt_1;
+	float dt_2;
+	float dt_3;
+	float dt_4;
 	int64_t gettime = 0.0;
 	int64_t currenttime = 0.0;
 public:
@@ -47,8 +52,8 @@ public:
 	float ABprim(void);
 	bool ABstable(void);
 	float ABraw(void);
-	void ABlpinit( float lpperiod );
-	float ABfiltlp( void );
+	float ABfiltds();
+	float ABdtds();
 };
 
  #endif /* AlphaBetaFilter_H_ */
