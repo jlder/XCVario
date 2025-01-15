@@ -246,6 +246,10 @@ char str[500]; 	// string for flight test message broadcast on wireless // TODO 
 
 // Fligth Test
 
+#define GroundAccelprimlimit 2.5 // m/s3
+#define	GroundGyroprimlimit 0.55// rad/s2
+#define RhoSLISA 1.225
+
 // IMU variables	
 mpud::float_axes_t accelMPU;
 mpud::float_axes_t accelBODY;	
@@ -258,8 +262,7 @@ Level AccelModulePrimLevel;
 Level NaccelLevel;
 Level RollModuleLevel;
 
-#define GroundAccelprimlimit 2.5 // m/s3
-#define	GroundGyroprimlimit 0.55// rad/s2
+
 
 // variables for bias and gravity estimation
 mpud::float_axes_t currentAccelBias;
@@ -307,11 +310,6 @@ float cosRoll = 1.0;
 float sinRoll = 0.0;
 float cosPitch = 1.0;
 float sinPitch = 0.0;
-
-// Variables for baro speed calculation in BODY frame
-float Ub = 0.0;
-float Vb = 0.0;
-float Wb = 0.0;
 
 float TASbiSquare = 0.0;
 
@@ -398,8 +396,6 @@ static float baroP=0; // barometric pressure
 static float temperature=15.0;
 static float XCVTemp=15.0;//External temperature for MPU temp control
 
-#define RhoSLISA 1.225
-float Rhocorr = RhoSLISA;
 float Vzbaro = 0.0;
 float NEnergy = 20.0;
 float PeriodVelbi = 8.0;
@@ -446,6 +442,9 @@ AlphaBeta KinEnergy, ALTbiEnergy, TASbiEnergy;
 // declare alpha beta for CAS and ALT
 AlphaBeta CAS, ALT;
 
+// declare AB filter Ub, Vb and Wb
+AlphaBeta Ub, Vb, Wb; 
+
 // Outside temp alpha beta class 
 AlphaBeta OATemp;
 
@@ -470,6 +469,7 @@ Magdwick AHRS;
 // declare SetGet class to reduce read write conflicts between tasks
 SetGet statP, teP, dynP, TAS, Vztotbi, TASbi, AoA, AoB, gyroCorrx;
 SetGet Vh, DHeading;
+SetGet Rhocorr;
 
 // complementary filters
 Complementary UbiPrim, VbiPrim, WbiPrim;
@@ -929,6 +929,12 @@ static void processIMU(void *pvParameters)
 	ViPrim.ABinit( NIPRIM, processIMUperiod );
 	WiPrim.ABinit( NIPRIM, processIMUperiod );
 	
+	// alpha beta parameters for Ub, Vb and Wb
+	#define NBARO 10
+	Ub.ABinit( NBARO, processIMUperiod );
+	Vb.ABinit( NBARO, processIMUperiod );
+	Wb.ABinit( NBARO, processIMUperiod );
+		
 	// alpha beta gyro and accel module filters parameters
 	#define NModule 4 //  AB Filter parameter
 	GyroModule.ABinit( NModule, processIMUperiod );
@@ -1069,7 +1075,7 @@ static void processIMU(void *pvParameters)
 		CAS.ABupdate( dtdynP.getdt(), sqrt(2 * dynP.get() / RhoSLISA) );
 		
 		// compute TAS
-		TAS.set( Rhocorr * CAS.ABfilt() );
+		TAS.set( Rhocorr.get() * CAS.ABfilt() );
 
 		// computer/filter altitude
 		ALT.ABupdate( dtStat.getdt(), (1.0 - pow( (statP.get()-(QNH.get()-1013.25)) * 0.000986923 , 0.1902891634 ) ) * (273.15 + 15) * 153.846153846 );
@@ -1079,7 +1085,7 @@ static void processIMU(void *pvParameters)
 		// therefore Vzbaro in NED is the opposite of altitude variation.
 		Vzbaro = -ALT.ABprim();
 		
-		if (!CALstream) { // if not in calibration mode MOD#8
+		if (!CALstream) { // if not in calibration mode
 			if ( TAS.get() > 15.0 ) {	// Update IMU, only consider centrifugal forces if TAS > 15 m/s
 				// estimate gravity in body frame taking into account centrifugal corrections
 				//xSemaphoreTake( dataMutex, 3/portTICK_PERIOD_MS ); // prevent data conflicts for 3ms max.
@@ -1115,21 +1121,34 @@ static void processIMU(void *pvParameters)
 			// alternate kinetic accel solution using 3D baro inertial speeds
 			// UiPrim.ABupdate( accelx.ABfilt()- AHRS.Gravx() - gyroy.ABfilt() * Wbi.get() + gyroz.ABfilt() * Vbi.get() );
 			// ViPrim.ABupdate( accely.ABfilt()- AHRS.Gravy() - gyroz.ABfilt() * Ubi.get() + gyrox.ABfilt() * Wbi.get() );			
-			// WiPrim.ABupdate( accelz.ABfilt()- AHRS.Gravz() + gyroy.ABfilt() * Ubi.get() - gyrox.ABfilt() * Vbi.get() );			
+			// WiPrim.ABupdate( accelz.ABfilt()- AHRS.Gravz() + gyroy.ABfilt() * Ubi.get() - gyrox.ABfilt() * Vbi.get() );
+
+			// Compute trajectory pneumatic speeds components in body frame NEDBODY
+			// Vh corresponds to the trajectory horizontal speed and Vzbaro corresponds to the vertical speed in earth frame
+			Vh.set( TAS.get() * cos( AHRS.getPitch() - cosRoll * AoA.get() - sinRoll * AoB.get() ) );
+			// Pitch and Roll correspond to the attitude of the glider and DHeading corresponds to the heading deviation due to the Beta and Alpha.
+			DHeading.set( -(AoB.get() * cosRoll - AoA.get() * sinRoll ) / ( cosPitch + AoB.get() * sinPitch * sinRoll + AoA.get() * sinPitch * cosRoll ) );
+			float cosDHeading = cos( DHeading.get() );
+			float sinDHeading = sin( DHeading.get() );
+			// applying DCM from earth to body frame (using Pitch, Roll and DHeading Yaw angles) to Vh and Vzbaro trajectory components in earth frame to reproject speed in TE referential onto body axis. 
+			Ub.ABupdate( dtStat.getdt(), cosPitch * cosDHeading * Vh.get() - sinPitch * Vzbaro );
+			Vb.ABupdate( dtStat.getdt(), ( sinRoll * sinPitch * cosDHeading - cosRoll * sinDHeading ) * Vh.get() + sinRoll * cosPitch * Vzbaro );
+			Wb.ABupdate( dtStat.getdt(), ( cosRoll * sinPitch * cosDHeading + sinRoll * sinDHeading ) * Vh.get() + cosRoll * cosPitch * Vzbaro );
 
 			// Compute baro interial acceleration ( complementary filter between inertial accel derivatives and baro accels )
-			UbiPrim.update( dtAcc.getdt(), UiPrim.ABprim(), UbPrimS );
-			VbiPrim.update( dtAcc.getdt(), ViPrim.ABprim(), VbPrimS );
-			WbiPrim.update( dtAcc.getdt(), WiPrim.ABprim(), WbPrimS );
+			UbiPrim.update( dtAcc.getdt(), UiPrim.ABprim(), Ub.ABprim() );
+			VbiPrim.update( dtAcc.getdt(), ViPrim.ABprim(), Vb.ABprim() );
+			WbiPrim.update( dtAcc.getdt(), WiPrim.ABprim(), Wb.ABprim() );
 			
 			// Compute baro interial velocity ( complementary filter between baro inertial acceleration and baro speed )
-			Ubi.update( dtAcc.getdt(), UbiPrim.get(), Ub );
-			Vbi.update( dtAcc.getdt(), VbiPrim.get(), Vb );
-			Wbi.update( dtAcc.getdt(), WbiPrim.get(), Wb );
+			Ubi.update( dtAcc.getdt(), UbiPrim.get(), Ub.ABfilt() );
+			Vbi.update( dtAcc.getdt(), VbiPrim.get(), Vb.ABfilt() );
+			Wbi.update( dtAcc.getdt(), WbiPrim.get(), Wb.ABfilt() );
 			
 			// baro inertial TAS & TAS square in any frame
 			TASbiSquare = Ubi.get() * Ubi.get() + Vbi.get() * Vbi.get() + Wbi.get() * Wbi.get();
 			TASbi.set( sqrt( TASbiSquare ) );
+
 				
 			
 			// process gyro bias and local gravity estimates when TAS < 15 m/s
@@ -1278,13 +1297,13 @@ static void processIMU(void *pvParameters)
 					(int32_t)(DynPeriodVelbi*1000),
 					// $S3 stream
 					(int32_t)(UiPrim.ABraw()*100),(int32_t)(ViPrim.ABraw()*100),(int32_t)(WiPrim.ABraw()*100),
-					(int32_t)(UbPrimS*100), (int32_t)(VbPrimS*100),(int32_t)(WbPrimS*100),
+					(int32_t)(Ub.ABprim()*100), (int32_t)(Vb.ABprim()*100),(int32_t)(Wb.ABprim()*100),
 					(int32_t)(UiPrim.ABprim()*100), (int32_t)(ViPrim.ABprim()*100),(int32_t)(WiPrim.ABprim()*100),	
 					(int32_t)(UbiPrim.get()*100), (int32_t)(VbiPrim.get()*100),(int32_t)(WbiPrim.get()*100),
 					(int32_t)(Bias_AoB*1000),
 					(int32_t)(RTKNproj*1000),(int32_t)(RTKEproj*1000),(int32_t)(-RTKUproj*1000),(int32_t)(RTKheading*10),(int32_t)(ALTbi.get()*100),
-					(int32_t)(DHeading.get()*1000),(int32_t)(UbFS*100),(int32_t)(VbFS*100),(int32_t)(WbFS*100),
-					(int32_t)(AccelModulePrimLevel.get()*100),(int32_t)(GyroModulePrimLevel.get()*100), (int32_t)(Event), (int32_t)(Vb*100),
+					(int32_t)(DHeading.get()*1000),(int32_t)(Ub.ABfilt()*100),(int32_t)(Vb.ABfilt()*100),(int32_t)(Wb.ABfilt()*100),
+					(int32_t)(AccelModulePrimLevel.get()*100),(int32_t)(GyroModulePrimLevel.get()*100), (int32_t)(Event), (int32_t)(Vb.ABfilt()*100),
 					(int32_t)(PseudoHeadingPrim*100000),
 					// $S2 stream
 					(int16_t)(temperatureLP.LowPass1()*10.0), (int16_t)(MPUtempcel*10.0), chosenGnss->fix, chosenGnss->numSV,
@@ -1314,13 +1333,13 @@ static void processIMU(void *pvParameters)
 						(int32_t)(DynPeriodVelbi*1000),
 						// $S3 stream
 						(int32_t)(UiPrim.ABraw()*100),(int32_t)(ViPrim.ABraw()*100),(int32_t)(WiPrim.ABraw()*100),
-						(int32_t)(UbPrimS*100), (int32_t)(VbPrimS*100),(int32_t)(WbPrimS*100),   
+						(int32_t)(Ub.ABprim()*100), (int32_t)(Vb.ABprim()*100),(int32_t)(Wb.ABprim()*100),   
 						(int32_t)(UiPrim.ABprim()*100), (int32_t)(ViPrim.ABprim()*100),(int32_t)(WiPrim.ABprim()*100),	
 						(int32_t)(UbiPrim.get()*100), (int32_t)(VbiPrim.get()*100),(int32_t)(WbiPrim.get()*100),
 						(int32_t)(Bias_AoB*1000),
 						(int32_t)(RTKNproj*1000),(int32_t)(RTKEproj*1000),(int32_t)(-RTKUproj*1000),(int32_t)(RTKheading*10),(int32_t)(ALTbi.get()*100),
-						(int32_t)(DHeading.get()*1000),(int32_t)(UbFS*100),(int32_t)(VbFS*100),(int32_t)(WbFS*100),
-						(int32_t)(AccelModulePrimLevel.get()*100),(int32_t)(GyroModulePrimLevel.get()*100), (int32_t)(Event),(int32_t)(Vb*100),
+						(int32_t)(DHeading.get()*1000),(int32_t)(Ub.ABfilt()*100),(int32_t)(Vb.ABfilt()*100),(int32_t)(Wb.ABfilt()*100),
+						(int32_t)(AccelModulePrimLevel.get()*100),(int32_t)(GyroModulePrimLevel.get()*100), (int32_t)(Event),(int32_t)(Vb.ABfilt()*100),
 						(int32_t)(PseudoHeadingPrim*100000)						
 					);
 					xSemaphoreTake( BTMutex, 2/portTICK_PERIOD_MS );				
@@ -1492,6 +1511,8 @@ void readSensors(void *pvParameters){
 
 	*/
 
+	// Rho corrected initialization
+	Rhocorr.set( RhoSLISA );
 	
 	// alpha beta GNSS parameters
 	#define NGNSS 4 //  Filter parameter
@@ -1699,7 +1720,7 @@ void readSensors(void *pvParameters){
 		} else {
 			Rho = RhoSLISA;
 		}
-		Rhocorr = sqrt(RhoSLISA/Rho);
+		Rhocorr.set( sqrt(RhoSLISA/Rho) );
 		
 		// compute AoA (Angle of attack) and AoB (Angle od slip)
 		#define FreqAlpha 0.66 // Hz
@@ -1736,38 +1757,11 @@ void readSensors(void *pvParameters){
 			Bias_AoB = BiasAoB.LowPass2();
 			if ( abs(Bias_AoB) > AoBMaxBias ) Bias_AoB = copysign( AoBMaxBias, Bias_AoB);
 		}
-		
-		// Compute trajectory pneumatic speeds components in body frame NEDBODY
-		// Vh corresponds to the trajectory horizontal speed and Vzbaro corresponds to the vertical speed in earth frame
-		Vh.set( TAS.get() * cos( AHRS.getPitch() - cosRoll * AoA.get() - sinRoll * AoB.get() ) );
-		// Pitch and Roll correspond to the attitude of the glider and DHeading corresponds to the heading deviation due to the Beta and Alpha.
-		DHeading.set( -(AoB.get() * cosRoll - AoA.get() * sinRoll ) / ( cosPitch + AoB.get() * sinPitch * sinRoll + AoA.get() * sinPitch * cosRoll ) );
-		float cosDHeading = cos( DHeading.get() );
-		float sinDHeading = sin( DHeading.get() );
-		// applying DCM from earth to body frame (using Pitch, Roll and DHeading Yaw angles) to Vh and Vzbaro trajectory components in earth frame to reproject speed in TE referential onto body axis. 
-		Ub = cosPitch * cosDHeading * Vh.get() - sinPitch * Vzbaro;
-		Vb = ( sinRoll * sinPitch * cosDHeading - cosRoll * sinDHeading ) * Vh.get() + sinRoll * cosPitch * Vzbaro;
-		Wb = ( cosRoll * sinPitch * cosDHeading + sinRoll * sinDHeading ) * Vh.get() + cosRoll * cosPitch * Vzbaro;
-
-		// Baro acceleration derivative Short period alpha/beta filter
-		// U/V/WbPrimS are used to compute U/V/WbiPrim, baro inertial accelerations
-		#define NBaroAccS 7.0 // accel kinetic alpha/beta filter coeff
-		#define alphaBaroAccS (2.0 * (2.0 * NBaroAccS - 1.0) / NBaroAccS / (NBaroAccS + 1.0))
-		#define betaBaroAccS (6.0 / NBaroAccS / (NBaroAccS + 1.0) )			
-		deltaUbS = Ub - UbFS;
-		UbPrimS = UbPrimS + betaBaroAccS * deltaUbS / dtStat.getdt();
-		UbFS = UbFS + alphaBaroAccS * deltaUbS + UbPrimS * dtStat.getdt();
-		deltaVbS = Vb - VbFS;
-		VbPrimS = VbPrimS + betaBaroAccS * deltaVbS / dtStat.getdt();
-		VbFS = VbFS + alphaBaroAccS * deltaVbS + VbPrimS * dtStat.getdt();			
-		deltaWbS = Wb - WbFS;
-		WbPrimS = WbPrimS + betaBaroAccS * deltaWbS / dtStat.getdt();
-		WbFS = WbFS + alphaBaroAccS * deltaWbS + WbPrimS * dtStat.getdt();
-			
-		// baro interial speed in earth frame
-		//Vxbi = cosPitch * Ubi.get() + sinRoll * sinPitch * Vb + cosRoll * sinPitch * Wbi.get(); // TODO might be required for wind calculation
+					
+		// baro interial speed in earth frame // TODO replaced Vb with Vbi.get this need to be validated
+		//Vxbi = cosPitch * Ubi.get() + sinRoll * sinPitch * Vbi.get() + cosRoll * sinPitch * Wbi.get(); // TODO might be required for wind calculation
 		//Vybi = cosRoll * Vb - sinRoll * Wbi.get();
-		Vzbi = -sinPitch * Ubi.get() + sinRoll * cosPitch * Vb + cosRoll * cosPitch * Wbi.get(); // TODO might be required for wind calculation
+		Vzbi = -sinPitch * Ubi.get() + sinRoll * cosPitch * Vbi.get() + cosRoll * cosPitch * Wbi.get(); // TODO might be required for wind calculation
 
 		// baro inertial altitude
 		// ALTbi is computed using a complementary filter with baro altitude and baro inertial vertical speed in earth frame
