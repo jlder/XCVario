@@ -257,13 +257,6 @@ mpud::float_axes_t gyroRPS;
 mpud::float_axes_t gyroMPU;
 mpud::float_axes_t gyroBODY;
 
-Level GyroModulePrimLevel;
-Level AccelModulePrimLevel;
-Level NaccelLevel;
-Level RollModuleLevel;
-
-
-
 // variables for bias and gravity estimation
 mpud::float_axes_t currentAccelBias;
 mpud::float_axes_t currentAccelGain;
@@ -278,28 +271,10 @@ float Gravx = 0.0;
 float Gravy = 0.0;
 float Gravz = 0.0;
 int64_t gyrobiastemptimer = 0;
-uint16_t BIAS_Init = 0; // Bias initialization status (0= no init, n = nth bias calculation
+uint16_t BIAS_Init = 0; // Bias initialization status (0= no init, n = nth bias calculation)
 
+// Variable for AoB biais estimation
 float Bias_AoB = 0.0;
-
-// variables for accel calibration
-float accelMaxx = 0.0;
-float accelMaxy = 0.0;
-float accelMaxz = 0.0;
-float accelMinx = 0.0;
-float accelMiny = 0.0;
-float accelMinz = 0.0;
-float accelAvgx = 0.0;	
-float accelAvgy = 0.0;	
-float accelAvgz = 0.0;	
-int16_t gyromodulestable = 8;
-
-float localGravity = 9.807; // local gravity used during accel calibration. Value is entered using BT $CAL command
-
-// variables for in flight bias estimation
-float BiasQuatGx = 0.0;
-float BiasQuatGy = 0.0;
-float BiasQuatGz = 0.0;
 
 float DynPeriodVelbi = 8.0; // TODO replace with LP class
 float GravModuleLP = 0.0; // TODO replace with LP class
@@ -310,11 +285,6 @@ float cosRoll = 1.0;
 float sinRoll = 0.0;
 float cosPitch = 1.0;
 float sinPitch = 0.0;
-
-float TASbiSquare = 0.0;
-
-float GnssTrack;
-float PseudoHeadingPrim;
 
 // variables for gravity estimation from accelerations
 mpud::float_axes_t gravBODY;
@@ -339,15 +309,6 @@ int64_t ProcessTimeSensors = 0.0;
 float PrevdynP=0.0;
 float MPUtempcel; // MPU chip temperature
 float GNSSRouteraw;
-float deltaUbS = 0.0;
-float UbPrimS = 0.0;
-float UbFS = 0.0;
-float deltaVbS = 0.0;
-float VbPrimS = 0.0;
-float VbFS = 0.0;
-float deltaWbS = 0.0;
-float WbPrimS = 0.0;
-float WbFS = 0.0;
 
 float opt_TE = 1;
 
@@ -414,9 +375,6 @@ float Vzbi = 0.0;
 int16_t Event = 0;
 int16_t EventHoldTime = 0;
 
-///// End FT variables 
-
-
 // alpha beta class for gyros
 AlphaBeta gyrox, gyroy, gyroz;
 
@@ -467,9 +425,11 @@ LowPassFilter BiasAoB;
 Magdwick AHRS;
 
 // declare SetGet class to reduce read write conflicts between tasks
-SetGet statP, teP, dynP, TAS, Vztotbi, TASbi, AoA, AoB, gyroCorrx;
+SetGet statP, teP, dynP, TAS, Vztotbi, TASbi, TASbiSquare, AoA, AoB, gyroCorrx;
 SetGet Vh, DHeading;
 SetGet Rhocorr;
+SetGet PseudoHeadingPrim;
+SetGet BiasQuatGx, BiasQuatGy, BiasQuatGz;
 
 // complementary filters
 Complementary UbiPrim, VbiPrim, WbiPrim;
@@ -478,6 +438,15 @@ Complementary ALTbi;
 
 // time class
 TimeDt dtGyr, dtAcc, dtStat, dtdynP;
+
+// Level class
+Level GyroModulePrimLevel;
+Level AccelModulePrimLevel;
+Level NaccelLevel;
+Level RollModuleLevel;
+
+///// End FT variables 
+
 
 #define GYRO_FS (mpud::GYRO_FS_250DPS)
 
@@ -781,7 +750,22 @@ void GroundBiasEstimation() {
 
 // accels calibration process
 void AccelCalibration() {
+	// variables for accel calibration
+	float accelMaxx;
+	float accelMaxy;
+	float accelMaxz;
+	float accelMinx;
+	float accelMiny;
+	float accelMinz;
+	float accelAvgx;	
+	float accelAvgy;	
+	float accelAvgz;	
+	int16_t gyromodulestable;	
+	
 	if ( CALfirstpass ) {
+		accelAvgx = 0.0;
+		accelAvgy = 0.0;
+		accelAvgz = 0.0;		
 		accelMaxx = 0.0;
 		accelMinx = 0.0;
 		accelMaxy = 0.0;
@@ -844,6 +828,7 @@ void AccelCalibration() {
 	Acceleration gain z in m/s²				
 	<CR><LF>	
 	*/
+	float localGravity = 9.807; // local gravity used during accel calibration. Value is entered using BT $CAL command	
 	if ( gyromodulestable == 1 ) {
 		if( gflags.gload_alarm ) {
 			Audio::alarm( false );
@@ -999,9 +984,9 @@ static void processIMU(void *pvParameters)
 			gyroMPU.y = -(gyroRPS.y - GroundGyroBias.y);
 			gyroMPU.z = -(gyroRPS.x - GroundGyroBias.x);				
 			// convert NEDMPU to NEDBODY and apply bias estimation
-			gyroBODY.x = C_T * gyroMPU.x + STmultSS * gyroMPU.y + STmultCS * gyroMPU.z; // + BiasQuatGx;
-			gyroBODY.y = C_S * gyroMPU.y - S_S * gyroMPU.z; //+ BiasQuatGy;
-			gyroBODY.z = -S_T * gyroMPU.x + SSmultCT  * gyroMPU.y + CTmultCS * gyroMPU.z; // + BiasQuatGz;
+			gyroBODY.x = C_T * gyroMPU.x + STmultSS * gyroMPU.y + STmultCS * gyroMPU.z; // + BiasQuatGx.get();
+			gyroBODY.y = C_S * gyroMPU.y - S_S * gyroMPU.z; //+ BiasQuatGy.get();
+			gyroBODY.z = -S_T * gyroMPU.x + SSmultCT  * gyroMPU.y + CTmultCS * gyroMPU.z; // + BiasQuatGz.get();
 			// update gyro filters
 			gyrox.ABupdate(dtGyr.getdt(), gyroBODY.x );
 			gyroy.ABupdate(dtGyr.getdt(), gyroBODY.y );			
@@ -1146,8 +1131,8 @@ static void processIMU(void *pvParameters)
 			Wbi.update( dtAcc.getdt(), WbiPrim.get(), Wb.ABfilt() );
 			
 			// baro inertial TAS & TAS square in any frame
-			TASbiSquare = Ubi.get() * Ubi.get() + Vbi.get() * Vbi.get() + Wbi.get() * Wbi.get();
-			TASbi.set( sqrt( TASbiSquare ) );
+			TASbiSquare.set( Ubi.get() * Ubi.get() + Vbi.get() * Vbi.get() + Wbi.get() * Wbi.get() );
+			TASbi.set( sqrt( TASbiSquare.get() ) );
 
 				
 			
@@ -1304,11 +1289,11 @@ static void processIMU(void *pvParameters)
 					(int32_t)(RTKNproj*1000),(int32_t)(RTKEproj*1000),(int32_t)(-RTKUproj*1000),(int32_t)(RTKheading*10),(int32_t)(ALTbi.get()*100),
 					(int32_t)(DHeading.get()*1000),(int32_t)(Ub.ABfilt()*100),(int32_t)(Vb.ABfilt()*100),(int32_t)(Wb.ABfilt()*100),
 					(int32_t)(AccelModulePrimLevel.get()*100),(int32_t)(GyroModulePrimLevel.get()*100), (int32_t)(Event), (int32_t)(Vb.ABfilt()*100),
-					(int32_t)(PseudoHeadingPrim*100000),
+					(int32_t)(PseudoHeadingPrim.get()*100000),
 					// $S2 stream
 					(int16_t)(temperatureLP.LowPass1()*10.0), (int16_t)(MPUtempcel*10.0), chosenGnss->fix, chosenGnss->numSV,
 					(int32_t)(NewGroundGyroBias.x*100000.0), (int32_t)(NewGroundGyroBias.y*100000.0), (int32_t)(NewGroundGyroBias.z*100000.0),				
-					(int32_t)(BiasQuatGx*100000.0), (int32_t)(BiasQuatGy*100000.0), (int32_t)(BiasQuatGz*100000.0),
+					(int32_t)(BiasQuatGx.get()*100000.0), (int32_t)(BiasQuatGy.get()*100000.0), (int32_t)(BiasQuatGz.get()*100000.0),
 					(int16_t)(XCVTemp*10.0), (int16_t) (PeriodVelbi*10),
 					(int32_t)(te_filt.get()*10),(int32_t)(Mahonykp*10000),(int32_t)(MagdwickBeta*10000), (int32_t)(ALTbiEnergyN*10), (int32_t)(TASbiEnergyN*10), (int32_t)(opt_TE),
 					(int32_t)BIAS_Init,
@@ -1340,7 +1325,7 @@ static void processIMU(void *pvParameters)
 						(int32_t)(RTKNproj*1000),(int32_t)(RTKEproj*1000),(int32_t)(-RTKUproj*1000),(int32_t)(RTKheading*10),(int32_t)(ALTbi.get()*100),
 						(int32_t)(DHeading.get()*1000),(int32_t)(Ub.ABfilt()*100),(int32_t)(Vb.ABfilt()*100),(int32_t)(Wb.ABfilt()*100),
 						(int32_t)(AccelModulePrimLevel.get()*100),(int32_t)(GyroModulePrimLevel.get()*100), (int32_t)(Event),(int32_t)(Vb.ABfilt()*100),
-						(int32_t)(PseudoHeadingPrim*100000)						
+						(int32_t)(PseudoHeadingPrim.get()*100000)						
 					);
 					xSemaphoreTake( BTMutex, 2/portTICK_PERIOD_MS );				
 					Router::sendXCV(str);
@@ -1639,18 +1624,18 @@ void readSensors(void *pvParameters){
 			if ( abs(RollAHRS.ABprim()) < RollLimit ) GyroBiasx.LPupdate( gyrox.ABfilt() - RollAHRS.ABprim() );
 			if ( abs(PitchAHRS.ABprim()) < PitchLimit ) GyroBiasy.LPupdate( gyroy.ABfilt() - PitchAHRS.ABprim() );					
 			// compute pseudo heading from GNSS
-			GnssTrack = atan2( GnssVy.ABfilt(), GnssVx.ABfilt() );
-			PseudoHeadingPrim = ( GnssVy.ABprim() * cos(GnssTrack) - GnssVx.ABprim() * sin(GnssTrack) ) / TASbi.get();
+			float GnssTrack = atan2( GnssVy.ABfilt(), GnssVx.ABfilt() );
+			PseudoHeadingPrim.set( ( GnssVy.ABprim() * cos(GnssTrack) - GnssVx.ABprim() * sin(GnssTrack) ) / TASbi.get() );
 			// compute Gz - pseudo heading variation long term average.		
-			if ( abs(PseudoHeadingPrim) < HeadingPrimLimit ) GyroBiasz.LPupdate( gyroz.ABfilt() - PseudoHeadingPrim );
+			if ( abs(PseudoHeadingPrim.get()) < HeadingPrimLimit ) GyroBiasz.LPupdate( gyroz.ABfilt() - PseudoHeadingPrim.get() );
 			// update gyros biases variables
-			BiasQuatGx = GyroBiasx.LowPass2();
-			BiasQuatGy = GyroBiasy.LowPass2();
-			BiasQuatGz = GyroBiasz.LowPass2();		
+			BiasQuatGx.set( GyroBiasx.LowPass2() );
+			BiasQuatGy.set( GyroBiasy.LowPass2() );
+			BiasQuatGz.set( GyroBiasz.LowPass2() );		
 			// limit bias estimation	
-			if ( abs(BiasQuatGx) > GMaxBias ) BiasQuatGx = copysign( GMaxBias, BiasQuatGx);
-			if ( abs(BiasQuatGy) > GMaxBias ) BiasQuatGy = copysign( GMaxBias, BiasQuatGy);		
-			if ( abs(BiasQuatGz) > GMaxBias ) BiasQuatGz = copysign( GMaxBias, BiasQuatGz);		
+			if ( abs(BiasQuatGx.get()) > GMaxBias ) BiasQuatGx.set( copysign( GMaxBias, BiasQuatGx.get()) );
+			if ( abs(BiasQuatGy.get()) > GMaxBias ) BiasQuatGy.set( copysign( GMaxBias, BiasQuatGy.get()) );		
+			if ( abs(BiasQuatGz.get()) > GMaxBias ) BiasQuatGz.set( copysign( GMaxBias, BiasQuatGz.get()) );		
 		}
 		
 		// get MPU temp
@@ -1781,7 +1766,7 @@ void readSensors(void *pvParameters){
 			NALTbiTASbiChanged = false;
 		}
 		ALTbiEnergy.ABupdate( dtStat.getdt(), ALTbi.get() );
-		TASbiEnergy.ABupdate( dtStat.getdt(), ( TASbiSquare / GRAVITY / 2.0 ) );			
+		TASbiEnergy.ABupdate( dtStat.getdt(), ( TASbiSquare.get() / GRAVITY / 2.0 ) );			
 		// Total Energy is sum of both potential and kinetic energies variations
 		Vztotbi.set( ALTbiEnergy.ABprim() + TASbiEnergy.ABprim() );
 		
