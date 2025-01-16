@@ -164,18 +164,14 @@ extern bool IMUstream;
 extern bool SENstream;
 extern bool CALstream;
 extern bool CALfirstpass;
-extern bool TSTstream;
-extern bool AHRSstream;
 extern float localGravity;
 extern float NEnergy;
 extern float alphaEnergy;
 extern float betaEnergy;
 extern float PeriodVelbi;
 extern float LastPeriodVelbi;
-extern float Mahonykp;
-extern float MagdwickBeta;
-extern float ALTbiEnergyN;
-extern float TASbiEnergyN;
+
+
 extern bool NALTbiTASbiChanged;
 extern float opt_TE;
 

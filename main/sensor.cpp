@@ -208,6 +208,7 @@ uint8_t gyro_flash_savings=0;
 t_global_flags gflags = { true, false, false, false, false, false, false, false, false, false, false, false, false, false };
 
 int  ccp=60;
+static float dynamicP;
 float tas = 0;
 float cas = 0;
 float aTE = 0;
@@ -250,6 +251,11 @@ char str[500]; 	// string for flight test message broadcast on wireless // TODO 
 #define	GroundGyroprimlimit 0.55// rad/s2
 #define RhoSLISA 1.225
 
+bool IMUstream;
+bool SENstream;
+bool CALstream;
+bool CALfirstpass;
+
 // IMU variables	
 mpud::float_axes_t accelMPU;
 mpud::float_axes_t accelBODY;	
@@ -273,57 +279,19 @@ float Gravz = 0.0;
 int64_t gyrobiastemptimer = 0;
 uint16_t BIAS_Init = 0; // Bias initialization status (0= no init, n = nth bias calculation)
 
-// Variable for AoB biais estimation
-float Bias_AoB = 0.0;
-
 float DynPeriodVelbi = 8.0; // TODO replace with LP class
 float GravModuleLP = 0.0; // TODO replace with LP class
 float RollModule = 0.0; // TODO replace with LP class
 
-// variables to avoid repeated calculations
-float cosRoll = 1.0;
-float sinRoll = 0.0;
-float cosPitch = 1.0;
-float sinPitch = 0.0;
-
 // variables for gravity estimation from accelerations
 mpud::float_axes_t gravBODY;
-
-// get installation parameters tilt, sway, distCG
-// compute trigonometry
-float DistCGVario = 0.0; // distance from CG to vario
-float Sway = 0.0; // vario installation roll angle
-float Tilt = 0.0; // vario installation pitch angle
-float S_S = 0.0; // sinus Sway
-float S_T = 0.0; // sinus Tilt
-float C_S = 1.0; // cos Sway
-float C_T = 1.0; // cos tilt
-float STmultSS = 0.0; // ST * SS
-float STmultCS = 0.0; // ST * CS
-float SSmultCT = 0.0; // SS * CT
-float CTmultCS = 1.0; // CT * CS
 
 int64_t ProcessTimeIMU = 0.0;
 int64_t ProcessTimeSensors = 0.0;
 
 float PrevdynP=0.0;
-float MPUtempcel; // MPU chip temperature
-float GNSSRouteraw;
 
 float opt_TE = 1;
-
-float Mahonykp = 0.05;
-float MagdwickBeta = 0.002; // TODO should be initialized with FT test menu!!!
-float CurrentBeta;
-
-bool IMUstream = false; // IMU FT stream
-bool SENstream = false; // Sensors FT stream
-bool SENDataReady = false; // test SEN data readiness
-bool SEN50DataReady = false; // test SEN data readiness
-bool CALstream = false; // accel calibration stream
-bool CALfirstpass = true; // reset accel calibration data
-bool TSTstream = false; // Test stream
-bool AHRSstream = false; // stream to test AHRS
 
 // PX1122 RTK variables
 double RTKtime;
@@ -352,7 +320,6 @@ float Allyvel2D;
 
 static float GRAVITY = 9.807;
 
-static float dynamicP; // filtered dynamic pressure
 static float baroP=0; // barometric pressure
 static float temperature=15.0;
 static float XCVTemp=15.0;//External temperature for MPU temp control
@@ -362,9 +329,6 @@ float NEnergy = 20.0;
 float PeriodVelbi = 8.0;
 float LastPeriodVelbi = 8.0;
 
-
-float ALTbiEnergyN = 9.0;
-float TASbiEnergyN = 5.0;
 bool NALTbiTASbiChanged = true;
 
 float Vxbi = 0.0;
@@ -430,6 +394,12 @@ SetGet Vh, DHeading;
 SetGet Rhocorr;
 SetGet PseudoHeadingPrim;
 SetGet BiasQuatGx, BiasQuatGy, BiasQuatGz;
+// Set/get for installation parameters trigonometry
+SetGet S_S, S_T, C_S, C_T, STmultSS, STmultCS, SSmultCT, CTmultCS;
+// Set/Get for attitude trigonometry
+SetGet cosRoll, sinRoll, cosPitch, sinPitch;
+// Variable for AoB biais estimation
+SetGet Bias_AoB;
 
 // complementary filters
 Complementary UbiPrim, VbiPrim, WbiPrim;
@@ -944,33 +914,12 @@ static void processIMU(void *pvParameters)
 	PeriodVelbi = velbi_period.get(); // period in second for baro/inertial velocity. period long enough to reduce effect of baro wind gradients
 	LastPeriodVelbi = PeriodVelbi;
 	
-	Mahonykp = kp_Mahony.get(); // get last kp value from NV memory // TODO remove
 	AHRS.setBeta( Beta_Magdwick.get() ); // get last ki value from NV memory
-	ALTbiEnergyN = ALTbi_N.get(); // get last N for ALTbi A/B filter from NV memory
-	TASbiEnergyN = TASbi_N.get(); // get last N delta between ALTbi and TASbi from NV memory // TODO remove
 	
-	SENDataReady = false;
-	SEN50DataReady = false;
-	
-	if( nmea_streams.get() & FT_IMU ) {
-		IMUstream = true;
-		AHRSstream = false;
-	} else
-		IMUstream = false;
-	if( nmea_streams.get() & FT_SENSOR ) {
-		SENstream = true;
-		AHRSstream = false;
-	} else
-		SENstream = false;
-	if( nmea_streams.get() & FT_AHRS ) {
-		IMUstream = false;
-		SENstream = false;
-		AHRSstream = true;
-	} else
-		AHRSstream = false;
-		
 	while (1) {
-		countIMU++;
+
+		mtick++;
+		
 		TickType_t xLastWakeTime_mpu =xTaskGetTickCount();
 		
 		// get gyro data
@@ -984,9 +933,9 @@ static void processIMU(void *pvParameters)
 			gyroMPU.y = -(gyroRPS.y - GroundGyroBias.y);
 			gyroMPU.z = -(gyroRPS.x - GroundGyroBias.x);				
 			// convert NEDMPU to NEDBODY and apply bias estimation
-			gyroBODY.x = C_T * gyroMPU.x + STmultSS * gyroMPU.y + STmultCS * gyroMPU.z; // + BiasQuatGx.get();
-			gyroBODY.y = C_S * gyroMPU.y - S_S * gyroMPU.z; //+ BiasQuatGy.get();
-			gyroBODY.z = -S_T * gyroMPU.x + SSmultCT  * gyroMPU.y + CTmultCS * gyroMPU.z; // + BiasQuatGz.get();
+			gyroBODY.x = C_T.get() * gyroMPU.x + STmultSS.get() * gyroMPU.y + STmultCS.get() * gyroMPU.z; // + BiasQuatGx.get();
+			gyroBODY.y = C_S.get() * gyroMPU.y - S_S.get() * gyroMPU.z; //+ BiasQuatGy.get();
+			gyroBODY.z = -S_T.get() * gyroMPU.x + SSmultCT.get()  * gyroMPU.y + CTmultCS.get() * gyroMPU.z; // + BiasQuatGz.get();
 			// update gyro filters
 			gyrox.ABupdate(dtGyr.getdt(), gyroBODY.x );
 			gyroy.ABupdate(dtGyr.getdt(), gyroBODY.y );			
@@ -1002,11 +951,11 @@ static void processIMU(void *pvParameters)
 			accelMPU.y = ((-accelG.y*9.807) - currentAccelBias.y ) * currentAccelGain.y;
 			accelMPU.z = ((-accelG.x*9.807) - currentAccelBias.z ) * currentAccelGain.z;
 			// convert from MPU to BODY and filter with A/B
-			accelBODY.x = C_T * accelMPU.x + STmultSS * accelMPU.y + STmultCS * accelMPU.z + ( gyroy.ABfilt() * gyroy.ABfilt() + gyroz.ABfilt() * gyroz.ABfilt() ) * DistCGVario ;
+			accelBODY.x = C_T.get() * accelMPU.x + STmultSS.get() * accelMPU.y + STmultCS.get() * accelMPU.z + ( gyroy.ABfilt() * gyroy.ABfilt() + gyroz.ABfilt() * gyroz.ABfilt() ) * distCG.get() ;
 			accelx.ABupdate( dtAcc.getdt(), accelBODY.x );
-			accelBODY.y = C_S * accelMPU.y - S_S * accelMPU.z;
+			accelBODY.y = C_S.get() * accelMPU.y - S_S.get() * accelMPU.z;
 			accely.ABupdate( dtAcc.getdt(), accelBODY.y  );
-			accelBODY.z = -S_T * accelMPU.x + SSmultCT * accelMPU.y + CTmultCS * accelMPU.z ;
+			accelBODY.z = -S_T.get() * accelMPU.x + SSmultCT.get() * accelMPU.y + CTmultCS.get() * accelMPU.z ;
 			accelz.ABupdate( dtAcc.getdt(), accelBODY.z );
 			accelNz = -accelz.ABfilt()/GRAVITY;
 		}
@@ -1040,10 +989,11 @@ static void processIMU(void *pvParameters)
 		
 		// get dynamic pressure
 		float dp = 0.0;
+		float PrevdynP;
 		if( asSensor ) {
 			PrevdynP = dynP.get();
 			dp =  asSensor->readPascal(0, ok);
-		}
+		} else PrevdynP = 0.0;
 		if( ok ) {			
 			dtdynP.update( processIMUperiod );
 			dynP.set( dp );
@@ -1093,10 +1043,10 @@ static void processIMU(void *pvParameters)
 			PitchAHRS.ABupdate( dtGyr.getdt(), AHRS.getPitch() );
 			
 			// compute sin and cos for Roll and Pitch from IMU quaternion since they are used in multiple calculations
-			cosRoll = cos( AHRS.getRoll() );
-			sinRoll = sin( AHRS.getRoll() );
-			cosPitch = cos( AHRS.getPitch() );
-			sinPitch = sin( AHRS.getPitch() );
+			cosRoll.set( cos( AHRS.getRoll() ) );
+			sinRoll.set( sin( AHRS.getRoll() ) );
+			cosPitch.set( cos( AHRS.getPitch() ) );
+			sinPitch.set( sin( AHRS.getPitch() ) );
 			
 			// compute kinetic accelerations using accelerations, corrected with gravity and centrifugal accels
 			UiPrim.ABupdate( dtAcc.getdt(), accelx.ABfilt()- AHRS.Gravx() - gyroy.ABfilt() * TASbi.get() * AoA.get() + gyroz.ABfilt() * TASbi.get() * AoB.get() );
@@ -1110,15 +1060,15 @@ static void processIMU(void *pvParameters)
 
 			// Compute trajectory pneumatic speeds components in body frame NEDBODY
 			// Vh corresponds to the trajectory horizontal speed and Vzbaro corresponds to the vertical speed in earth frame
-			Vh.set( TAS.get() * cos( AHRS.getPitch() - cosRoll * AoA.get() - sinRoll * AoB.get() ) );
+			Vh.set( TAS.get() * cos( AHRS.getPitch() - cosRoll.get() * AoA.get() - sinRoll.get() * AoB.get() ) );
 			// Pitch and Roll correspond to the attitude of the glider and DHeading corresponds to the heading deviation due to the Beta and Alpha.
-			DHeading.set( -(AoB.get() * cosRoll - AoA.get() * sinRoll ) / ( cosPitch + AoB.get() * sinPitch * sinRoll + AoA.get() * sinPitch * cosRoll ) );
+			DHeading.set( -(AoB.get() * cosRoll.get() - AoA.get() * sinRoll.get() ) / ( cosPitch.get() + AoB.get() * sinPitch.get() * sinRoll.get() + AoA.get() * sinPitch.get() * cosRoll.get() ) );
 			float cosDHeading = cos( DHeading.get() );
 			float sinDHeading = sin( DHeading.get() );
 			// applying DCM from earth to body frame (using Pitch, Roll and DHeading Yaw angles) to Vh and Vzbaro trajectory components in earth frame to reproject speed in TE referential onto body axis. 
-			Ub.ABupdate( dtStat.getdt(), cosPitch * cosDHeading * Vh.get() - sinPitch * Vzbaro );
-			Vb.ABupdate( dtStat.getdt(), ( sinRoll * sinPitch * cosDHeading - cosRoll * sinDHeading ) * Vh.get() + sinRoll * cosPitch * Vzbaro );
-			Wb.ABupdate( dtStat.getdt(), ( cosRoll * sinPitch * cosDHeading + sinRoll * sinDHeading ) * Vh.get() + cosRoll * cosPitch * Vzbaro );
+			Ub.ABupdate( dtStat.getdt(), cosPitch.get() * cosDHeading * Vh.get() - sinPitch.get() * Vzbaro );
+			Vb.ABupdate( dtStat.getdt(), ( sinRoll.get() * sinPitch.get() * cosDHeading - cosRoll.get() * sinDHeading ) * Vh.get() + sinRoll.get() * cosPitch.get() * Vzbaro );
+			Wb.ABupdate( dtStat.getdt(), ( cosRoll.get() * sinPitch.get() * cosDHeading + sinRoll.get() * sinDHeading ) * Vh.get() + cosRoll.get() * cosPitch.get() * Vzbaro );
 
 			// Compute baro interial acceleration ( complementary filter between inertial accel derivatives and baro accels )
 			UbiPrim.update( dtAcc.getdt(), UiPrim.ABprim(), Ub.ABprim() );
@@ -1182,10 +1132,8 @@ static void processIMU(void *pvParameters)
 			(int32_t)(accelBODY.x*10000.0), (int32_t)(accelBODY.y*10000.0), (int32_t)(accelBODY.z*10000.0),
 			(int32_t)(gyroBODY.x*100000.0), (int32_t)(gyroBODY.y*100000.0),(int32_t)(gyroBODY.z*100000.0),
 			dtStat.gettime(), (int32_t)(statP.get()*100.0),(int32_t)(teP.get()*100.0), (int32_t)(dynP.get()*10)						
-		);						
-		xSemaphoreTake( BTMutex, 2/portTICK_PERIOD_MS ); // prevent BT conflicts for 2ms max.
+			);						
 		Router::sendXCV(str);
-		xSemaphoreGive( BTMutex );
 		}
 		
 		if ( SENstream ) {
@@ -1206,7 +1154,7 @@ static void processIMU(void *pvParameters)
 				Wbi.get() in cm/s,
 				Vzbi in cm/s,			
 				TotalEnergy in cm/s,
-				CurrentBeta in tenthousand of unit,
+				AHRS.getBeta in tenthousand of unit,
 				NAccel in ten of unit,
 				DynPeriodVelbi in thousands of second
 				<CR><LF>		
@@ -1226,10 +1174,10 @@ static void processIMU(void *pvParameters)
 				XCVtemp (temperature inside vario) in tenth of °C,
 				PeriodVelbi (Baro Inertial period in tenth of seconds),
 				te_filt (TE filter period in tenth of second),
-				Mahonykp in tenthousandth of unit,
-				MagdwickBeta in tenthousandth of unit,
-				ALTbiEnergyN ALTbi N A/B filter in tenth of unit,
-				TASbiEnergyN delta between ALTbi and TASbi N in tenth of unit,
+				Mahonykp = 0.0 in tenthousandth of unit,
+				AHRS.getBeta() in tenthousandth of unit,
+				ALTbi_N.get() ALTbi N A/B filter in tenth of unit,
+				TASbiEnergyN = 0.0 delta between ALTbi and TASbi N in tenth of unit,
 				opt_TE 1 or 2,
 				BIAS_Init number of gyro bias estimates on ground,
 				FTVERSION,
@@ -1265,9 +1213,8 @@ static void processIMU(void *pvParameters)
 				Vb in cm/s
 				PseudoHeadingPrim in hundredth of milli rad/s,			
 			*/				
-			if ( SEN50DataReady ) {
-				SEN50DataReady = false;
-				// send $S1 and $S2 every 50 cycles = 5 seconds
+			if ( mtick % 200 ) { // every 5 seconds ( 200 x 0.025 ms )
+				// send $S1, $S2 and $S3
 				sprintf(str,"$S1,%lld,%i,%i,%i,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$S3,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$S2,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",				
 					// $S1 stream
 					dtStat.gettime(), (int32_t)(statP.get()*100.0),(int32_t)(teP.get()*100.0), (int16_t)(dynP.get()*10), 
@@ -1277,35 +1224,32 @@ static void processIMU(void *pvParameters)
 					(int32_t)(AoA.get()*1000), (int32_t)(AoB.get()*1000),
 					(int32_t)(Ubi.get()*100), (int32_t)(Vbi.get()*100),(int32_t)(Wbi.get()*100), (int32_t)(Vzbi*100),				
 					(int32_t)(Vztotbi.get()*100),
-					(int32_t)(CurrentBeta*10000), 
-					(int32_t)(NAccel * 10),
+					(int32_t)(AHRS.getBeta()*10000), 
+					(int32_t)(accelx.ABNget() * 10),
 					(int32_t)(DynPeriodVelbi*1000),
 					// $S3 stream
 					(int32_t)(UiPrim.ABraw()*100),(int32_t)(ViPrim.ABraw()*100),(int32_t)(WiPrim.ABraw()*100),
 					(int32_t)(Ub.ABprim()*100), (int32_t)(Vb.ABprim()*100),(int32_t)(Wb.ABprim()*100),
 					(int32_t)(UiPrim.ABprim()*100), (int32_t)(ViPrim.ABprim()*100),(int32_t)(WiPrim.ABprim()*100),	
 					(int32_t)(UbiPrim.get()*100), (int32_t)(VbiPrim.get()*100),(int32_t)(WbiPrim.get()*100),
-					(int32_t)(Bias_AoB*1000),
+					(int32_t)(Bias_AoB.get()*1000),
 					(int32_t)(RTKNproj*1000),(int32_t)(RTKEproj*1000),(int32_t)(-RTKUproj*1000),(int32_t)(RTKheading*10),(int32_t)(ALTbi.get()*100),
 					(int32_t)(DHeading.get()*1000),(int32_t)(Ub.ABfilt()*100),(int32_t)(Vb.ABfilt()*100),(int32_t)(Wb.ABfilt()*100),
 					(int32_t)(AccelModulePrimLevel.get()*100),(int32_t)(GyroModulePrimLevel.get()*100), (int32_t)(Event), (int32_t)(Vb.ABfilt()*100),
 					(int32_t)(PseudoHeadingPrim.get()*100000),
 					// $S2 stream
-					(int16_t)(temperatureLP.LowPass1()*10.0), (int16_t)(MPUtempcel*10.0), chosenGnss->fix, chosenGnss->numSV,
+					(int16_t)(temperatureLP.LowPass1()*10.0), (int16_t)(MPU.getTemperature()*10.0), chosenGnss->fix, chosenGnss->numSV,
 					(int32_t)(NewGroundGyroBias.x*100000.0), (int32_t)(NewGroundGyroBias.y*100000.0), (int32_t)(NewGroundGyroBias.z*100000.0),				
 					(int32_t)(BiasQuatGx.get()*100000.0), (int32_t)(BiasQuatGy.get()*100000.0), (int32_t)(BiasQuatGz.get()*100000.0),
 					(int16_t)(XCVTemp*10.0), (int16_t) (PeriodVelbi*10),
-					(int32_t)(te_filt.get()*10),(int32_t)(Mahonykp*10000),(int32_t)(MagdwickBeta*10000), (int32_t)(ALTbiEnergyN*10), (int32_t)(TASbiEnergyN*10), (int32_t)(opt_TE),
+					(int32_t)(te_filt.get()*10),(int32_t)(0.0*10000),(int32_t)(Beta_Magdwick.get()*10000), (int32_t)(ALTbi_N.get()*10), (int32_t)(0.0*10), (int32_t)(opt_TE),
 					(int32_t)BIAS_Init,
 					(int32_t)(FTVERSION),(int32_t)(SOFTVERSION)
 					);
-				xSemaphoreTake( BTMutex, 2/portTICK_PERIOD_MS );				
 				Router::sendXCV(str);
-				xSemaphoreGive( BTMutex );
 			} else {
-				if ( SENDataReady ) {
-					SENDataReady = false;
-					// send $S1 only every 100ms
+				if ( mtick % 4 ) { // every 100 ms ( 4 x 0.02 ms)
+					// send $S1 and $S3
 					sprintf(str,"$S1,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$S3,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",
 						(int64_t)(chosenGnss->time*1000.0), (int16_t)(chosenGnss->speed.x*100), (int16_t)(chosenGnss->speed.y*100), (int16_t)(chosenGnss->speed.z*100),
 						(int32_t)(AHRS.getPitch()*1000.0), (int32_t)(AHRS.getRoll()*1000.0), (int32_t)(AHRS.getYaw()*1000.0),
@@ -1313,23 +1257,21 @@ static void processIMU(void *pvParameters)
 						(int32_t)(AoA.get()*1000), (int32_t)(AoB.get()*1000),
 						(int32_t)(Ubi.get()*100), (int32_t)(Vbi.get()*100),(int32_t)(Wbi.get()*100), (int32_t)(Vzbi*100),				
 						(int32_t)(Vztotbi.get()*100),
-						(int32_t)(CurrentBeta*10000), 
-						(int32_t)NAccel * 10,
+						(int32_t)(AHRS.getBeta()*10000), 
+						(int32_t) accelx.ABNget()* 10,
 						(int32_t)(DynPeriodVelbi*1000),
 						// $S3 stream
 						(int32_t)(UiPrim.ABraw()*100),(int32_t)(ViPrim.ABraw()*100),(int32_t)(WiPrim.ABraw()*100),
 						(int32_t)(Ub.ABprim()*100), (int32_t)(Vb.ABprim()*100),(int32_t)(Wb.ABprim()*100),   
 						(int32_t)(UiPrim.ABprim()*100), (int32_t)(ViPrim.ABprim()*100),(int32_t)(WiPrim.ABprim()*100),	
 						(int32_t)(UbiPrim.get()*100), (int32_t)(VbiPrim.get()*100),(int32_t)(WbiPrim.get()*100),
-						(int32_t)(Bias_AoB*1000),
+						(int32_t)(Bias_AoB.get()*1000),
 						(int32_t)(RTKNproj*1000),(int32_t)(RTKEproj*1000),(int32_t)(-RTKUproj*1000),(int32_t)(RTKheading*10),(int32_t)(ALTbi.get()*100),
 						(int32_t)(DHeading.get()*1000),(int32_t)(Ub.ABfilt()*100),(int32_t)(Vb.ABfilt()*100),(int32_t)(Wb.ABfilt()*100),
 						(int32_t)(AccelModulePrimLevel.get()*100),(int32_t)(GyroModulePrimLevel.get()*100), (int32_t)(Event),(int32_t)(Vb.ABfilt()*100),
 						(int32_t)(PseudoHeadingPrim.get()*100000)						
 					);
-					xSemaphoreTake( BTMutex, 2/portTICK_PERIOD_MS );				
 					Router::sendXCV(str);
-					xSemaphoreGive( BTMutex );
 				}					
 			}
 		}		
@@ -1340,7 +1282,7 @@ static void processIMU(void *pvParameters)
 		if ( ProcessTimeIMU > 8 && TAS.get() < 15.0 ) {
 			ESP_LOGI(FNAME,"processIMU: %i / 25", (int16_t)(ProcessTimeIMU) );
 		}		
-		mtick++;
+
 		vTaskDelayUntil(&xLastWakeTime_mpu, 25/portTICK_PERIOD_MS);  // 25 ms = 40 Hz loop
 		if( (mtick % 40) == 0) {  // test stack every second
 			if( uxTaskGetStackHighWaterMark( mpid ) < 1024 && TAS.get() < 15.0 )
@@ -1547,9 +1489,6 @@ void readSensors(void *pvParameters){
 	NEnergy = te_filt.get(); // Total Energy alpha/beta N
 	
 	opt_TE = te_opt.get(); // get last d(TE)/dt calculation option
-	
-	SENDataReady = false;
-	SEN50DataReady = false;
 
 	while (1)
 	{ 
@@ -1577,15 +1516,15 @@ void readSensors(void *pvParameters){
 			#define MaxGravityError 0.12					
 			GravModuleLP = 0.9 * GravModuleLP  + 0.1 * abs( AHRS.AccelGravityModule() - GRAVITY );					
 			if ( (RollModuleLevel.get() < BetaRollMax) && ( GravModuleLP < MaxGravityError ) ) {
-				CurrentBeta = MagdwickBeta * pow( 10.0, (BetaRollMax - RollModuleLevel.get()) / BetaGain );
+				AHRS.setBeta( Beta_Magdwick.get() * pow( 10.0, (BetaRollMax - RollModuleLevel.get()) / BetaGain ) );
 			} else {
-				CurrentBeta = MagdwickBeta;
+				AHRS.setBeta( Beta_Magdwick.get() );
 			}
 		} else {
 			// When static use higher Beta = 0.003 to let AHRS synchronize with accels attitude faster
-			CurrentBeta = 0.003;
+			AHRS.setBeta( 0.003 );
 		}
-		AHRS.setBeta( CurrentBeta );		
+
 		
 		// Adjust Accel A/B filter N value in function of accel module prim level
 		float NAccelupdt = AccelModulePrimLevel.get() / 3.0;
@@ -1638,9 +1577,6 @@ void readSensors(void *pvParameters){
 			if ( abs(BiasQuatGz.get()) > GMaxBias ) BiasQuatGz.set( copysign( GMaxBias, BiasQuatGz.get()) );		
 		}
 		
-		// get MPU temp
-		MPUtempcel = MPU.getTemperature();
-		
 		// get Ublox GNSS data
 		// when GNSS receiver is connected to S1 interface
 		gnss_data_t *gnss1 = s1UbloxGnssDecoder.getGNSSData(1);
@@ -1648,7 +1584,6 @@ void readSensors(void *pvParameters){
 		gnss_data_t *gnss2 = s2UbloxGnssDecoder.getGNSSData(2);
 		// select gnss with better fix
 		chosenGnss = (gnss2->fix >= gnss1->fix) ? gnss2 : gnss1;
-		GNSSRouteraw = chosenGnss->route;
 		
 		// Get PX1122 RTK Data
 		if ( RTKtime >= 0 ) {
@@ -1669,7 +1604,6 @@ void readSensors(void *pvParameters){
 					GnssVy.ABupdate( dtRTKtime, chosenGnss->speed.y );		
 					GnssVz.ABupdate( dtRTKtime, chosenGnss->speed.z );
 				} 				
-				GNSSRouteraw = atan2(GnssVy.ABfilt(),GnssVx.ABfilt());			
 			} else {
 				chosenGnss->fix = 0;
 			}
@@ -1692,7 +1626,6 @@ void readSensors(void *pvParameters){
 				GnssVy.ABupdate( dtAllytime, chosenGnss->speed.y );		
 				GnssVz.ABupdate( dtAllytime, chosenGnss->speed.z );
 			} 
-			GNSSRouteraw = atan2(GnssVy.ABfilt(),GnssVx.ABfilt());
 		} else {
 			chosenGnss->fix = 8; // GNSS Allystar TAU1301 checksum error or bad time			
 			chosenGnss->time = -1;
@@ -1727,7 +1660,7 @@ void readSensors(void *pvParameters){
 			}  else { //when  close to Az=0, only aoa from lift considered
                 AoA.set( AoA.get() + dAoA ) ;
             }			
-			AoB.set( fcAoB1 * AoB.get() + fcAoB2 * ( KAoB * WingLoad * accely.ABfilt()/ dynP.get() - KGx * gyroCorrx.get() / TAS.get()) - Bias_AoB );	
+			AoB.set( fcAoB1 * AoB.get() + fcAoB2 * ( KAoB * WingLoad * accely.ABfilt()/ dynP.get() - KGx * gyroCorrx.get() / TAS.get()) - Bias_AoB.get() );	
 		} else {
 			AoA.set( 0.0 );
 			AoB.set( 0.0 );
@@ -1739,14 +1672,14 @@ void readSensors(void *pvParameters){
 		#define AoBMaxBias 0.1 // limit biais correction to 100 mrad/s
 		if ( ( TAS.get() > MinTASAoB ) && ( abs(AHRS.getRoll()) < RollLimitAoB ) ) {
 			BiasAoB.LPupdate( AoB.get() );
-			Bias_AoB = BiasAoB.LowPass2();
-			if ( abs(Bias_AoB) > AoBMaxBias ) Bias_AoB = copysign( AoBMaxBias, Bias_AoB);
+			Bias_AoB.set( BiasAoB.LowPass2() );
+			if ( abs(Bias_AoB.get()) > AoBMaxBias ) Bias_AoB.set( copysign( AoBMaxBias, Bias_AoB.get() ) );
 		}
 					
 		// baro interial speed in earth frame // TODO replaced Vb with Vbi.get this need to be validated
-		//Vxbi = cosPitch * Ubi.get() + sinRoll * sinPitch * Vbi.get() + cosRoll * sinPitch * Wbi.get(); // TODO might be required for wind calculation
-		//Vybi = cosRoll * Vb - sinRoll * Wbi.get();
-		Vzbi = -sinPitch * Ubi.get() + sinRoll * cosPitch * Vbi.get() + cosRoll * cosPitch * Wbi.get(); // TODO might be required for wind calculation
+		//Vxbi = cosPitch.get() * Ubi.get() + sinRoll.get() * sinPitch.get() * Vbi.get() + cosRoll.get() * sinPitch.get() * Wbi.get(); // TODO might be required for wind calculation
+		//Vybi = cosRoll.get() * Vb - sinRoll.get() * Wbi.get();
+		Vzbi = -sinPitch.get() * Ubi.get() + sinRoll.get() * cosPitch.get() * Vbi.get() + cosRoll.get() * cosPitch.get() * Wbi.get(); // TODO might be required for wind calculation
 
 		// baro inertial altitude
 		// ALTbi is computed using a complementary filter with baro altitude and baro inertial vertical speed in earth frame
@@ -1761,8 +1694,8 @@ void readSensors(void *pvParameters){
 			#define ALTbiTASbiEnergyOutliers 10.0 // 10 m/s maximum variation sample to sample
 			#define ALTbiTASbiEnergyPrimMin -50.0
 			#define ALTbiTASbiEnergyPrimMax 50.0
-			ALTbiEnergy.ABinit(  ALTbiEnergyN,  ALTbiTASbiEnergdt, ALTbiTASbiEnergyOutliers, 0.0, 0.0, ALTbiTASbiEnergyPrimMin, ALTbiTASbiEnergyPrimMax );
-			TASbiEnergy.ABinit(  ALTbiEnergyN + TASbiEnergyN,  ALTbiTASbiEnergdt, ALTbiTASbiEnergyOutliers, 0.0, 0.0, ALTbiTASbiEnergyPrimMin, ALTbiTASbiEnergyPrimMax );
+			ALTbiEnergy.ABinit(  ALTbi_N.get(),  ALTbiTASbiEnergdt, ALTbiTASbiEnergyOutliers, 0.0, 0.0, ALTbiTASbiEnergyPrimMin, ALTbiTASbiEnergyPrimMax );
+			TASbiEnergy.ABinit(  ALTbi_N.get(),  ALTbiTASbiEnergdt, ALTbiTASbiEnergyOutliers, 0.0, 0.0, ALTbiTASbiEnergyPrimMin, ALTbiTASbiEnergyPrimMax );
 			NALTbiTASbiChanged = false;
 		}
 		ALTbiEnergy.ABupdate( dtStat.getdt(), ALTbi.get() );
@@ -2076,18 +2009,6 @@ void readSensors(void *pvParameters){
 			}
 		}	
 
-		if ( SENstream ) {
-			// see definition of $S1, $S2, $S3 in IMU section
-			if ( !(count % 50) ) { 
-				// send $S1, $S2, $S3 stream
-				SEN50DataReady = true;
-				
-			} else {
-				// send $S1 and $S3 only every 100ms
-				SENDataReady = true;
-			}
-		}
-
 		ProcessTimeSensors = (esp_timer_get_time()/1000.0) - ProcessTimeSensors;
 		if ( ProcessTimeSensors > 30 && TAS.get() < 15.0 ) {
 			ESP_LOGI(FNAME,"readSensors: %i / 100", (int16_t)(ProcessTimeSensors) );
@@ -2388,24 +2309,21 @@ void system_startup(void *args){
 			gyro_bias.set(NewGroundGyroBias);		
 		}
 		// get installation parameters tilt, sway, distCG
-		DistCGVario = distCG.get();
 		// Check value just in case FLASH is not correct to reset to neutral values (OK range is dist from CG to XCV between 0 an 3 meters and sway and tilt +-0.4 rad)
-		if ( DistCGVario < 0.0 || DistCGVario > 3.0 ) DistCGVario = 0.0;
-		Sway = sway.get();
-		Tilt = tilt.get();
-		if ( abs(Sway) > 0.4 || abs(Tilt) > 0.4 ) {
-			Sway = 0.0;
-			Tilt = 0.0;
+		if ( distCG.get() < 0.0 || distCG.get() > 3.0 ) distCG.set( 0.0 );
+		if ( abs(sway.get()) > 0.4 || abs(tilt.get()) > 0.4 ) {
+			sway.set( 0.0 );
+			tilt.set( 0.0 );
 		}
 		// compute trigonometry
-		S_S = sin(Sway);
-		C_S = cos(Sway);
-		S_T = sin(Tilt);
-		C_T = cos(Tilt);
-		STmultSS = S_T * S_S;
-		STmultCS = S_T * C_S;
-		SSmultCT = S_S * C_T;
-		CTmultCS = C_T * C_S;
+		S_S.set( sin(sway.get() ) );
+		C_S.set( cos(sway.get() ) );
+		S_T.set( sin(tilt.get() ) );
+		C_T.set( cos(tilt.get() ) );
+		STmultSS.set( S_T.get() * S_S.get() );
+		STmultCS.set( S_T.get() * C_S.get() );
+		SSmultCT.set( S_S.get() * C_T.get() );
+		CTmultCS.set( C_T.get() * C_S.get() );
 		
 		// create mutex for BT synchronization
 		BTMutex = xSemaphoreCreateMutex();	

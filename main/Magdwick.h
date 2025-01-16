@@ -38,6 +38,7 @@ private:
 public:
 	void init();
 	void setBeta( float val );
+	float getBeta();
 	float getRoll();
 	float getPitch();
 	float getYaw();

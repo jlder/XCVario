@@ -20,7 +20,8 @@ private:
 	float filt = 0.0;
 	float _delta = 0.0;
 	float _prim = 0.0;
-	float _filt = 0.0;	
+	float _filt = 0.0;
+	float NAB;
 	float alpha = 0.0;
 	float beta = 0.0;
 	float Threshold = 0.0;
@@ -47,6 +48,7 @@ public:
 	void ABinit( float N, float dtTypical, float _Threshold, float _filtMin, float _filtMax );
 	void ABinit( float N, float dtTypical, float _Threshold, float _filtMin, float _filtMax, float _primMin, float _primMax );
 	void ABNupdate( float N );
+	int16_t ABNget();
 	void ABupdate(float dt, float RawData );
 	float ABfilt(void);
 	float ABprim(void);

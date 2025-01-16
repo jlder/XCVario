@@ -157,20 +157,16 @@ int upd_screens( SetupMenuSelect * p ){
 void build_streams(){
 	if( nmea_streams.get() & FT_IMU ) {
 		IMUstream = true;
-		AHRSstream = false;
 	} else
 		IMUstream = false;
 	if( nmea_streams.get() & FT_SENSOR ) {
 		SENstream = true;
-		AHRSstream = false;
 	} else
 		SENstream = false;
 	if( nmea_streams.get() & FT_AHRS ) {
 		IMUstream = false;
 		SENstream = false;
-		AHRSstream = true;
-	} else
-		AHRSstream = false;
+	}
 }
 
 int change_streams( SetupMenuSelect * p ){
@@ -2031,23 +2027,23 @@ int bifilt_adj( SetupMenuValFloat * p ){
 }
 
 int kp_adj( SetupMenuValFloat * p ){
-		Mahonykp = kp_Mahony.get(); // period in second for baro/inertial velocity. period long enough to reduce effect of baro wind gradients
+		//Mahonykp = kp_Mahony.get(); // period in second for baro/inertial velocity. period long enough to reduce effect of baro wind gradients
 	return 0;
 }
 
 int beta_adj( SetupMenuValFloat * p ){
-		MagdwickBeta = Beta_Magdwick.get(); // period in second for baro/inertial velocity. period long enough to reduce effect of baro wind gradients
+		//MagdwickBeta = Beta_Magdwick.get(); // period in second for baro/inertial velocity. period long enough to reduce effect of baro wind gradients
 	return 0;
 }
 
 int ALTbi_N_adj( SetupMenuValFloat * p ){
-		ALTbiEnergyN = ALTbi_N.get(); // N for ALTbi A/B filter
+		//ALTbiEnergyN = ALTbi_N.get(); // N for ALTbi A/B filter
 		NALTbiTASbiChanged = true;		
 	return 0;
 }
 
 int TASbi_N_adj( SetupMenuValFloat * p ){
-		TASbiEnergyN = TASbi_N.get(); // delta N (from ALTbi N) for TASbi A/B filter
+		//TASbiEnergyN = TASbi_N.get(); // delta N (from ALTbi N) for TASbi A/B filter
 		NALTbiTASbiChanged = true;		
 	return 0;
 }

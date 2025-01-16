@@ -55,20 +55,20 @@ void change_bifilt(){
 }
 
 void change_kpMahony(){
-		Mahonykp = kp_Mahony.get(); // unit for Mahony Kp adjustement
+		//Mahonykp = kp_Mahony.get(); // unit for Mahony Kp adjustement
 }
 
 void change_BetaMagdwick(){
-		MagdwickBeta = Beta_Magdwick.get(); // unit for Mahony Ki adjustement
+		//MagdwickBeta = Beta_Magdwick.get(); // unit for Mahony Ki adjustement
 }
 
 void change_ALTbiN() {
-		ALTbiEnergyN = ALTbi_N.get();
+		//ALTbiEnergyN = ALTbi_N.get();
 		NALTbiTASbiChanged = true;		
 }
 
 void change_TASbiN() {
-		TASbiEnergyN = TASbi_N.get();
+		//TASbiEnergyN = TASbi_N.get();
 		NALTbiTASbiChanged = true;		
 }
 

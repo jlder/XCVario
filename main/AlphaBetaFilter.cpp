@@ -16,6 +16,7 @@ void AlphaBeta::ABinit( float N, float dtTypical, float _Threshold, float _filtM
 }
 void AlphaBeta::ABinit( float N, float dtTypical, float _Threshold, float _filtMin, float _filtMax, float _primMin, float _primMax ) {
 	if ( N != 0.0  ) {
+		NAB = N;
 		alpha =  (2.0 * (2.0 * N - 1.0) / N / (N + 1.0));
 		beta = (6.0 / N / (N + 1.0));
 		dtAvg = dtTypical;
@@ -33,11 +34,15 @@ void AlphaBeta::ABinit( float N, float dtTypical, float _Threshold, float _filtM
 // AB filter depth N update
 void AlphaBeta::ABNupdate( float N ) {
 	if ( N > 0.0  ) {
+		NAB = N;
 		alpha =  (2.0 * (2.0 * N - 1.0) / N / (N + 1.0));
 		beta = (6.0 / N / (N + 1.0));
 	}
 }
 
+int16_t AlphaBeta::ABNget() {
+	return NAB;
+}
 
 // AB filter update		
 void AlphaBeta::ABupdate(float dt, float RawData ) {

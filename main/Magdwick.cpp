@@ -21,6 +21,11 @@ void Magdwick::setBeta( float val ) {
 	Beta = val;
 }
 
+// get Beta for Magdwick
+float Magdwick::getBeta() {
+	return Beta;
+}
+
 // Get Roll from quaternion
 float Magdwick::getRoll() {
 	while( writing ) {

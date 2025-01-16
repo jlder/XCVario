@@ -607,7 +607,6 @@ void Protocols::parseNMEA( const char *str ){
 			IMUstream = false; // no FT stream
 			SENstream = false;
 			CALstream = false;
-			TSTstream = false; 
 			sprintf(strx,"OK for $FT0\r\n");
 			Router::sendXCV(strx);	
 		}
@@ -615,7 +614,6 @@ void Protocols::parseNMEA( const char *str ){
 			IMUstream = true; // IMU stream
 			SENstream = false;
 			CALstream = false;			
-			TSTstream = false; 
 			sprintf(strx,"OK for $FT1\r\n");
 			Router::sendXCV(strx);
 		}
@@ -623,7 +621,6 @@ void Protocols::parseNMEA( const char *str ){
 			IMUstream = false; // SEN stream
 			SENstream = true;
 			CALstream = false;			
-			TSTstream = false; 
 			sprintf(strx,"OK for $FT2\r\n");
 			Router::sendXCV(strx);			
 		}
@@ -631,7 +628,6 @@ void Protocols::parseNMEA( const char *str ){
 			IMUstream = true; // IMU and SEN stream
 			SENstream = true;
 			CALstream = false;			
-			TSTstream = false; 
 			sprintf(strx,"OK for $FT3\r\n");
 			Router::sendXCV(strx);			
 		}
@@ -639,7 +635,6 @@ void Protocols::parseNMEA( const char *str ){
 			IMUstream = false;
 			SENstream = false;			
 			CALstream = true; // Accel calibration stream
-			TSTstream = false; 
 			sprintf(strx,"OK for $FT4\r\n");
 			Router::sendXCV(strx);			
 		}
@@ -647,7 +642,6 @@ void Protocols::parseNMEA( const char *str ){
 			IMUstream = false;
 			SENstream = false;
 			CALstream = false; 			
-			TSTstream = true;
 			sprintf(strx,"OK for $FT5\r\n");
 			Router::sendXCV(strx);			
 		}
