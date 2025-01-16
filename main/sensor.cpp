@@ -592,15 +592,13 @@ void drawDisplay(void *pvParameters){
 			// Vario Screen
 			if( !(gflags.stall_warning_active || gflags.gear_warning_active || gflags.flarmWarning || gflags.gLoadDisplay )  ) {
 				// ESP_LOGI(FNAME,"TE=%2.3f", te_vario.get() );
-// modif gfm affichage d'une tension batterie nulle tant que les biais gyros n'ont pas été initialisés
 				if (  (BIAS_Init > 0)  || (TAS.get() > 15.0) ){
 					display->drawDisplay( airspeed, Vztotbi.get() /*te_vario.get()*/, AverageTotalEnergy.LowPass1()/*aTE*/, polar_sink, altitude.get(), t, battery, s2f_delta, as2f, average_climb.get(), Switch::getCruiseState(), gflags.standard_setting, flap_pos.get() );
 				}	
 				else {
 					display->drawDisplay( airspeed,  Vztotbi.get() /*te_vario.get()*/, AverageTotalEnergy.LowPass1() /*aTE*/, polar_sink, altitude.get(), t, 0.0, s2f_delta, as2f, average_climb.get(), Switch::getCruiseState(), gflags.standard_setting, flap_pos.get() );
 				}
-// fin modif gfm
-				}
+			}
 			if( screen_centeraid.get() ){
 				if( centeraid ){
 					centeraid->tick();
@@ -609,8 +607,7 @@ void drawDisplay(void *pvParameters){
 		}
 		if( flarm_alarm_holdtime )
 			flarm_alarm_holdtime--;
-//		drawDisplayTime = (esp_timer_get_time()/1000.0) - drawDisplayTime;
-//		ESP_LOGI(FNAME,"drawDisplay: %0.1f  / %0.1f", drawDisplayTime, 20.0 );
+
 		vTaskDelay(20/portTICK_PERIOD_MS);
 		if( uxTaskGetStackHighWaterMark( dpid ) < 512  )
 			ESP_LOGW(FNAME,"Warning drawDisplay stack low: %d bytes", uxTaskGetStackHighWaterMark( dpid ) );
@@ -648,8 +645,7 @@ void audioTask(void *pvParameters){
 		}
 		doAudio();
 		Router::routeXCV();
-//		audioTaskTime = (esp_timer_get_time()/1000.0) - audioTaskTime;
-//		ESP_LOGI(FNAME,"audioTask: %0.1f  / %0.1f", audioTaskTime, 100.0 );
+
 		if( uxTaskGetStackHighWaterMark( apid )  < 512 )
 			ESP_LOGW(FNAME,"Warning audio task stack low: %d", uxTaskGetStackHighWaterMark( apid ) );
 		vTaskDelayUntil(&xLastWakeTime, 100/portTICK_PERIOD_MS);
@@ -1013,7 +1009,7 @@ static void processIMU(void *pvParameters)
 		TAS.set( Rhocorr.get() * CAS.ABfilt() );
 
 		// computer/filter altitude
-		ALT.ABupdate( dtStat.getdt(), (1.0 - pow( (statP.get()-(QNH.get()-1013.25)) * 0.000986923 , 0.1902891634 ) ) * (273.15 + 15) * 153.846153846 );
+		ALT.ABupdate( dtStat.getdt(), (1.0 - pow( (statP.get()-(QNH.get()-1013.25)) * 0.000986923 , 0.1902891634 ) ) * 44330.76923 );
 		
 		// update Vz baro
 		// in glider operation, gaining altitude and energy is considered positive. However in NED representation vertical axis is positive pointing down.
@@ -1083,8 +1079,6 @@ static void processIMU(void *pvParameters)
 			// baro inertial TAS & TAS square in any frame
 			TASbiSquare.set( Ubi.get() * Ubi.get() + Vbi.get() * Vbi.get() + Wbi.get() * Wbi.get() );
 			TASbi.set( sqrt( TASbiSquare.get() ) );
-
-				
 			
 			// process gyro bias and local gravity estimates when TAS < 15 m/s
 			if ( TAS.get() < 15.0 ) {
@@ -1648,13 +1642,12 @@ void readSensors(void *pvParameters){
 		#define fcAoB1 (10.0/(10.0+FreqBeta))
 		#define fcAoB2 (1.0-fcAoB1)		
 		float WingLoad = gross_weight.get() / polar_wingarea.get();  // should be only computed when pilot change weight settings in XCVario
-		//xSemaphoreTake( dataMutex, 3/portTICK_PERIOD_MS ); // prevent data conflicts for 3ms max.		
 		if ( CAS.ABfilt() >10.0 ) { // compute AoA and AoB only when CAS is above 10m/s
 			AccelzFiltAoA = 0.8 * AccelzFiltAoA + 0.2 * accelz.ABfilt(); // simple ~3 Hz low pass on accel z
 			CL = -AccelzFiltAoA * 2 / RhoSLISA * WingLoad / CAS.ABfilt() / CAS.ABfilt();
 			dAoA = ( CL - prevCL ) / CLA;
 			prevCL = CL;
-			if (abs(AccelzFiltAoA) > 1.0) { //when not close to Az=0, hybridation of aoa from drag & aoa from lift
+			if ( (abs(AccelzFiltAoA) > 1.0) && ( accelz.ABfilt() != 0.0 ) ) { //when not close to Az=0, hybridation of aoa from drag & aoa from lift
 				AoARaw = -(accelx.ABfilt()/ accelz.ABfilt()) - Speed2Fly.cw( CAS.ABfilt() ) / Speed2Fly.getN();
 				AoA.set( fcAoA1 * ( AoA.get() + dAoA ) + fcAoA2 * AoARaw );
 			}  else { //when  close to Az=0, only aoa from lift considered
