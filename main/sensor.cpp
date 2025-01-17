@@ -345,7 +345,7 @@ AlphaBeta accelx, accely, accelz;
 float accelNz;
 
 // alpha beta class for gyro and accel module
-AlphaBeta GyroModule, AccelModule;
+AlphaBeta GyroModuleSquare, AccelModuleSquare;
 
 // alpha beta filters classes for AHRS roll and pitch
 AlphaBeta RollAHRS, PitchAHRS;
@@ -886,8 +886,8 @@ static void processIMU(void *pvParameters)
 		
 	// alpha beta gyro and accel module filters parameters
 	#define NModule 4 //  AB Filter parameter
-	GyroModule.ABinit( NModule, processIMUperiod );
-	AccelModule.ABinit( NModule, processIMUperiod );	
+	GyroModuleSquare.ABinit( NModule, processIMUperiod );
+	AccelModuleSquare.ABinit( NModule, processIMUperiod );	
 
 	// U/V/Wbi and U/V/WbiPrim complementary filters initialization
 	#define Ucfperiod 8.0 // 8 second complementary filter period
@@ -948,10 +948,10 @@ static void processIMU(void *pvParameters)
 		}
 
 		// compute/filter acceleration module
-		AccelModule.ABupdate( dtAcc.getdt(), ( accelx.ABfilt() * accelx.ABfilt() + accely.ABfilt() * accely.ABfilt() + accelz.ABfilt() * accelz.ABfilt() ) );
+		AccelModuleSquare.ABupdate( dtAcc.getdt(), ( accelx.ABfilt() * accelx.ABfilt() + accely.ABfilt() * accely.ABfilt() + accelz.ABfilt() * accelz.ABfilt() ) );
 		
 		// compute/filter gyro module
-		GyroModule.ABupdate( dtGyr.getdt(), ( gyrox.ABfilt() * gyrox.ABfilt() + gyroy.ABfilt() * gyroy.ABfilt() + gyroz.ABfilt() * gyroz.ABfilt() ) );		
+		GyroModuleSquare.ABupdate( dtGyr.getdt(), ( gyrox.ABfilt() * gyrox.ABfilt() + gyroy.ABfilt() * gyroy.ABfilt() + gyroz.ABfilt() * gyroz.ABfilt() ) );		
 
 		// get static pressure
 		bool ok=false;
@@ -1484,10 +1484,10 @@ void readSensors(void *pvParameters){
 		ProcessTimeSensors = (esp_timer_get_time()/1000.0);
 
 		// compute acceleration module variation
-		AccelModulePrimLevel.update( AccelModule.ABprim()/2.0/sqrt(AccelModule.ABfilt()) );		
+		AccelModulePrimLevel.update( AccelModuleSquare.ABprim()/2.0/sqrt(AccelModuleSquare.ABfilt()) );		
 		
 		// compute gyro module variation
-		GyroModulePrimLevel.update( GyroModule.ABprim()/2.0/sqrt(GyroModule.ABfilt()) );
+		GyroModulePrimLevel.update( GyroModuleSquare.ABprim()/2.0/sqrt(GyroModuleSquare.ABfilt()) );
 
 		// compute Roll Module from gravity
 		RollModule = 0.8 * RollModule + 0.2 * abs( atan2(-gravBODY.y, -gravBODY.z) );
