@@ -258,10 +258,8 @@ bool CALfirstpass;
 
 // IMU variables	
 mpud::float_axes_t accelMPU;
-mpud::float_axes_t accelBODY;	
 mpud::float_axes_t gyroRPS;
 mpud::float_axes_t gyroMPU;
-mpud::float_axes_t gyroBODY;
 
 // variables for bias and gravity estimation
 mpud::float_axes_t currentAccelBias;
@@ -928,14 +926,10 @@ static void processIMU(void *pvParameters)
 			gyroMPU.x = -(gyroRPS.z - GroundGyroBias.z);
 			gyroMPU.y = -(gyroRPS.y - GroundGyroBias.y);
 			gyroMPU.z = -(gyroRPS.x - GroundGyroBias.x);				
-			// convert NEDMPU to NEDBODY and apply bias estimation
-			gyroBODY.x = C_T.get() * gyroMPU.x + STmultSS.get() * gyroMPU.y + STmultCS.get() * gyroMPU.z; // + BiasQuatGx.get();
-			gyroBODY.y = C_S.get() * gyroMPU.y - S_S.get() * gyroMPU.z; //+ BiasQuatGy.get();
-			gyroBODY.z = -S_T.get() * gyroMPU.x + SSmultCT.get()  * gyroMPU.y + CTmultCS.get() * gyroMPU.z; // + BiasQuatGz.get();
-			// update gyro filters
-			gyrox.ABupdate(dtGyr.getdt(), gyroBODY.x );
-			gyroy.ABupdate(dtGyr.getdt(), gyroBODY.y );			
-			gyroz.ABupdate(dtGyr.getdt(), gyroBODY.z );			
+			// convert NEDMPU to NEDBODY and apply bias estimation and update filters
+			gyrox.ABupdate(dtGyr.getdt(), (C_T.get() * gyroMPU.x + STmultSS.get() * gyroMPU.y + STmultCS.get() * gyroMPU.z) /* + BiasQuatGx.get() */ );
+			gyroy.ABupdate(dtGyr.getdt(), (-S_T.get() * gyroMPU.x + SSmultCT.get()  * gyroMPU.y + CTmultCS.get() * gyroMPU.z) /* + BiasQuatGz.get() */ );			
+			gyroz.ABupdate(dtGyr.getdt(), (C_S.get() * gyroMPU.y - S_S.get() * gyroMPU.z) /*+ BiasQuatGy.get() */ );			
 		}
 		// get accel data
 		errMPU = MPU.acceleration(&accelRaw);// read raw gyro data
@@ -947,20 +941,17 @@ static void processIMU(void *pvParameters)
 			accelMPU.y = ((-accelG.y*9.807) - currentAccelBias.y ) * currentAccelGain.y;
 			accelMPU.z = ((-accelG.x*9.807) - currentAccelBias.z ) * currentAccelGain.z;
 			// convert from MPU to BODY and filter with A/B
-			accelBODY.x = C_T.get() * accelMPU.x + STmultSS.get() * accelMPU.y + STmultCS.get() * accelMPU.z + ( gyroy.ABfilt() * gyroy.ABfilt() + gyroz.ABfilt() * gyroz.ABfilt() ) * distCG.get() ;
-			accelx.ABupdate( dtAcc.getdt(), accelBODY.x );
-			accelBODY.y = C_S.get() * accelMPU.y - S_S.get() * accelMPU.z;
-			accely.ABupdate( dtAcc.getdt(), accelBODY.y  );
-			accelBODY.z = -S_T.get() * accelMPU.x + SSmultCT.get() * accelMPU.y + CTmultCS.get() * accelMPU.z ;
-			accelz.ABupdate( dtAcc.getdt(), accelBODY.z );
+			accelx.ABupdate( dtAcc.getdt(), C_T.get() * accelMPU.x + STmultSS.get() * accelMPU.y + STmultCS.get() * accelMPU.z + ( gyroy.ABfilt() * gyroy.ABfilt() + gyroz.ABfilt() * gyroz.ABfilt() ) * distCG.get()  );
+			accely.ABupdate( dtAcc.getdt(), C_S.get() * accelMPU.y - S_S.get() * accelMPU.z  );
+			accelz.ABupdate( dtAcc.getdt(), -S_T.get() * accelMPU.x + SSmultCT.get() * accelMPU.y + CTmultCS.get() * accelMPU.z);
 			accelNz = -accelz.ABfilt()/GRAVITY;
 		}
 
 		// compute/filter acceleration module
-		AccelModule.ABupdate( dtAcc.getdt(), sqrt( accelx.ABfilt() * accelx.ABfilt() + accely.ABfilt() * accely.ABfilt() + accelz.ABfilt() * accelz.ABfilt() ) );
+		AccelModule.ABupdate( dtAcc.getdt(), ( accelx.ABfilt() * accelx.ABfilt() + accely.ABfilt() * accely.ABfilt() + accelz.ABfilt() * accelz.ABfilt() ) );
 		
 		// compute/filter gyro module
-		GyroModule.ABupdate( dtGyr.getdt(), sqrt( gyrox.ABfilt() * gyrox.ABfilt() + gyroy.ABfilt() * gyroy.ABfilt() + gyroz.ABfilt() * gyroz.ABfilt() ) );		
+		GyroModule.ABupdate( dtGyr.getdt(), ( gyrox.ABfilt() * gyrox.ABfilt() + gyroy.ABfilt() * gyroy.ABfilt() + gyroz.ABfilt() * gyroz.ABfilt() ) );		
 
 		// get static pressure
 		bool ok=false;
@@ -1123,8 +1114,8 @@ static void processIMU(void *pvParameters)
 		// Send $I
 		sprintf(str,"$I,%lld,%i,%i,%i,%i,%i,%i,%lld,%i,%i,%i\r\n",
 			dtGyr.gettime(),
-			(int32_t)(accelBODY.x*10000.0), (int32_t)(accelBODY.y*10000.0), (int32_t)(accelBODY.z*10000.0),
-			(int32_t)(gyroBODY.x*100000.0), (int32_t)(gyroBODY.y*100000.0),(int32_t)(gyroBODY.z*100000.0),
+			(int32_t)(accelx.ABraw()*10000.0), (int32_t)(accely.ABraw()*10000.0), (int32_t)(accelz.ABraw()*10000.0),
+			(int32_t)(gyrox.ABraw()*100000.0), (int32_t)(gyroy.ABraw()*100000.0),(int32_t)(gyroz.ABraw()*100000.0),
 			dtStat.gettime(), (int32_t)(statP.get()*100.0),(int32_t)(teP.get()*100.0), (int32_t)(dynP.get()*10)						
 			);						
 		Router::sendXCV(str);
@@ -1493,10 +1484,10 @@ void readSensors(void *pvParameters){
 		ProcessTimeSensors = (esp_timer_get_time()/1000.0);
 
 		// compute acceleration module variation
-		AccelModulePrimLevel.update( AccelModule.ABprim() );		
+		AccelModulePrimLevel.update( AccelModule.ABprim()/2.0/sqrt(AccelModule.ABfilt()) );		
 		
 		// compute gyro module variation
-		GyroModulePrimLevel.update( GyroModule.ABprim() );
+		GyroModulePrimLevel.update( GyroModule.ABprim()/2.0/sqrt(GyroModule.ABfilt()) );
 
 		// compute Roll Module from gravity
 		RollModule = 0.8 * RollModule + 0.2 * abs( atan2(-gravBODY.y, -gravBODY.z) );
