@@ -45,7 +45,6 @@ private:
 	float dt_3;
 	float dt_4;
 	int64_t gettime = 0.0;
-	int64_t currenttime = 0.0;
 public:
 	void ABinit( float N, float dtTypical );
 	void ABinit( float N, float dtTypical, float _Threshold );

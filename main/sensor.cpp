@@ -1066,10 +1066,9 @@ static void processIMU(void *pvParameters)
 			Ubi.update( dtAcc.getdt(), UbiPrim.get(), Ub.ABfilt() );
 			Vbi.update( dtAcc.getdt(), VbiPrim.get(), Vb.ABfilt() );
 			Wbi.update( dtAcc.getdt(), WbiPrim.get(), Wb.ABfilt() );
-			
-			// baro inertial TAS & TAS square in any frame
+
+			// baro inertial TAS square in any frame
 			TASbiSquare.set( Ubi.get() * Ubi.get() + Vbi.get() * Vbi.get() + Wbi.get() * Wbi.get() );
-			TASbi.set( sqrt( TASbiSquare.get() ) );
 			
 			// process gyro bias and local gravity estimates when TAS < 15 m/s
 			if ( TAS.get() < 15.0 ) {
@@ -1510,8 +1509,7 @@ void readSensors(void *pvParameters){
 			AHRS.setBeta( 0.003 );
 		}
 
-		
-		// Adjust Accel A/B filter N value in function of accel module prim level
+		// Adjust Accel A/B filter N value in function of accel module prim level  // level should be automatically set in function of flight history
 		float NAccelupdt = AccelModulePrimLevel.get() / 3.0;
 		if (NAccelupdt < 6.0 ) NAccelupdt = 6.0;
 		if (NAccelupdt > 30.0 ) NAccelupdt = 30.0;
@@ -1650,6 +1648,10 @@ void readSensors(void *pvParameters){
 			AoB.set( 0.0 );
 		}
 
+		// baro inertial TAS in any frame
+		TASbi.set( sqrt( TASbiSquare.dsget() ) );
+
+
 		// if TAS > ~110 km/h and bank is less than ~4.5°, long term average of AoB to detect bias
 		#define RollLimitAoB 0.08 // max roll for AoB bias estimation
 		#define MinTASAoB 30.0 // minimum speed to evaluate AoB bias
@@ -1683,7 +1685,7 @@ void readSensors(void *pvParameters){
 			NALTbiTASbiChanged = false;
 		}
 		ALTbiEnergy.ABupdate( dtStat.getdt(), ALTbi.get() );
-		TASbiEnergy.ABupdate( dtStat.getdt(), ( TASbiSquare.get() / GRAVITY / 2.0 ) );			
+		TASbiEnergy.ABupdate( dtAcc.getdtds(), ( TASbiSquare.dsget() / GRAVITY / 2.0 ) );			
 		// Total Energy is sum of both potential and kinetic energies variations
 		Vztotbi.set( ALTbiEnergy.ABprim() + TASbiEnergy.ABprim() );
 		

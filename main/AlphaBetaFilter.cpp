@@ -46,7 +46,7 @@ int16_t AlphaBeta::ABNget() {
 
 // AB filter update		
 void AlphaBeta::ABupdate(float dt, float RawData ) {
-	#define MaxZicket 2 // maximum number of concecuitives zickets to let the filter track the signal. If zicket is higher a step change in signal is suspected
+	#define MaxZicket 3 // maximum number of concecuitives zickets to let the filter track the signal. If zicket is higher a step change in signal is suspected
 	// process sample if dt above dtMin and below dtMax (dtMin typicaly average dt / 4 and dtMax typicaly 4 x average dt)
 	writing = false;
 	if ( dt > dtMin && dt < dtMax  ) {
@@ -113,7 +113,7 @@ void AlphaBeta::ABupdate(float dt, float RawData ) {
 						// if new zicket makes filter unstable (step change), arm and switch to alternate AB filter
 						_prim = prim;
 						_filt = filt;
-						zicket = 4*MaxZicket;
+						zicket = 3*MaxZicket;
 					}
 				}
 			} else {
@@ -153,18 +153,16 @@ void AlphaBeta::ABupdate(float dt, float RawData ) {
 
 // AB filter filtered output
 float AlphaBeta::ABfilt(void) {
-	currenttime = esp_timer_get_time();
 	while( writing ) {
-		if ( abs( currenttime - gettime ) > 1000 ) break; // wait for 1 ms max if writing is in process
+		if ( abs( (int64_t)esp_timer_get_time() - gettime ) > 1000 ) break; // wait for 1 ms max if writing is in process
 	}
 	return filt;
 }
 
 // AB filter derivative output
 float AlphaBeta::ABprim(void) {
-	currenttime = esp_timer_get_time();
 	while( writing ) {
-		if ( abs( currenttime - gettime ) > 1000 ) break; // wait for 1 ms max if writing is in process
+		if ( abs( (int64_t)esp_timer_get_time() - gettime ) > 1000 ) break; // wait for 1 ms max if writing is in process
 	}
 	return prim;
 }
@@ -177,24 +175,32 @@ bool AlphaBeta::ABstable(void) {
 
 // AB filter unfiltered output
 float AlphaBeta::ABraw(void) {
-	currenttime = esp_timer_get_time();	
 	while( writing ) {
-		if ( abs( currenttime - gettime ) > 1000 ) break; // wait for 1 ms max if writing is in process
+		if ( abs( (int64_t)esp_timer_get_time() - gettime ) > 1000 ) break; // wait for 1 ms max if writing is in process
 	}
 	return unfiltered;
 }
 
 // AB filter down scale x 4
 float AlphaBeta::ABfiltds( void ) {
+	while( writing ) {
+		if ( abs( (int64_t)esp_timer_get_time() - gettime ) > 1000 ) break; // wait for 1 ms max if writing is in process
+	}	
 	return (( filt_1 + filt_2 + filt_3 + filt_4 ) / 4.0);
 }
 
-// AB filter down scale x 4
+// AB derivative (prim) down scale x 4
 float AlphaBeta::ABprimds( void ) {
+	while( writing ) {
+		if ( abs( (int64_t)esp_timer_get_time() - gettime ) > 1000 ) break; // wait for 1 ms max if writing is in process
+	}	
 	return (( prim_1 + prim_2 + prim_3 + prim_4 ) / 4.0);
 }
 
 // AB dt down scale x 4
 float AlphaBeta::ABdtds( void ) {
+	while( writing ) {
+		if ( abs( (int64_t)esp_timer_get_time() - gettime ) > 1000 ) break; // wait for 1 ms max if writing is in process
+	}	
 	return ( dt_1 + dt_2 + dt_3 + dt_4);
 }
