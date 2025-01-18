@@ -387,7 +387,7 @@ LowPassFilter BiasAoB;
 Magdwick AHRS;
 
 // declare SetGet class to reduce read write conflicts between tasks
-SetGet statP, teP, dynP, TAS, Vztotbi, TASbi, TASbiSquare, AoA, AoB, gyroCorrx;
+SetGet statP, teP, dynP, TAS, Vztotbi, TASbi, TASbiSquare, AoA, AoB;
 SetGet Vh, DHeading;
 SetGet Rhocorr;
 SetGet PseudoHeadingPrim;
@@ -1484,10 +1484,10 @@ void readSensors(void *pvParameters){
 		ProcessTimeSensors = (esp_timer_get_time()/1000.0);
 
 		// compute acceleration module variation
-		AccelModulePrimLevel.update( AccelModuleSquare.ABprim()/2.0/sqrt(AccelModuleSquare.ABfilt()) );		
+		AccelModulePrimLevel.update( AccelModuleSquare.ABprimds()/2.0/sqrt(AccelModuleSquare.ABfiltds()) );		
 		
 		// compute gyro module variation
-		GyroModulePrimLevel.update( GyroModuleSquare.ABprim()/2.0/sqrt(GyroModuleSquare.ABfilt()) );
+		GyroModulePrimLevel.update( GyroModuleSquare.ABprimds()/2.0/sqrt(GyroModuleSquare.ABfiltds()) );
 
 		// compute Roll Module from gravity
 		RollModule = 0.8 * RollModule + 0.2 * abs( atan2(-gravBODY.y, -gravBODY.z) );
@@ -1524,7 +1524,7 @@ void readSensors(void *pvParameters){
 		#define PeriodVelbiGain 2.0
 		#define GyrAmplitudeLimit 0.4
 		// Gyro x and z amplitude used to adjust Baro Inertial filter
-		float GyrxzAmplitudeBIdyn = abs(gyrox.ABfilt())*0.9 + abs(gyroz.ABfilt())*0.4;			
+		float GyrxzAmplitudeBIdyn = abs(gyrox.ABfiltds())*0.9 + abs(gyroz.ABfiltds())*0.4;			
 		if ( GyrxzAmplitudeBIdyn < GyrAmplitudeLimit ) {
 			//DynPeriodVelbi = 0.95 * DynPeriodVelbi + 0.05 * PeriodVelbi / ( 1 + GyrxzAmplitudeBIdyn / (GyrAmplitudeLimit/PeriodVelbiGain) );
 			DynPeriodVelbi = 0.95 * DynPeriodVelbi + 0.05 * PeriodVelbi / ( 1 + GyrxzAmplitudeBIdyn * (PeriodVelbiGain - 1.0) / GyrAmplitudeLimit );					
@@ -1545,13 +1545,13 @@ void readSensors(void *pvParameters){
 		#define GMaxBias 0.005 // limit biais correction to 5 mrad/s
 		if ( (TAS.get() > 15.0) && (abs(AHRS.getRoll()) < RollLimit)  && (abs(AHRS.getPitch()) < PitchLimit) ) {
 			// When there is no outliers from d(roll)/dt and d(pitch)/dt, compute bias as Gx - d(roll)/dt and Gy - d(pitch)/dt long term average.
-			if ( abs(RollAHRS.ABprim()) < RollLimit ) GyroBiasx.LPupdate( gyrox.ABfilt() - RollAHRS.ABprim() );
-			if ( abs(PitchAHRS.ABprim()) < PitchLimit ) GyroBiasy.LPupdate( gyroy.ABfilt() - PitchAHRS.ABprim() );					
+			if ( abs(RollAHRS.ABprimds()) < RollLimit ) GyroBiasx.LPupdate( gyrox.ABfiltds() - RollAHRS.ABprimds() );
+			if ( abs(PitchAHRS.ABprimds()) < PitchLimit ) GyroBiasy.LPupdate( gyroy.ABfiltds() - PitchAHRS.ABprimds() );					
 			// compute pseudo heading from GNSS
 			float GnssTrack = atan2( GnssVy.ABfilt(), GnssVx.ABfilt() );
 			PseudoHeadingPrim.set( ( GnssVy.ABprim() * cos(GnssTrack) - GnssVx.ABprim() * sin(GnssTrack) ) / TASbi.get() );
 			// compute Gz - pseudo heading variation long term average.		
-			if ( abs(PseudoHeadingPrim.get()) < HeadingPrimLimit ) GyroBiasz.LPupdate( gyroz.ABfilt() - PseudoHeadingPrim.get() );
+			if ( abs(PseudoHeadingPrim.get()) < HeadingPrimLimit ) GyroBiasz.LPupdate( gyroz.ABfiltds() - PseudoHeadingPrim.get() );
 			// update gyros biases variables
 			BiasQuatGx.set( GyroBiasx.LowPass2() );
 			BiasQuatGy.set( GyroBiasy.LowPass2() );
@@ -1633,18 +1633,18 @@ void readSensors(void *pvParameters){
 		#define fcAoB1 (10.0/(10.0+FreqBeta))
 		#define fcAoB2 (1.0-fcAoB1)		
 		float WingLoad = gross_weight.get() / polar_wingarea.get();  // should be only computed when pilot change weight settings in XCVario
-		if ( CAS.ABfilt() >10.0 ) { // compute AoA and AoB only when CAS is above 10m/s
-			AccelzFiltAoA = 0.8 * AccelzFiltAoA + 0.2 * accelz.ABfilt(); // simple ~3 Hz low pass on accel z
-			CL = -AccelzFiltAoA * 2 / RhoSLISA * WingLoad / CAS.ABfilt() / CAS.ABfilt();
+		if ( CAS.ABfiltds() >10.0 ) { // compute AoA and AoB only when CAS is above 10m/s
+			AccelzFiltAoA = 0.8 * AccelzFiltAoA + 0.2 * accelz.ABfiltds(); // simple ~3 Hz low pass on accel z
+			CL = -AccelzFiltAoA * 2 / RhoSLISA * WingLoad / CAS.ABfiltds() / CAS.ABfiltds();
 			dAoA = ( CL - prevCL ) / CLA;
 			prevCL = CL;
-			if ( (abs(AccelzFiltAoA) > 1.0) && ( accelz.ABfilt() != 0.0 ) ) { //when not close to Az=0, hybridation of aoa from drag & aoa from lift
-				AoARaw = -(accelx.ABfilt()/ accelz.ABfilt()) - Speed2Fly.cw( CAS.ABfilt() ) / Speed2Fly.getN();
+			if ( (abs(AccelzFiltAoA) > 1.0) && ( accelz.ABfiltds() != 0.0 ) ) { //when not close to Az=0, hybridation of aoa from drag & aoa from lift
+				AoARaw = -(accelx.ABfiltds()/ accelz.ABfiltds()) - Speed2Fly.cw( CAS.ABfiltds() ) / Speed2Fly.getN();
 				AoA.set( fcAoA1 * ( AoA.get() + dAoA ) + fcAoA2 * AoARaw );
 			}  else { //when  close to Az=0, only aoa from lift considered
                 AoA.set( AoA.get() + dAoA ) ;
             }			
-			AoB.set( fcAoB1 * AoB.get() + fcAoB2 * ( KAoB * WingLoad * accely.ABfilt()/ dynP.get() - KGx * gyroCorrx.get() / TAS.get()) - Bias_AoB.get() );	
+			AoB.set( fcAoB1 * AoB.get() + fcAoB2 * ( KAoB * WingLoad * accely.ABfiltds()/ dynP.get() - KGx * gyrox.ABfiltds() / TAS.get()) - Bias_AoB.get() );	
 		} else {
 			AoA.set( 0.0 );
 			AoB.set( 0.0 );
@@ -1667,7 +1667,7 @@ void readSensors(void *pvParameters){
 
 		// baro inertial altitude
 		// ALTbi is computed using a complementary filter with baro altitude and baro inertial vertical speed in earth frame
-		ALTbi.update( dtStat.getdt(), - Vzbi, ALT.ABfilt() );
+		ALTbi.update( dtStat.getdt(), - Vzbi, ALT.ABfiltds() );
 
 		// Energy variation d(TE)/dt
 		// energy variation calculation d(E/mg)/dt = d(ALT)/dt + d(1/2 1/g TAS²)/dt
@@ -1846,7 +1846,7 @@ void readSensors(void *pvParameters){
 			// ESP_LOGI(FNAME,"AS: %f m/s, CURSL: %f°, SLIP: %f", as, -accelG[1]*K / (as*as), slipAngle );
 		} */ // TODO replace Eckhard code with flight test values
 
-		cas = CAS.ABfilt() * 3.6;
+		cas = CAS.ABfiltds() * 3.6;
 		if ( cas < 30.0 ) cas = 0.0;
 		if( (int( ias.get()+0.5 ) != int( cas+0.5 ) ) || !(count%20) ){
 			ias.set( cas );  // low pass filter
@@ -2034,7 +2034,7 @@ void readTemp(void *pvParameters){
 				OATemp.ABupdate( 1.0, t );
 				temperature =  OATemp.ABfilt();
 				if( temperature > 65.0 )
-					temperature = 20 - ALT.ABfilt() * .0065;  // if temperature error, switch to standard ISA + 5
+					temperature = 20 - ALT.ABfiltds() * .0065;  // if temperature error, switch to standard ISA + 5
 				temperatureLP.LPupdate( temperature );
 				if( abs(temperatureLP.LowPass1() - temp_prev) > 0.1 ){
 					OAT.set( std::round(temperatureLP.LowPass1()*10)/10 );

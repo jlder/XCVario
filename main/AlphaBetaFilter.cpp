@@ -66,6 +66,10 @@ void AlphaBeta::ABupdate(float dt, float RawData ) {
 			_filt = RawData;
 			prim = 0.0;
 			_prim = 0.0;
+			prim_1 = 0.0;
+			prim_2 = 0.0;
+			prim_3 = 0.0;
+			prim_4 = 0.0;
 			writing = false;
 			firstpass = false;
 			zicket = 4*MaxZicket;
@@ -83,6 +87,10 @@ void AlphaBeta::ABupdate(float dt, float RawData ) {
 						if ( prim < primMin ) prim = primMin;
 						if ( prim > primMax ) prim = primMax;
 					}
+					prim_1 = prim_2;
+					prim_2 = prim_3;
+					prim_3 = prim_4;
+					prim_4 = prim;
 					filt = filt + alpha * delta + prim * dt;
 					if ( filtMin != 0.0 || filtMax != 0.0 ) {
 						if ( filt < filtMin ) filt = filtMin;
@@ -127,6 +135,10 @@ void AlphaBeta::ABupdate(float dt, float RawData ) {
 					filt_2 = filt;
 					filt_3 = filt;
 					filt_4 = filt;
+					prim_1 = prim;
+					prim_2 = prim;
+					prim_3 = prim;
+					prim_4 = prim;					
 					dt_1 = dt;
 					dt_2 = dt;
 					dt_3 = dt;
@@ -175,6 +187,11 @@ float AlphaBeta::ABraw(void) {
 // AB filter down scale x 4
 float AlphaBeta::ABfiltds( void ) {
 	return (( filt_1 + filt_2 + filt_3 + filt_4 ) / 4.0);
+}
+
+// AB filter down scale x 4
+float AlphaBeta::ABprimds( void ) {
+	return (( prim_1 + prim_2 + prim_3 + prim_4 ) / 4.0);
 }
 
 // AB dt down scale x 4

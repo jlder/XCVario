@@ -36,6 +36,10 @@ private:
 	float filt_2;
 	float filt_3;
 	float filt_4;
+	float prim_1;
+	float prim_2;
+	float prim_3;
+	float prim_4;	
 	float dt_1;
 	float dt_2;
 	float dt_3;
@@ -55,6 +59,7 @@ public:
 	bool ABstable(void);
 	float ABraw(void);
 	float ABfiltds();
+	float ABprimds();
 	float ABdtds();
 };
 
