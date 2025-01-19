@@ -21,7 +21,7 @@ void AlphaBeta::ABinit( float N, float dtTypical, float _Threshold, float _filtM
 		beta = (6.0 / N / (N + 1.0));
 		dtAvg = dtTypical;
 		dtMax = dtTypical * 3.0;
-		dtMin = dtTypical / 3.0;
+		dtMin = dtTypical * 0.33;
 	}
 	firstpass = true;
 	Threshold = _Threshold;
@@ -186,7 +186,7 @@ float AlphaBeta::ABfiltds( void ) {
 	while( writing ) {
 		if ( abs( (int64_t)esp_timer_get_time() - gettime ) > 1000 ) break; // wait for 1 ms max if writing is in process
 	}	
-	return (( filt_1 + filt_2 + filt_3 + filt_4 ) / 4.0);
+	return (( filt_1 + filt_2 + filt_3 + filt_4 ) * 0.25 );
 }
 
 // AB derivative (prim) down scale x 4
@@ -194,7 +194,7 @@ float AlphaBeta::ABprimds( void ) {
 	while( writing ) {
 		if ( abs( (int64_t)esp_timer_get_time() - gettime ) > 1000 ) break; // wait for 1 ms max if writing is in process
 	}	
-	return (( prim_1 + prim_2 + prim_3 + prim_4 ) / 4.0);
+	return (( prim_1 + prim_2 + prim_3 + prim_4 ) * 0.25 );
 }
 
 // AB dt down scale x 4
@@ -202,5 +202,5 @@ float AlphaBeta::ABdtds( void ) {
 	while( writing ) {
 		if ( abs( (int64_t)esp_timer_get_time() - gettime ) > 1000 ) break; // wait for 1 ms max if writing is in process
 	}	
-	return ( dt_1 + dt_2 + dt_3 + dt_4);
+	return ( dt_1 + dt_2 + dt_3 + dt_4 );
 }

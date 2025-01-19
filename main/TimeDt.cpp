@@ -9,7 +9,7 @@
 void TimeDt::update( float val ) {
 	writing = true;
 	if ( firstpass ) {
-		dtmin = val / 3.0;
+		dtmin = val * 0.33;
 		dtmax = dt * 3.0;
 		dt_1 = 0.0;
 		dt_2 = 0.0;

@@ -187,15 +187,17 @@ void Magdwick::update(	float dt, float gx, float gy, float gz, float ax, float a
 		gettime = esp_timer_get_time();
 		
 		// compute Euler angles
+		#define M_PI_DIV2 M_PI / 2.0
+		#define M_PI_MUL2 M_PI * 2.0
 		if ( abs(q1 * q3 - q0 * q2) < 0.5 ) {
 			Pitch = asin(-2.0 * (q1 * q3 - q0 * q2));
 		} else {
-			Pitch = M_PI / 2.0 * signbit((q0 * q2 - q1 * q3 ));
+			Pitch = M_PI_DIV2 * signbit((q0 * q2 - q1 * q3 ));
 		}
 		Roll = atan2((q0 * q1 + q2 * q3), (0.5 - q1 * q1 - q2 * q2));
 		Yaw = atan2(2.0 * (q1 * q2 + q0 * q3), (q0 * q0 + q1 * q1 - q2 * q2 - q3 * q3));
-		if (Yaw < 0.0 ) Yaw = Yaw + 2.0 * M_PI;
-		if (Yaw > 2.0 * M_PI) Yaw = Yaw - 2.0 * M_PI;
+		if (Yaw < 0.0 ) Yaw = Yaw + M_PI_MUL2;
+		if (Yaw > 2.0 * M_PI) Yaw = Yaw - M_PI_MUL2;
 		
 		// compute gravity estimation using IMU quaternion
 		GravIMUx = -GRAVITY * 2.0 * (q1 * q3 - q0 * q2);
@@ -217,10 +219,10 @@ void Magdwick::update(	float dt, float gx, float gy, float gz, float ax, float a
 			Roll = atan2( -AverageAy, -AverageAz );
 			Pitch = asin( AverageAx/ sqrt( AverageAx * AverageAx + AverageAy * AverageAy + AverageAz * AverageAz ) );
 			Yaw = 0.0;
-			q0=((cos(Roll/2.0)*cos(Pitch/2.0)*cos(Yaw/2.0)+sin(Roll/2.0)*sin(Pitch/2.0)*sin(Yaw/2.0)));
-			q1=((sin(Roll/2.0)*cos(Pitch/2.0)*cos(Yaw/2.0)-cos(Roll/2.0)*sin(Pitch/2.0)*sin(Yaw/2.0)));
-			q2=((cos(Roll/2.0)*sin(Pitch/2.0)*cos(Yaw/2.0)+sin(Roll/2.0)*cos(Pitch/2.0)*sin(Yaw/2.0)));
-			q3=((cos(Roll/2.0)*cos(Pitch/2.0)*sin(Yaw/2.0)-sin(Roll/2.0)*sin(Pitch/2.0)*cos(Yaw/2.0)));
+			q0=((cos(Roll*0.5)*cos(Pitch*0.5)*cos(Yaw*0.5)+sin(Roll*0.5)*sin(Pitch*0.5)*sin(Yaw*0.5)));
+			q1=((sin(Roll*0.5)*cos(Pitch*0.5)*cos(Yaw*0.5)-cos(Roll*0.5)*sin(Pitch*0.5)*sin(Yaw*0.5)));
+			q2=((cos(Roll*0.5)*sin(Pitch*0.5)*cos(Yaw*0.5)+sin(Roll*0.5)*cos(Pitch*0.5)*sin(Yaw*0.5)));
+			q3=((cos(Roll*0.5)*cos(Pitch*0.5)*sin(Yaw*0.5)-sin(Roll*0.5)*sin(Pitch*0.5)*cos(Yaw*0.5)));
 			SumCount++;
 			if ( SumCount > AverageSamplesCount ) InitDone = true;
 		}

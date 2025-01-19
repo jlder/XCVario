@@ -20,7 +20,7 @@ void SetGet::set( float value ) {
 		data_2 = data_2;
 		data_3 = data_1;
 		data_4 = value;
-		dsvalue = (data_1 + data_2 + data_3 + data_4 ) / 4.0;
+		dsvalue = (data_1 + data_2 + data_3 + data_4 ) * 0.25;
 		writing = false;
 	}
 }

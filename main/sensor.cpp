@@ -250,6 +250,8 @@ char str[500]; 	// string for flight test message broadcast on wireless // TODO 
 #define GroundAccelprimlimit 2.5 // m/s3
 #define	GroundGyroprimlimit 0.55// rad/s2
 #define RhoSLISA 1.225
+#define TwoInvRhoSLISA 2.0/RhoSLISA
+#define LOCALGRAVITY 9.807
 
 bool IMUstream;
 bool SENstream;
@@ -316,7 +318,7 @@ float AllyvelU;
 float Allyvel3D = 0.0;
 float Allyvel2D;
 
-static float GRAVITY = 9.807;
+static float GRAVITY = LOCALGRAVITY;
 
 static float baroP=0; // barometric pressure
 static float temperature=15.0;
@@ -743,15 +745,15 @@ void AccelCalibration() {
 	if ( GyroModulePrimLevel.get() < GroundGyroprimlimit  &&  AccelModulePrimLevel.get() < GroundAccelprimlimit) { //MOD#6 improve calibration process
 		if ( gyromodulestable > 5 ) gyromodulestable--;  
 		if ( gyromodulestable == 5 ) {
-			accelAvgx = -accelG.z*9.807;
-			accelAvgy = -accelG.y*9.807;
-			accelAvgz = -accelG.x*9.807;
+			accelAvgx = -accelG.z*LOCALGRAVITY;
+			accelAvgy = -accelG.y*LOCALGRAVITY;
+			accelAvgz = -accelG.x*LOCALGRAVITY;
 			gyromodulestable = 4;
 		}
 		if ( gyromodulestable < 5 ) {
-			accelAvgx = 0.8 * accelAvgx + 0.2 * (-accelG.z*9.807);
-			accelAvgy = 0.8 * accelAvgy + 0.2 * (-accelG.y*9.807);
-			accelAvgz = 0.8 * accelAvgz + 0.2 * (-accelG.x*9.807);
+			accelAvgx = 0.8 * accelAvgx + 0.2 * (-accelG.z*LOCALGRAVITY);
+			accelAvgy = 0.8 * accelAvgy + 0.2 * (-accelG.y*LOCALGRAVITY);
+			accelAvgz = 0.8 * accelAvgz + 0.2 * (-accelG.x*LOCALGRAVITY);
 			if ( gyromodulestable > 1 ) gyromodulestable--;
 		}					
 		// store max and min with a short ~10 Hz low pass // MOD#9
@@ -792,7 +794,7 @@ void AccelCalibration() {
 	Acceleration gain z in m/s²				
 	<CR><LF>	
 	*/
-	float localGravity = 9.807; // local gravity used during accel calibration. Value is entered using BT $CAL command	
+	// local gravity used during accel calibration. Value is entered using BT $CAL command	
 	if ( gyromodulestable == 1 ) {
 		if( gflags.gload_alarm ) {
 			Audio::alarm( false );
@@ -802,7 +804,7 @@ void AccelCalibration() {
 			dtGyr.gettime(), gyrox.ABfilt(), gyroy.ABfilt(), gyroz.ABfilt(), GyroModulePrimLevel.get(), GroundGyroprimlimit,
 			accelAvgx, accelMaxx, accelMinx, accelAvgy, accelMaxy, accelMiny, accelAvgz, accelMaxz, accelMinz,
 			(accelMaxx+accelMinx)/2, (accelMaxy+accelMiny)/2, (accelMaxz+accelMinz)/2,
-			localGravity /((accelMaxx-accelMinx)/2), localGravity /((accelMaxy-accelMiny)/2), localGravity/((accelMaxz-accelMinz)/2) );
+			LOCALGRAVITY /((accelMaxx-accelMinx)/2), LOCALGRAVITY /((accelMaxy-accelMiny)/2), LOCALGRAVITY/((accelMaxz-accelMinz)/2) );
 	} else {
 		if( !gflags.gload_alarm ) {
 			Audio::alarm( true );
@@ -811,7 +813,7 @@ void AccelCalibration() {
 		sprintf(str,"$CAL,%lld,%.4f,%.4f,%.4f,%.4f,%.4f, - , - , - , - , - , - , - , - , - ,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f\r\n",
 			dtGyr.gettime(), gyrox.ABfilt(), gyroy.ABfilt(), gyroz.ABfilt(), GyroModulePrimLevel.get(), GroundGyroprimlimit,
 			(accelMaxx+accelMinx)/2, (accelMaxy+accelMiny)/2, (accelMaxz+accelMinz)/2,
-			localGravity /((accelMaxx-accelMinx)/2), localGravity /((accelMaxy-accelMiny)/2), localGravity/((accelMaxz-accelMinz)/2) );					
+			LOCALGRAVITY /((accelMaxx-accelMinx)/2), LOCALGRAVITY /((accelMaxy-accelMiny)/2), LOCALGRAVITY/((accelMaxz-accelMinz)/2) );					
 	}
 	Router::sendXCV(str);
 }
@@ -937,9 +939,9 @@ static void processIMU(void *pvParameters)
 			dtAcc.update( processIMUperiod );
 			accelG = mpud::accelGravity(accelRaw, mpud::ACCEL_FS_8G);  // For compatibility with Eckhard code only. Convert raw data to to 8G full scale
 			// convert accels coordinates to ISU : m/s² NED MPU
-			accelMPU.x = ((-accelG.z*9.807) - currentAccelBias.x ) * currentAccelGain.x;
-			accelMPU.y = ((-accelG.y*9.807) - currentAccelBias.y ) * currentAccelGain.y;
-			accelMPU.z = ((-accelG.x*9.807) - currentAccelBias.z ) * currentAccelGain.z;
+			accelMPU.x = ((-accelG.z*LOCALGRAVITY) - currentAccelBias.x ) * currentAccelGain.x;
+			accelMPU.y = ((-accelG.y*LOCALGRAVITY) - currentAccelBias.y ) * currentAccelGain.y;
+			accelMPU.z = ((-accelG.x*LOCALGRAVITY) - currentAccelBias.z ) * currentAccelGain.z;
 			// convert from MPU to BODY and filter with A/B
 			accelx.ABupdate( dtAcc.getdt(), C_T.get() * accelMPU.x + STmultSS.get() * accelMPU.y + STmultCS.get() * accelMPU.z + ( gyroy.ABfilt() * gyroy.ABfilt() + gyroz.ABfilt() * gyroz.ABfilt() ) * distCG.get()  );
 			accely.ABupdate( dtAcc.getdt(), C_S.get() * accelMPU.y - S_S.get() * accelMPU.z  );
@@ -994,7 +996,7 @@ static void processIMU(void *pvParameters)
 		if ( dynamicP < 60.0 ) dynamicP = 0.0;
 
 		// compute/filter CAS
-		CAS.ABupdate( dtdynP.getdt(), sqrt(2 * dynP.get() / RhoSLISA) );
+		CAS.ABupdate( dtdynP.getdt(), sqrt(dynP.get() * TwoInvRhoSLISA) );
 		
 		// compute TAS
 		TAS.set( Rhocorr.get() * CAS.ABfilt() );
@@ -1262,7 +1264,7 @@ static void processIMU(void *pvParameters)
 
 		Router::routeXCV();
 		
-		ProcessTimeIMU = (esp_timer_get_time()/1000.0) - dtGyr.gettime();
+		ProcessTimeIMU = (esp_timer_get_time()*0.001) - dtGyr.gettime();
 		if ( ProcessTimeIMU > 8 && TAS.get() < 15.0 ) {
 			ESP_LOGI(FNAME,"processIMU: %i / 25", (int16_t)(ProcessTimeIMU) );
 		}		
@@ -1373,7 +1375,7 @@ void clientLoop(void *pvParameters)
 			if( uxTaskGetStackHighWaterMark( bpid ) < 512 )
 				ESP_LOGW(FNAME,"Warning client task stack low: %d bytes", uxTaskGetStackHighWaterMark( bpid ) );
 		}
-//		clientLoopTime = (esp_timer_get_time()/1000.0) - clientLoopTime;
+//		clientLoopTime = (esp_timer_get_time()*0.001) - clientLoopTime;
 //		ESP_LOGI(FNAME,"clientLoop: %0.1f  / %0.1f", clientLoopTime, 100.0 );
 		vTaskDelayUntil(&xLastWakeTime, pdMS_TO_TICKS(100));
 	}
@@ -1480,7 +1482,7 @@ void readSensors(void *pvParameters){
 
 		TickType_t xLastWakeTime = xTaskGetTickCount();
 		
-		ProcessTimeSensors = (esp_timer_get_time()/1000.0);
+		ProcessTimeSensors = (esp_timer_get_time()*0.001);
 
 		// compute acceleration module variation
 		AccelModulePrimLevel.update( AccelModuleSquare.ABprimds()/2.0/sqrt(AccelModuleSquare.ABfiltds()) );		
@@ -1633,7 +1635,7 @@ void readSensors(void *pvParameters){
 		float WingLoad = gross_weight.get() / polar_wingarea.get();  // should be only computed when pilot change weight settings in XCVario
 		if ( CAS.ABfiltds() >10.0 ) { // compute AoA and AoB only when CAS is above 10m/s
 			AccelzFiltAoA = 0.8 * AccelzFiltAoA + 0.2 * accelz.ABfiltds(); // simple ~3 Hz low pass on accel z
-			CL = -AccelzFiltAoA * 2 / RhoSLISA * WingLoad / CAS.ABfiltds() / CAS.ABfiltds();
+			CL = -AccelzFiltAoA * TwoInvRhoSLISA * WingLoad / CAS.ABfiltds() / CAS.ABfiltds();
 			dAoA = ( CL - prevCL ) / CLA;
 			prevCL = CL;
 			if ( (abs(AccelzFiltAoA) > 1.0) && ( accelz.ABfiltds() != 0.0 ) ) { //when not close to Az=0, hybridation of aoa from drag & aoa from lift
@@ -1995,7 +1997,7 @@ void readSensors(void *pvParameters){
 			}
 		}	
 
-		ProcessTimeSensors = (esp_timer_get_time()/1000.0) - ProcessTimeSensors;
+		ProcessTimeSensors = (esp_timer_get_time()*0.001) - ProcessTimeSensors;
 		if ( ProcessTimeSensors > 30 && TAS.get() < 15.0 ) {
 			ESP_LOGI(FNAME,"readSensors: %i / 100", (int16_t)(ProcessTimeSensors) );
 		}		
@@ -2055,7 +2057,7 @@ void readTemp(void *pvParameters){
 		theWind.tick();
 		CircleWind::tick();
 		Flarm::progress();
-//		readTempTime = (esp_timer_get_time()/1000.0) - readTempTime;
+//		readTempTime = (esp_timer_get_time()*0.001) - readTempTime;
 //		ESP_LOGI(FNAME,"readTemp: %0.1f  / %0.1f", readTempTime, 1000.0 );
 		vTaskDelayUntil(&xLastWakeTime, 1000/portTICK_PERIOD_MS);
 		esp_task_wdt_reset();
@@ -2263,7 +2265,7 @@ void system_startup(void *args){
 
 		// check GRAVITY and accels offset/gain 
 		GRAVITY = gravity.get();
-		if(abs(GRAVITY-9.807) > 0.5 ) GRAVITY = 9.807;
+		if(abs(GRAVITY-LOCALGRAVITY) > 0.5 ) GRAVITY = LOCALGRAVITY;
 		currentAccelBias = accl_bias.get();
 		currentAccelGain = accl_gain.get();	
 		// Check value just in case FLASH is not correct to reset to neutral values (OK range is +- 2 m/s² for bias and +-20% on gain)
