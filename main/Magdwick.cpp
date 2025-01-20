@@ -125,7 +125,7 @@ void Magdwick::update(	float dt, float gx, float gy, float gz, float ax, float a
 		// Compute feedback only if accelerometer measurement valid (avoids NaN in accelerometer normalisation)
 		writingaccelgravmodule = true;
 		gettime = esp_timer_get_time();		
-		AccelGravModule = sqrt(ax * ax + ay * ay + az * az);
+		AccelGravModule = sqrtf(ax * ax + ay * ay + az * az);
 		writingaccelgravmodule = false;
 		if ( AccelGravModule != 0.0 ) {
 			recipNorm = 1.0 / AccelGravModule;
@@ -154,7 +154,7 @@ void Magdwick::update(	float dt, float gx, float gy, float gz, float ax, float a
 			s3 = 4.0 * q1q1 * q3 - _2q1 * ax + 4.0 * q2q2 * q3 - _2q2 * ay;
 			if ( (s0 + s1 + s2 + s3) != 0 ) {
 				// normalise step magnitude
-				recipNorm = 1.0 / sqrt(s0 * s0 + s1 * s1 + s2 * s2 + s3 * s3);
+				recipNorm = 1.0 / sqrtf(s0 * s0 + s1 * s1 + s2 * s2 + s3 * s3);
 				s0 = s0 * recipNorm;
 				s1 = s1 * recipNorm;
 				s2 = s2 * recipNorm;
@@ -174,7 +174,7 @@ void Magdwick::update(	float dt, float gx, float gy, float gz, float ax, float a
 
 		// Normalise quaternion*/
 		if ( (q0 * q1 * q2 * q3) != 0 ) {
-			recipNorm = 1.0 / sqrt( q0 * q0 + q1 * q1 + q2 * q2 + q3 * q3 );
+			recipNorm = 1.0 / sqrtf( q0 * q0 + q1 * q1 + q2 * q2 + q3 * q3 );
 		} else {
 			recipNorm = 1.0;
 		}
@@ -190,12 +190,12 @@ void Magdwick::update(	float dt, float gx, float gy, float gz, float ax, float a
 		#define M_PI_DIV2 M_PI / 2.0
 		#define M_PI_MUL2 M_PI * 2.0
 		if ( abs(q1 * q3 - q0 * q2) < 0.5 ) {
-			Pitch = asin(-2.0 * (q1 * q3 - q0 * q2));
+			Pitch = asinf(-2.0 * (q1 * q3 - q0 * q2));
 		} else {
 			Pitch = M_PI_DIV2 * signbit((q0 * q2 - q1 * q3 ));
 		}
-		Roll = atan2((q0 * q1 + q2 * q3), (0.5 - q1 * q1 - q2 * q2));
-		Yaw = atan2(2.0 * (q1 * q2 + q0 * q3), (q0 * q0 + q1 * q1 - q2 * q2 - q3 * q3));
+		Roll = atan2f((q0 * q1 + q2 * q3), (0.5 - q1 * q1 - q2 * q2));
+		Yaw = atan2f(2.0 * (q1 * q2 + q0 * q3), (q0 * q0 + q1 * q1 - q2 * q2 - q3 * q3));
 		if (Yaw < 0.0 ) Yaw = Yaw + M_PI_MUL2;
 		if (Yaw > 2.0 * M_PI) Yaw = Yaw - M_PI_MUL2;
 		

@@ -692,7 +692,7 @@ void GroundBiasEstimation() {
 						Gravx /= averagecount;
 						Gravy /= averagecount;
 						Gravz /= averagecount;
-						GRAVITY = sqrt(Gravx*Gravx+Gravy*Gravy+Gravz*Gravz);
+						GRAVITY = sqrtf(Gravx*Gravx+Gravy*Gravy+Gravz*Gravz);
 						BIAS_Init++;
 						// Store bias and gravity in non volatile memory if:
 						// - they have been identified for the first time
@@ -742,7 +742,7 @@ void AccelCalibration() {
 		CALfirstpass = false;
 	}
 	// If gyro are stable
-	if ( GyroModulePrimLevel.get() < GroundGyroprimlimit  &&  AccelModulePrimLevel.get() < GroundAccelprimlimit) { //MOD#6 improve calibration process
+	if ( GyroModulePrimLevel.get() < GroundGyroprimlimit  &&  AccelModulePrimLevel.get() < GroundAccelprimlimit) { 
 		if ( gyromodulestable > 5 ) gyromodulestable--;  
 		if ( gyromodulestable == 5 ) {
 			accelAvgx = -accelG.z*LOCALGRAVITY;
@@ -756,7 +756,7 @@ void AccelCalibration() {
 			accelAvgz = 0.8 * accelAvgz + 0.2 * (-accelG.x*LOCALGRAVITY);
 			if ( gyromodulestable > 1 ) gyromodulestable--;
 		}					
-		// store max and min with a short ~10 Hz low pass // MOD#9
+		// store max and min with a short ~10 Hz low pass
 		if ( gyromodulestable == 1 ) {
 			if ( accelAvgx > accelMaxx ) accelMaxx = accelMaxx*0.5 + accelAvgx*0.5;
 			if ( accelAvgy > accelMaxy ) accelMaxy = accelMaxy*0.5 + accelAvgy*0.5;
@@ -803,8 +803,8 @@ void AccelCalibration() {
 		sprintf(str,"$CAL,%lld,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f\r\n",
 			dtGyr.gettime(), gyrox.ABfilt(), gyroy.ABfilt(), gyroz.ABfilt(), GyroModulePrimLevel.get(), GroundGyroprimlimit,
 			accelAvgx, accelMaxx, accelMinx, accelAvgy, accelMaxy, accelMiny, accelAvgz, accelMaxz, accelMinz,
-			(accelMaxx+accelMinx)/2, (accelMaxy+accelMiny)/2, (accelMaxz+accelMinz)/2,
-			LOCALGRAVITY /((accelMaxx-accelMinx)/2), LOCALGRAVITY /((accelMaxy-accelMiny)/2), LOCALGRAVITY/((accelMaxz-accelMinz)/2) );
+			(accelMaxx+accelMinx)*0.5, (accelMaxy+accelMiny)*0.5, (accelMaxz+accelMinz)*0.5,
+			LOCALGRAVITY /((accelMaxx-accelMinx)*0.5), LOCALGRAVITY /((accelMaxy-accelMiny)*0.5), LOCALGRAVITY/((accelMaxz-accelMinz)*0.5) );
 	} else {
 		if( !gflags.gload_alarm ) {
 			Audio::alarm( true );
@@ -812,8 +812,8 @@ void AccelCalibration() {
 		}
 		sprintf(str,"$CAL,%lld,%.4f,%.4f,%.4f,%.4f,%.4f, - , - , - , - , - , - , - , - , - ,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f\r\n",
 			dtGyr.gettime(), gyrox.ABfilt(), gyroy.ABfilt(), gyroz.ABfilt(), GyroModulePrimLevel.get(), GroundGyroprimlimit,
-			(accelMaxx+accelMinx)/2, (accelMaxy+accelMiny)/2, (accelMaxz+accelMinz)/2,
-			LOCALGRAVITY /((accelMaxx-accelMinx)/2), LOCALGRAVITY /((accelMaxy-accelMiny)/2), LOCALGRAVITY/((accelMaxz-accelMinz)/2) );					
+			(accelMaxx+accelMinx)*0.5, (accelMaxy+accelMiny)*0.5, (accelMaxz+accelMinz)*0.5,
+			LOCALGRAVITY /((accelMaxx-accelMinx)*0.5), LOCALGRAVITY /((accelMaxy-accelMiny)*0.5), LOCALGRAVITY/((accelMaxz-accelMinz)*0.5) );					
 	}
 	Router::sendXCV(str);
 }
@@ -996,7 +996,7 @@ static void processIMU(void *pvParameters)
 		if ( dynamicP < 60.0 ) dynamicP = 0.0;
 
 		// compute/filter CAS
-		CAS.ABupdate( dtdynP.getdt(), sqrt(dynP.get() * TwoInvRhoSLISA) );
+		CAS.ABupdate( dtdynP.getdt(), sqrtf(dynP.get() * TwoInvRhoSLISA) );
 		
 		// compute TAS
 		TAS.set( Rhocorr.get() * CAS.ABfilt() );
@@ -1032,10 +1032,10 @@ static void processIMU(void *pvParameters)
 			PitchAHRS.ABupdate( dtGyr.getdt(), AHRS.getPitch() );
 			
 			// compute sin and cos for Roll and Pitch from IMU quaternion since they are used in multiple calculations
-			cosRoll.set( cos( AHRS.getRoll() ) );
-			sinRoll.set( sin( AHRS.getRoll() ) );
-			cosPitch.set( cos( AHRS.getPitch() ) );
-			sinPitch.set( sin( AHRS.getPitch() ) );
+			cosRoll.set( cosf( AHRS.getRoll() ) );
+			sinRoll.set( sinf( AHRS.getRoll() ) );
+			cosPitch.set( cosf( AHRS.getPitch() ) );
+			sinPitch.set( sinf( AHRS.getPitch() ) );
 			
 			// compute kinetic accelerations using accelerations, corrected with gravity and centrifugal accels
 			UiPrim.ABupdate( dtAcc.getdt(), accelx.ABfilt()- AHRS.Gravx() - gyroy.ABfilt() * TASbi.get() * AoA.get() + gyroz.ABfilt() * TASbi.get() * AoB.get() );
@@ -1049,11 +1049,11 @@ static void processIMU(void *pvParameters)
 
 			// Compute trajectory pneumatic speeds components in body frame NEDBODY
 			// Vh corresponds to the trajectory horizontal speed and Vzbaro corresponds to the vertical speed in earth frame
-			Vh.set( TAS.get() * cos( AHRS.getPitch() - cosRoll.get() * AoA.get() - sinRoll.get() * AoB.get() ) );
+			Vh.set( TAS.get() * cosf( AHRS.getPitch() - cosRoll.get() * AoA.get() - sinRoll.get() * AoB.get() ) );
 			// Pitch and Roll correspond to the attitude of the glider and DHeading corresponds to the heading deviation due to the Beta and Alpha.
 			DHeading.set( -(AoB.get() * cosRoll.get() - AoA.get() * sinRoll.get() ) / ( cosPitch.get() + AoB.get() * sinPitch.get() * sinRoll.get() + AoA.get() * sinPitch.get() * cosRoll.get() ) );
-			float cosDHeading = cos( DHeading.get() );
-			float sinDHeading = sin( DHeading.get() );
+			float cosDHeading = cosf( DHeading.get() );
+			float sinDHeading = sinf( DHeading.get() );
 			// applying DCM from earth to body frame (using Pitch, Roll and DHeading Yaw angles) to Vh and Vzbaro trajectory components in earth frame to reproject speed in TE referential onto body axis. 
 			Ub.ABupdate( dtStat.getdt(), cosPitch.get() * cosDHeading * Vh.get() - sinPitch.get() * Vzbaro );
 			Vb.ABupdate( dtStat.getdt(), ( sinRoll.get() * sinPitch.get() * cosDHeading - cosRoll.get() * sinDHeading ) * Vh.get() + sinRoll.get() * cosPitch.get() * Vzbaro );
@@ -1117,7 +1117,7 @@ static void processIMU(void *pvParameters)
 			dtGyr.gettime(),
 			(int32_t)(accelx.ABraw()*10000.0), (int32_t)(accely.ABraw()*10000.0), (int32_t)(accelz.ABraw()*10000.0),
 			(int32_t)(gyrox.ABraw()*100000.0), (int32_t)(gyroy.ABraw()*100000.0),(int32_t)(gyroz.ABraw()*100000.0),
-			dtStat.gettime(), (int32_t)(statP.get()*100.0),(int32_t)(teP.get()*100.0), (int32_t)(dynP.get()*10)						
+			dtStat.gettime(), (int32_t)(statP.get()*100.0),(int32_t)(teP.get()*100.0), (int32_t)(dynP.get()*10.0)						
 			);						
 		Router::sendXCV(str);
 		}
@@ -1203,32 +1203,32 @@ static void processIMU(void *pvParameters)
 				// send $S1, $S2 and $S3
 				sprintf(str,"$S1,%lld,%i,%i,%i,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$S3,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$S2,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",				
 					// $S1 stream
-					dtStat.gettime(), (int32_t)(statP.get()*100.0),(int32_t)(teP.get()*100.0), (int16_t)(dynP.get()*10), 
-					(int64_t)(chosenGnss->time*1000.0), (int16_t)(chosenGnss->speed.x*100), (int16_t)(chosenGnss->speed.y*100), (int16_t)(chosenGnss->speed.z*100),
+					dtStat.gettime(), (int32_t)(statP.get()*100.0),(int32_t)(teP.get()*100.0), (int16_t)(dynP.get()*10.0), 
+					(int64_t)(chosenGnss->time*1000.0), (int16_t)(chosenGnss->speed.x*100.0), (int16_t)(chosenGnss->speed.y*100.0), (int16_t)(chosenGnss->speed.z*100.0),
 					(int32_t)(AHRS.getPitch()*1000.0), (int32_t)(AHRS.getRoll()*1000.0), (int32_t)(AHRS.getYaw()*1000.0),
-					(int32_t)(Vzbaro*100),
-					(int32_t)(AoA.get()*1000), (int32_t)(AoB.get()*1000),
-					(int32_t)(Ubi.get()*100), (int32_t)(Vbi.get()*100),(int32_t)(Wbi.get()*100), (int32_t)(Vzbi*100),				
-					(int32_t)(Vztotbi.get()*100),
-					(int32_t)(AHRS.getBeta()*10000), 
-					(int32_t)(accelx.ABNget() * 10),
-					(int32_t)(DynPeriodVelbi*1000),
+					(int32_t)(Vzbaro*100.0),
+					(int32_t)(AoA.get()*1000.0), (int32_t)(AoB.get()*1000.0),
+					(int32_t)(Ubi.get()*100.0), (int32_t)(Vbi.get()*100.0),(int32_t)(Wbi.get()*100.0), (int32_t)(Vzbi*100.0),				
+					(int32_t)(Vztotbi.get()*100.0),
+					(int32_t)(AHRS.getBeta()*10000.0), 
+					(int32_t)(accelx.ABNget() * 10.0),
+					(int32_t)(DynPeriodVelbi*1000.0),
 					// $S3 stream
-					(int32_t)(UiPrim.ABraw()*100),(int32_t)(ViPrim.ABraw()*100),(int32_t)(WiPrim.ABraw()*100),
-					(int32_t)(Ub.ABprim()*100), (int32_t)(Vb.ABprim()*100),(int32_t)(Wb.ABprim()*100),
-					(int32_t)(UiPrim.ABprim()*100), (int32_t)(ViPrim.ABprim()*100),(int32_t)(WiPrim.ABprim()*100),	
-					(int32_t)(UbiPrim.get()*100), (int32_t)(VbiPrim.get()*100),(int32_t)(WbiPrim.get()*100),
-					(int32_t)(Bias_AoB.get()*1000),
-					(int32_t)(RTKNproj*1000),(int32_t)(RTKEproj*1000),(int32_t)(-RTKUproj*1000),(int32_t)(RTKheading*10),(int32_t)(ALTbi.get()*100),
-					(int32_t)(DHeading.get()*1000),(int32_t)(Ub.ABfilt()*100),(int32_t)(Vb.ABfilt()*100),(int32_t)(Wb.ABfilt()*100),
-					(int32_t)(AccelModulePrimLevel.get()*100),(int32_t)(GyroModulePrimLevel.get()*100), (int32_t)(Event), (int32_t)(Vb.ABfilt()*100),
-					(int32_t)(PseudoHeadingPrim.get()*100000),
+					(int32_t)(UiPrim.ABraw()*100.0),(int32_t)(ViPrim.ABraw()*100.0),(int32_t)(WiPrim.ABraw()*100.0),
+					(int32_t)(Ub.ABprim()*100.0), (int32_t)(Vb.ABprim()*100.0),(int32_t)(Wb.ABprim()*100.0),
+					(int32_t)(UiPrim.ABprim()*100.0), (int32_t)(ViPrim.ABprim()*100.0),(int32_t)(WiPrim.ABprim()*100.0),	
+					(int32_t)(UbiPrim.get()*100.0), (int32_t)(VbiPrim.get()*100.0),(int32_t)(WbiPrim.get()*100.0),
+					(int32_t)(Bias_AoB.get()*1000.0),
+					(int32_t)(RTKNproj*1000.0),(int32_t)(RTKEproj*1000.0),(int32_t)(-RTKUproj*1000.0),(int32_t)(RTKheading*10.0),(int32_t)(ALTbi.get()*100.0),
+					(int32_t)(DHeading.get()*1000.0),(int32_t)(Ub.ABfilt()*100.0),(int32_t)(Vb.ABfilt()*100.0),(int32_t)(Wb.ABfilt()*100.0),
+					(int32_t)(AccelModulePrimLevel.get()*100.0),(int32_t)(GyroModulePrimLevel.get()*100.0), (int32_t)(Event), (int32_t)(Vb.ABfilt()*100.0),
+					(int32_t)(PseudoHeadingPrim.get()*100000.0),
 					// $S2 stream
 					(int16_t)(temperatureLP.LowPass1()*10.0), (int16_t)(MPU.getTemperature()*10.0), chosenGnss->fix, chosenGnss->numSV,
 					(int32_t)(NewGroundGyroBias.x*100000.0), (int32_t)(NewGroundGyroBias.y*100000.0), (int32_t)(NewGroundGyroBias.z*100000.0),				
 					(int32_t)(BiasQuatGx.get()*100000.0), (int32_t)(BiasQuatGy.get()*100000.0), (int32_t)(BiasQuatGz.get()*100000.0),
-					(int16_t)(XCVTemp*10.0), (int16_t) (PeriodVelbi*10),
-					(int32_t)(te_filt.get()*10),(int32_t)(0.0*10000),(int32_t)(Beta_Magdwick.get()*10000), (int32_t)(ALTbi_N.get()*10), (int32_t)(0.0*10), (int32_t)(opt_TE),
+					(int16_t)(XCVTemp*10.0), (int16_t) (PeriodVelbi*10.0),
+					(int32_t)(te_filt.get()*10.0),(int32_t)(0.0*10000.0),(int32_t)(Beta_Magdwick.get()*10000.0), (int32_t)(ALTbi_N.get()*10.0), (int32_t)(0.0*10.0), (int32_t)(opt_TE),
 					(int32_t)BIAS_Init,
 					(int32_t)(FTVERSION),(int32_t)(SOFTVERSION)
 					);
@@ -1237,25 +1237,25 @@ static void processIMU(void *pvParameters)
 				if ( mtick % 4 ) { // every 100 ms ( 4 x 0.02 ms)
 					// send $S1 and $S3
 					sprintf(str,"$S1,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$S3,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",
-						(int64_t)(chosenGnss->time*1000.0), (int16_t)(chosenGnss->speed.x*100), (int16_t)(chosenGnss->speed.y*100), (int16_t)(chosenGnss->speed.z*100),
+						(int64_t)(chosenGnss->time*1000.0), (int16_t)(chosenGnss->speed.x*100.0), (int16_t)(chosenGnss->speed.y*100.0), (int16_t)(chosenGnss->speed.z*100.0),
 						(int32_t)(AHRS.getPitch()*1000.0), (int32_t)(AHRS.getRoll()*1000.0), (int32_t)(AHRS.getYaw()*1000.0),
-						(int32_t)(Vzbaro*100),
-						(int32_t)(AoA.get()*1000), (int32_t)(AoB.get()*1000),
-						(int32_t)(Ubi.get()*100), (int32_t)(Vbi.get()*100),(int32_t)(Wbi.get()*100), (int32_t)(Vzbi*100),				
-						(int32_t)(Vztotbi.get()*100),
-						(int32_t)(AHRS.getBeta()*10000), 
-						(int32_t) accelx.ABNget()* 10,
-						(int32_t)(DynPeriodVelbi*1000),
+						(int32_t)(Vzbaro*100.0),
+						(int32_t)(AoA.get()*1000.0), (int32_t)(AoB.get()*1000.0),
+						(int32_t)(Ubi.get()*100.0), (int32_t)(Vbi.get()*100.0),(int32_t)(Wbi.get()*100.0), (int32_t)(Vzbi*100.0),				
+						(int32_t)(Vztotbi.get()*100.0),
+						(int32_t)(AHRS.getBeta()*10000.0), 
+						(int32_t)(accelx.ABNget()* 10.0),
+						(int32_t)(DynPeriodVelbi*1000.0),
 						// $S3 stream
-						(int32_t)(UiPrim.ABraw()*100),(int32_t)(ViPrim.ABraw()*100),(int32_t)(WiPrim.ABraw()*100),
-						(int32_t)(Ub.ABprim()*100), (int32_t)(Vb.ABprim()*100),(int32_t)(Wb.ABprim()*100),   
-						(int32_t)(UiPrim.ABprim()*100), (int32_t)(ViPrim.ABprim()*100),(int32_t)(WiPrim.ABprim()*100),	
-						(int32_t)(UbiPrim.get()*100), (int32_t)(VbiPrim.get()*100),(int32_t)(WbiPrim.get()*100),
-						(int32_t)(Bias_AoB.get()*1000),
-						(int32_t)(RTKNproj*1000),(int32_t)(RTKEproj*1000),(int32_t)(-RTKUproj*1000),(int32_t)(RTKheading*10),(int32_t)(ALTbi.get()*100),
-						(int32_t)(DHeading.get()*1000),(int32_t)(Ub.ABfilt()*100),(int32_t)(Vb.ABfilt()*100),(int32_t)(Wb.ABfilt()*100),
-						(int32_t)(AccelModulePrimLevel.get()*100),(int32_t)(GyroModulePrimLevel.get()*100), (int32_t)(Event),(int32_t)(Vb.ABfilt()*100),
-						(int32_t)(PseudoHeadingPrim.get()*100000)						
+						(int32_t)(UiPrim.ABraw()*100.0),(int32_t)(ViPrim.ABraw()*100.0),(int32_t)(WiPrim.ABraw()*100.0),
+						(int32_t)(Ub.ABprim()*100.0), (int32_t)(Vb.ABprim()*100.0),(int32_t)(Wb.ABprim()*100.0),   
+						(int32_t)(UiPrim.ABprim()*100.0), (int32_t)(ViPrim.ABprim()*100.0),(int32_t)(WiPrim.ABprim()*100.0),	
+						(int32_t)(UbiPrim.get()*100.0), (int32_t)(VbiPrim.get()*100.0),(int32_t)(WbiPrim.get()*100.0),
+						(int32_t)(Bias_AoB.get()*1000.0),
+						(int32_t)(RTKNproj*1000.0),(int32_t)(RTKEproj*1000.0),(int32_t)(-RTKUproj*1000.0),(int32_t)(RTKheading*10.0),(int32_t)(ALTbi.get()*100.0),
+						(int32_t)(DHeading.get()*1000.0),(int32_t)(Ub.ABfilt()*100.0),(int32_t)(Vb.ABfilt()*100.0),(int32_t)(Wb.ABfilt()*100.0),
+						(int32_t)(AccelModulePrimLevel.get()*100.0),(int32_t)(GyroModulePrimLevel.get()*100.0), (int32_t)(Event),(int32_t)(Vb.ABfilt()*100.0),
+						(int32_t)(PseudoHeadingPrim.get()*100000.0)						
 					);
 					Router::sendXCV(str);
 				}					
@@ -1485,13 +1485,13 @@ void readSensors(void *pvParameters){
 		ProcessTimeSensors = (esp_timer_get_time()*0.001);
 
 		// compute acceleration module variation
-		AccelModulePrimLevel.update( AccelModuleSquare.ABprimds()/2.0/sqrt(AccelModuleSquare.ABfiltds()) );		
+		AccelModulePrimLevel.update( AccelModuleSquare.ABprimds()*0.5 /sqrtf(AccelModuleSquare.ABfiltds()) );		
 		
 		// compute gyro module variation
-		GyroModulePrimLevel.update( GyroModuleSquare.ABprimds()/2.0/sqrt(GyroModuleSquare.ABfiltds()) );
+		GyroModulePrimLevel.update( GyroModuleSquare.ABprimds()*0.5 /sqrtf(GyroModuleSquare.ABfiltds()) );
 
 		// compute Roll Module from gravity
-		RollModule = 0.8 * RollModule + 0.2 * abs( atan2(-gravBODY.y, -gravBODY.z) );
+		RollModule = 0.8 * RollModule + 0.2 * abs( atan2f(-gravBODY.y, -gravBODY.z) );
 		RollModuleLevel.update( RollModule );
 		
 		// Compute dynamic Beta
@@ -1548,8 +1548,8 @@ void readSensors(void *pvParameters){
 			if ( abs(RollAHRS.ABprimds()) < RollLimit ) GyroBiasx.LPupdate( gyrox.ABfiltds() - RollAHRS.ABprimds() );
 			if ( abs(PitchAHRS.ABprimds()) < PitchLimit ) GyroBiasy.LPupdate( gyroy.ABfiltds() - PitchAHRS.ABprimds() );					
 			// compute pseudo heading from GNSS
-			float GnssTrack = atan2( GnssVy.ABfilt(), GnssVx.ABfilt() );
-			PseudoHeadingPrim.set( ( GnssVy.ABprim() * cos(GnssTrack) - GnssVx.ABprim() * sin(GnssTrack) ) / TASbi.get() );
+			float GnssTrack = atan2f( GnssVy.ABfilt(), GnssVx.ABfilt() );
+			PseudoHeadingPrim.set( ( GnssVy.ABprim() * cosf(GnssTrack) - GnssVx.ABprim() * sinf(GnssTrack) ) / TASbi.get() );
 			// compute Gz - pseudo heading variation long term average.		
 			if ( abs(PseudoHeadingPrim.get()) < HeadingPrimLimit ) GyroBiasz.LPupdate( gyroz.ABfiltds() - PseudoHeadingPrim.get() );
 			// update gyros biases variables
@@ -1623,7 +1623,7 @@ void readSensors(void *pvParameters){
 		} else {
 			Rho = RhoSLISA;
 		}
-		Rhocorr.set( sqrt(RhoSLISA/Rho) );
+		Rhocorr.set( sqrtf(RhoSLISA/Rho) );
 		
 		// compute AoA (Angle of attack) and AoB (Angle od slip)
 		#define FreqAlpha 0.66 // Hz
@@ -1651,7 +1651,7 @@ void readSensors(void *pvParameters){
 		}
 
 		// baro inertial TAS in any frame
-		TASbi.set( sqrt( TASbiSquare.dsget() ) );
+		TASbi.set( sqrtf( TASbiSquare.dsget() ) );
 
 
 		// if TAS > ~110 km/h and bank is less than ~4.5°, long term average of AoB to detect bias
@@ -1703,13 +1703,13 @@ void readSensors(void *pvParameters){
 		DeltaVgx = Vgx-VgxPrev; // Variation of x speed coordinate
 		DeltaVgy = Vgy-VgyPrev; // Variation of y speed coordinate
 		SegmentSquare = DeltaVgx*DeltaVgx+DeltaVgy*DeltaVgy; // squared module of segment between speed vectors extremities
-		Segment = sqrt(SegmentSquare); // module of segment
-		float Vhbi = sqrt( Vxbi * Vxbi + Vybi * Vybi ); // Vhbi baro inertiel horizontal speed in earth frame
+		Segment = sqrtf(SegmentSquare); // module of segment
+		float Vhbi = sqrtf( Vxbi * Vxbi + Vybi * Vybi ); // Vhbi baro inertiel horizontal speed in earth frame
 		VhAvg = ( Vhbi + VhPrev ) / 2; // average horizontal speed
-		if ( (Segment > 0.75) && (VhAvg > Segment/2) && (VgxPrev != 0.0) && (VgyPrev != 0.0) && (DeltaVgx != 0.0) && (DeltaVgy != 0.0) ) {
-			MidSegmentx = (Vgx+VgxPrev)/2; // mid segment x
-			MidSegmenty = (Vgy+VgyPrev)/2; // mid segment y
-			Median = sqrt(VhAvg*VhAvg-SegmentSquare/4); // module of median between segment center and true airspedd origin (usinf average of current and previous true airspeed
+		if ( (Segment > 0.75) && (VhAvg > Segment*0.5) && (VgxPrev != 0.0) && (VgyPrev != 0.0) && (DeltaVgx != 0.0) && (DeltaVgy != 0.0) ) {
+			MidSegmentx = (Vgx+VgxPrev)*0.5; // mid segment x
+			MidSegmenty = (Vgy+VgyPrev)*0.5; // mid segment y
+			Median = sqrtf(VhAvg*VhAvg-SegmentSquare/4); // module of median between segment center and true airspedd origin (usinf average of current and previous true airspeed
 			MedianDirx = -DeltaVgy/Segment; // direction of median x
 			MedianDiry = DeltaVgx/Segment; // direction of median y
 			Windx = MidSegmentx + Median * MedianDirx; // wind x coordinate
@@ -1725,7 +1725,7 @@ void readSensors(void *pvParameters){
 			fcWind2 = 1 - fcWind1;
 			FilteredWindx = fcWind1 * FilteredWindx + fcWind2 * Windx;
 			FilteredWindy = fcWind1 * FilteredWindy + fcWind2 * Windy;
-			VhHeading = M_PI + atan2(Vgx-Windx, Vgy-Windy);
+			VhHeading = M_PI + atan2f(Vgx-Windx, Vgy-Windy);
 			if ( VhHeading < 0 ) VhHeading = VhHeading + 2.0 * M_PI;
 			VhHeading = VhHeading * 180.0 / M_PI;
 			VgxPrev = Vgx;
@@ -1755,7 +1755,7 @@ void readSensors(void *pvParameters){
 		Vgy = 0.5 * Vgy + 0.5 * GnssVy.ABfilt();
 
 		// compute Vhbi baro inertial horizontal speed in earth frame
-		Vhbi = sqrt( Vxbi * Vxbi + Vybi * Vybi );
+		Vhbi = sqrtf( Vxbi * Vxbi + Vybi * Vybi );
 
 		// consider last 15 samples to verify if speed variation is significant enough and compute wind as soon as condition is met
 		for ( int i=0; i<15 ; i++ ) {
@@ -1765,14 +1765,14 @@ void readSensors(void *pvParameters){
 				DeltaVgy = Vgy-Vgypast[i];
 				// compute segment length corresponding to GNSS speed variation ( segment square and segment)
 				SegmentSquare = DeltaVgx*DeltaVgx+DeltaVgy*DeltaVgy; // squared module of segment between gnss speed vectors
-				Segment = sqrt(SegmentSquare); // module of segment between gnss speed vectors
+				Segment = sqrtf(SegmentSquare); // module of segment between gnss speed vectors
 				// algorithm expects horizontal true airspeed to be constant but average is used to reduce error
 				VhbiAvg = ( Vhbi + Vhbipast[i] ) / 2; // average horizontal baro inertial speed
 				// test if no wind yet and long enough segment and conditions met to avoid calc errors
-				if ( (Segment > MINSEGMENT ) && (VhbiAvg > Segment/2) && (Vgxpast[i] != 0.0) && (Vgypast[i] != 0.0) && (DeltaVgx != 0.0) && (DeltaVgy != 0.0) ) {
-					MidSegmentx = (Vgx+Vgxpast[i])/2; // mid segment x
-					MidSegmenty = (Vgy+Vgypast[i])/2; // mid segment y
-					Median = sqrt(VhbiAvg*VhbiAvg-SegmentSquare/4); // module of median between segment center and true airspedd origin (usinf average of current and previous true airspeed
+				if ( (Segment > MINSEGMENT ) && (VhbiAvg > Segment*0.5) && (Vgxpast[i] != 0.0) && (Vgypast[i] != 0.0) && (DeltaVgx != 0.0) && (DeltaVgy != 0.0) ) {
+					MidSegmentx = (Vgx+Vgxpast[i])*0.5; // mid segment x
+					MidSegmenty = (Vgy+Vgypast[i])*0.5; // mid segment y
+					Median = sqrtf(VhbiAvg*VhbiAvg-SegmentSquare/4); // module of median between segment center and true airspedd origin (usinf average of current and previous true airspeed
 					MedianDirx = -DeltaVgy/Segment; // direction of median x
 					MedianDiry = DeltaVgx/Segment; // direction of median y
 					// There are two solutions to the problem
@@ -1792,7 +1792,7 @@ void readSensors(void *pvParameters){
 					FilteredWindx = fcWind1 * FilteredWindx + fcWind2 * Windx;
 					FilteredWindy = fcWind1 * FilteredWindy + fcWind2 * Windy;
 					// using GNSS speed and wind speed, compute Vh = TAS heading
-					VhHeading = M_PI + atan2(Vgx-Windx, Vgy-Windy);
+					VhHeading = M_PI + atan2f(Vgx-Windx, Vgy-Windy);
 					if ( VhHeading < 0 ) VhHeading = VhHeading + 2.0 * M_PI;
 					VhHeading = VhHeading * 180.0 / M_PI;
 					gotwind = true;
@@ -2304,10 +2304,10 @@ void system_startup(void *args){
 			tilt.set( 0.0 );
 		}
 		// compute trigonometry
-		S_S.set( sin(sway.get() ) );
-		C_S.set( cos(sway.get() ) );
-		S_T.set( sin(tilt.get() ) );
-		C_T.set( cos(tilt.get() ) );
+		S_S.set( sinf(sway.get() ) );
+		C_S.set( cosf(sway.get() ) );
+		S_T.set( sinf(tilt.get() ) );
+		C_T.set( cosf(tilt.get() ) );
 		STmultSS.set( S_T.get() * S_S.get() );
 		STmultCS.set( S_T.get() * C_S.get() );
 		SSmultCT.set( S_S.get() * C_T.get() );
