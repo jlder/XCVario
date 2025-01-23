@@ -9,6 +9,7 @@
 #define TimeDt_H_
 
 #include <stdint.h>
+#include "DownSample.h"
 
 class TimeDt {
 private:
@@ -16,17 +17,14 @@ private:
 	int64_t currentime;
 	int64_t previoustime;
 	int16_t dt;
-	int16_t dt_1;
-	int16_t dt_2;
-	int16_t dt_3;
-	int16_t dt_4;	
 	int16_t dtmin, dtmax;
 	bool writing = false;
+	DownSample deltat;	
 public:
-	void update( float value );
-    float getdt( void );
-	float getdtds( void );
-	int64_t gettime( void );
+	void DTupdate( float value );
+    float DTget( void );
+	float DTgetds( void );
+	int64_t DTgettime( void );
  };
  
  #endif /* TimeDt_H_ */

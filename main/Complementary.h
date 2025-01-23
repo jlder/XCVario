@@ -8,6 +8,7 @@
 #define Complementary_H_
 
 #include <stdint.h>
+#include "DownSample.h"
 
 // Complementary filter class
 //
@@ -21,12 +22,15 @@ private:
 	float CFValue = 0.0;
 	bool writing = false;
 	int64_t gettime;
+	DownSample result, deltat;
 public:
-	void init( float SamplingRate, float Period );
-	void setPeriod( float Period );
-	float getPeriod();
-	void update( float dt, float Derivative, float Signal );
-	float get();
+	void CFinit( float SamplingRate, float Period );
+	void CFsetPeriod( float Period );
+	float CFgetPeriod();
+	void CFupdate( float dt, float Derivative, float Signal );
+	float CFget();
+	float CFgetds();
+	float CFgetdtds();
 };
 
  #endif /* Complementary_H_ */

@@ -6,15 +6,12 @@
 // 
 
 // update dt 
-void TimeDt::update( float val ) {
+void TimeDt::DTupdate( float val ) {
 	writing = true;
 	if ( firstpass ) {
-		dtmin = val * 0.33;
-		dtmax = dt * 3.0;
-		dt_1 = 0.0;
-		dt_2 = 0.0;
-		dt_3 = 0.0;
-		dt_4 = 0.0;	
+		dtmin = (int16_t)val * 0.33;
+		dtmax = (int16_t)val * 3.0;
+		deltat.DSinit( val );	
 		currentime = esp_timer_get_time();
 		previoustime = currentime;
 		firstpass = false;
@@ -22,17 +19,17 @@ void TimeDt::update( float val ) {
 		currentime = esp_timer_get_time();
 		dt =  currentime - previoustime;
 		previoustime = currentime;
-		if ( (dt < dtmin) || (dt > dtmax) )  dt = 0.0;
-		dt_1 = dt_2;
-		dt_2 = dt_3;
-		dt_3 = dt_4;
-		dt_4 = dt;		
+		if ( (dt > dtmin) && (dt < dtmax) ) {
+			deltat.DSupdate( (float)dt );
+		} else {
+			dt = 0;
+		}
 	}
 	writing = false;
 }
 
 // Get dt
-float TimeDt::getdt() {
+float TimeDt::DTget() {
 	while( writing ) {
 		if ( abs( (int64_t)esp_timer_get_time() - currentime ) > 1000 ) break; // wait for 1 ms max if writing is in process
 	}	
@@ -40,15 +37,15 @@ float TimeDt::getdt() {
 }
 
 // Get dt
-float TimeDt::getdtds() {
+float TimeDt::DTgetds() {
 	while( writing ) {
 		if ( abs( (int64_t)esp_timer_get_time() - currentime ) > 1000 ) break; // wait for 1 ms max if writing is in process
 	}	
-	return (float)( dt_1 + dt_2 + dt_3 + dt_4 );
+	return deltat.DSsum();
 }
 
 // Get time
-int64_t TimeDt::gettime() {
+int64_t TimeDt::DTgettime() {
 	while( writing ) {
 		if ( abs( (int64_t)esp_timer_get_time() - currentime ) > 1000 ) break; // wait for 1 ms max if writing is in process
 	}		

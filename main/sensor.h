@@ -64,6 +64,7 @@
 #include "Level.h"
 #include "TimeDt.h"
 #include "Complementary.h"
+#include "DownSample.h"
 
 // Display 4 Wire SPI and Display CS
 #define RESET_Display  GPIO_NUM_5       // Reset pin for Display

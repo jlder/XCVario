@@ -1,5 +1,6 @@
 #include "AlphaBetaFilter.h"
 #include <esp_timer.h>
+#include <cmath>
 
 //
 // alpha beta filter class implementation
@@ -15,14 +16,10 @@ void AlphaBeta::ABinit( float N, float dtTypical, float _Threshold, float _filtM
 	ABinit( N, dtTypical, _Threshold, _filtMin, _filtMax, 0.0, 0.0 );
 }
 void AlphaBeta::ABinit( float N, float dtTypical, float _Threshold, float _filtMin, float _filtMax, float _primMin, float _primMax ) {
-	if ( N != 0.0  ) {
-		NAB = N;
-		alpha =  (2.0 * (2.0 * N - 1.0) / N / (N + 1.0));
-		beta = (6.0 / N / (N + 1.0));
-		dtAvg = dtTypical;
-		dtMax = dtTypical * 3.0;
-		dtMin = dtTypical * 0.33;
-	}
+	ABNupdate( N );
+	dtAvg = dtTypical;
+	dtMax = dtTypical * 3.0;
+	dtMin = dtTypical * 0.33;
 	firstpass = true;
 	Threshold = _Threshold;
 	filtMin = _filtMin;
@@ -33,7 +30,8 @@ void AlphaBeta::ABinit( float N, float dtTypical, float _Threshold, float _filtM
 
 // AB filter depth N update
 void AlphaBeta::ABNupdate( float N ) {
-	if ( N > 0.0  ) {
+	N= round( N );
+	if ( N >= 2.0  ) {
 		NAB = N;
 		alpha =  (2.0 * (2.0 * N - 1.0) / N / (N + 1.0));
 		beta = (6.0 / N / (N + 1.0));
@@ -55,21 +53,12 @@ void AlphaBeta::ABupdate(float dt, float RawData ) {
 			gettime = esp_timer_get_time();
 			unfiltered = RawData;
 			filt = RawData;
-			filt_1 = filt;
-			filt_2 = filt;
-			filt_3 = filt;
-			filt_4 = filt;
-			dt_1 = dt;
-			dt_2 = dt;
-			dt_3 = dt;
-			dt_4 = dt;
 			_filt = RawData;
+			filter.DSinit( filt );
+			deltat.DSinit( dt );
 			prim = 0.0;
 			_prim = 0.0;
-			prim_1 = 0.0;
-			prim_2 = 0.0;
-			prim_3 = 0.0;
-			prim_4 = 0.0;
+			deriv.DSinit( prim );
 			writing = false;
 			firstpass = false;
 			zicket = 4*MaxZicket;
@@ -87,23 +76,14 @@ void AlphaBeta::ABupdate(float dt, float RawData ) {
 						if ( prim < primMin ) prim = primMin;
 						if ( prim > primMax ) prim = primMax;
 					}
-					prim_1 = prim_2;
-					prim_2 = prim_3;
-					prim_3 = prim_4;
-					prim_4 = prim;
+					deriv.DSupdate( prim );
 					filt = filt + alpha * delta + prim * dt;
 					if ( filtMin != 0.0 || filtMax != 0.0 ) {
 						if ( filt < filtMin ) filt = filtMin;
 						if ( filt > filtMax ) filt = filtMax;
 					}
-					filt_1 = filt_2;
-					filt_2 = filt_3;
-					filt_3 = filt_4;
-					filt_4 = filt;
-					dt_1 = dt_2;
-					dt_2 = dt_3;
-					dt_3 = dt_4;
-					dt_4 = dt;					
+					filter.DSupdate( filt );
+					deltat.DSupdate( dt );					
 					writing = false;
 					zicket = 0;
 				} else {
@@ -131,18 +111,9 @@ void AlphaBeta::ABupdate(float dt, float RawData ) {
 					unfiltered = RawData;
 					prim = _prim;
 					filt = _filt;
-					filt_1 = filt;
-					filt_2 = filt;
-					filt_3 = filt;
-					filt_4 = filt;
-					prim_1 = prim;
-					prim_2 = prim;
-					prim_3 = prim;
-					prim_4 = prim;					
-					dt_1 = dt;
-					dt_2 = dt;
-					dt_3 = dt;
-					dt_4 = dt;					
+					filter.DSinit( filt );
+					deriv.DSinit( prim );
+					deltat.DSinit( dt );
 					writing = false;
 					zicket = 0;
 				}						
@@ -181,26 +152,26 @@ float AlphaBeta::ABraw(void) {
 	return unfiltered;
 }
 
-// AB filter down scale x 4
+// AB filter down scale x DSratio
 float AlphaBeta::ABfiltds( void ) {
 	while( writing ) {
 		if ( abs( (int64_t)esp_timer_get_time() - gettime ) > 1000 ) break; // wait for 1 ms max if writing is in process
 	}	
-	return (( filt_1 + filt_2 + filt_3 + filt_4 ) * 0.25 );
+	return ( filter.DSaverage() );
 }
 
-// AB derivative (prim) down scale x 4
+// AB derivative (prim) down scale x DSratio
 float AlphaBeta::ABprimds( void ) {
 	while( writing ) {
 		if ( abs( (int64_t)esp_timer_get_time() - gettime ) > 1000 ) break; // wait for 1 ms max if writing is in process
 	}	
-	return (( prim_1 + prim_2 + prim_3 + prim_4 ) * 0.25 );
+	return ( deriv.DSaverage() );
 }
 
-// AB dt down scale x 4
+// AB dt down scale x DSratio
 float AlphaBeta::ABdtds( void ) {
 	while( writing ) {
 		if ( abs( (int64_t)esp_timer_get_time() - gettime ) > 1000 ) break; // wait for 1 ms max if writing is in process
 	}	
-	return ( dt_1 + dt_2 + dt_3 + dt_4 );
+	return ( deltat.DSsum() );
 }

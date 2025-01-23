@@ -8,7 +8,7 @@
 // estimate the level of a stream of data using absolute value of the data filtered with low pass filters of different period when data increases or decreases
 
 // initialize with stream sample rate, low pass frequency for signal increase, low pass frequency for signal decrease
-void Level::init( float SampleRate, float LoPassInc, float LoPassDec ) {
+void Level::LVinit( float SampleRate, float LoPassInc, float LoPassDec ) {
 	fcinc1 = SampleRate / ( SampleRate + LoPassInc );
 	fcinc2 = 1 - fcinc1;
 	fcdec1 = SampleRate / ( SampleRate + LoPassDec ); 
@@ -19,7 +19,7 @@ void Level::init( float SampleRate, float LoPassInc, float LoPassDec ) {
 }	
 
 // Get current filtered signal level
-float Level::get() {
+float Level::LVget() {
 	while( writing ) {
 		if ( abs( (int64_t)esp_timer_get_time() - gettime ) > 1000 ) break; // wait for 1 ms max if writing is in process
 	}
@@ -27,7 +27,7 @@ float Level::get() {
 }
 
 // Update signal level using low pass filters
-void Level::update( float val ) {
+void Level::LVupdate( float val ) {
 	writing = true;
 	gettime = esp_timer_get_time();
 	if ( InitDone ) {

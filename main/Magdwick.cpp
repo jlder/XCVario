@@ -213,18 +213,26 @@ void Magdwick::update(	float dt, float gx, float gy, float gz, float ax, float a
 			SumAx = SumAx + ax;
 			SumAy = SumAy + ay;
 			SumAz = SumAz + az;
-			AverageAx = SumAx / SumCount;
-			AverageAy = SumAy / SumCount;
-			AverageAz = SumAz / SumCount;
-			Roll = atan2( -AverageAy, -AverageAz );
-			Pitch = asin( AverageAx/ sqrt( AverageAx * AverageAx + AverageAy * AverageAy + AverageAz * AverageAz ) );
-			Yaw = 0.0;
-			q0=((cos(Roll*0.5)*cos(Pitch*0.5)*cos(Yaw*0.5)+sin(Roll*0.5)*sin(Pitch*0.5)*sin(Yaw*0.5)));
-			q1=((sin(Roll*0.5)*cos(Pitch*0.5)*cos(Yaw*0.5)-cos(Roll*0.5)*sin(Pitch*0.5)*sin(Yaw*0.5)));
-			q2=((cos(Roll*0.5)*sin(Pitch*0.5)*cos(Yaw*0.5)+sin(Roll*0.5)*cos(Pitch*0.5)*sin(Yaw*0.5)));
-			q3=((cos(Roll*0.5)*cos(Pitch*0.5)*sin(Yaw*0.5)-sin(Roll*0.5)*sin(Pitch*0.5)*cos(Yaw*0.5)));
+
+			if ( SumCount >= AverageSamplesCount ) {
+				AverageAx = SumAx / SumCount;
+				AverageAy = SumAy / SumCount;
+				AverageAz = SumAz / SumCount;
+				Roll = atan2f( -AverageAy, -AverageAz );
+				Pitch = asinf( AverageAx/ sqrtf( AverageAx * AverageAx + AverageAy * AverageAy + AverageAz * AverageAz ) );
+				Yaw = 0.0;				
+				q0=((cosf(Roll*0.5)*cosf(Pitch*0.5)*cosf(Yaw*0.5)+sinf(Roll*0.5)*sinf(Pitch*0.5)*sinf(Yaw*0.5)));
+				q1=((sinf(Roll*0.5)*cosf(Pitch*0.5)*cosf(Yaw*0.5)-cosf(Roll*0.5)*sinf(Pitch*0.5)*sinf(Yaw*0.5)));
+				q2=((cosf(Roll*0.5)*sinf(Pitch*0.5)*cosf(Yaw*0.5)+sinf(Roll*0.5)*cosf(Pitch*0.5)*sinf(Yaw*0.5)));
+				q3=((cosf(Roll*0.5)*cosf(Pitch*0.5)*sinf(Yaw*0.5)-sinf(Roll*0.5)*sinf(Pitch*0.5)*cosf(Yaw*0.5)));
+				InitDone = true;
+			}
 			SumCount++;
-			if ( SumCount > AverageSamplesCount ) InitDone = true;
+		} else {
+			SumAx = 0.0;
+			SumAy = 0.0;
+			SumAz = 0.0;
+			SumCount = 1;
 		}
 	}
 }

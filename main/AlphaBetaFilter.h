@@ -7,6 +7,7 @@
 #define AlphaBetaFilter_H_
 
 #include <stdint.h>
+#include "DownSample.h"
 
 // alpha beta filter class
 class AlphaBeta {
@@ -32,19 +33,8 @@ private:
 	bool firstpass = true;
 	int zicket = 0;
 	bool writing = false;
-	float filt_1;
-	float filt_2;
-	float filt_3;
-	float filt_4;
-	float prim_1;
-	float prim_2;
-	float prim_3;
-	float prim_4;	
-	float dt_1;
-	float dt_2;
-	float dt_3;
-	float dt_4;
 	int64_t gettime = 0.0;
+	DownSample filter, deriv, deltat;
 public:
 	void ABinit( float N, float dtTypical );
 	void ABinit( float N, float dtTypical, float _Threshold );
