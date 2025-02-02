@@ -42,83 +42,99 @@ int16_t AlphaBeta::ABNget() {
 	return NAB;
 }
 
+void AlphaBeta::Init( float dt, float val, float valprim, float valacc ) {
+		filt_update = val;
+		prim_update = valprim;
+		acc_update = valacc;
+		Dt = 0.0;
+		filter.DSinit( val );		
+		deriv.DSinit( prim );
+		deltat.DSinit( dt );
+}
+
 // AB filter update		
 void AlphaBeta::ABupdate(float dt, float RawData ) {
 	#define MaxZicket 3 // maximum number of concecuitives zickets to let the filter track the signal. If zicket is higher a step change in signal is suspected
-	// process sample if dt above dtMin and below dtMax (dtMin typicaly average dt / 4 and dtMax typicaly 4 x average dt)
-	writing = false;
-	if ( dt > dtMin && dt < dtMax  ) {
-		if ( firstpass ) { // initialize filter variables when first called
-			writing = true;
-			gettime = esp_timer_get_time();
-			unfiltered = RawData;
-			filt = RawData;
-			_filt = RawData;
-			filter.DSinit( filt );
-			deltat.DSinit( dt );
-			prim = 0.0;
-			_prim = 0.0;
-			deriv.DSinit( prim );
-			writing = false;
-			firstpass = false;
-			zicket = 4*MaxZicket;
-		} else {
+	// process sample if dt above dtMin and below dtMax (dtMin typicaly average dt -/ 3 and dtMax typicaly 3 x average dt)
+	if ( firstpass ) { // initialize filter variables when first called
+		// Initialize filter parameters
+		Init( dt, RawData, 0.0, 0.0 );
+		zicket = 0;
+		firstpass = false;
+	} else {
+		if ( dt > dtMin && dt < dtMax  ) {
+			// predict filt and prim from previous state
+			Dt = Dt + dt;
+			filt_predict = filt_update + Dt * prim_update + 0.5 * Dt * Dt * acc_update;
+			prim_predict = prim_update + acc_update * Dt;
+			// innovation is the difference between measured value and prediction 
+			innovation = RawData - filt_predict;
+			// compute filt, prim and acc updates
+			filt_update = filt_predict + alpha * innovation;
+			prim_update = prim_predict + beta * innovation / Dt;
+			acc_update = acc_update  + gamma * innovation / Dt / Dt; 
 			if ( zicket <= MaxZicket ) { 
-				// if filter stable
-				delta = RawData - filt;
-				if ( (abs(delta) < Threshold ) || (Threshold == 0.0) ) {
+				// if filter stable (below max zicket) test if data within threshold, filt and prim limits				
+				if ( ( (abs(innovation) < Threshold ) || (Threshold == 0.0)) &&
+					 ( (filt_update > filtMin && filt_update < filtMax) || ( filtMin == 0.0 && filtMax == 0.0 ) ) &&
+					 ( (prim_update > primMin && prim_update < primMax) || ( primMin == 0.0 && primMax == 0.0 ) )    ) {
 					// new data below threshold
+					// filter is stable, Dt = 0 and zicket = 0, update filter outputs filt, prim 
+					Dt = 0;
+					zicket = 0;
 					writing = true;
 					gettime = esp_timer_get_time();
-					unfiltered = RawData;
-					prim = prim + beta * delta / dt;
-					if ( primMin != 0.0 || primMax != 0.0 ) {
-						if ( prim < primMin ) prim = primMin;
-						if ( prim > primMax ) prim = primMax;
-					}
-					deriv.DSupdate( prim );
-					filt = filt + alpha * delta + prim * dt;
-					if ( filtMin != 0.0 || filtMax != 0.0 ) {
-						if ( filt < filtMin ) filt = filtMin;
-						if ( filt > filtMax ) filt = filtMax;
-					}
-					filter.DSupdate( filt );
-					deltat.DSupdate( dt );					
+					filt = filt_update;
+					prim = prim_update;
 					writing = false;
-					zicket = 0;
 				} else {
-					// new data above threshold, additional zicket
+					// new data beyond threshold, filt and prim limits
+					// increase zicket
 					zicket++;
 					if ( zicket > MaxZicket ) {
-						// if new zicket makes filter unstable (step change), arm and switch to alternate AB filter
-						_prim = prim;
-						_filt = filt;
-						zicket = 3*MaxZicket;
+						// if zicket is above max zicket, filter is considered unstable and we probably are getting into a step change
+						// we don't update filter outputs filt, prim
+						// we reset filter to start tracking at current value RawData
+						Init( dt, RawData, 0.0, 0.0 );
+						// filter unstable, we increase zicket to create hysteresis
+						zicket = 2 * MaxZicket;
 					}
 				}
 			} else {
-				// if filter unstable - step change
-				// update alternate filter to track step change
-				_delta = RawData - _filt;
-				_prim = _prim + beta * _delta / dt;
-				_filt = _filt + alpha * _delta + _prim * dt;
-				// if new data below threshold, reduce number of zicket
-				if ( abs(_delta) < Threshold || (Threshold == 0.0) ) zicket--; else zicket = 4*MaxZicket;
+				// filter is unstable, we consider we have been through a step change
+				// we don't update filter outputs filt, prim
+				//
+				if ( abs(innovation) < Threshold || (Threshold == 0.0) ) {
+					// if innovation is below threshold, filter is converging toward stability and we reduce the zicket number
+					zicket--;
+				} else {
+					// if innovation is above threshold, filter is still unstable and we increase zicket to create hysteresis
+					zicket = 2 * MaxZicket;
+				}
+				//
 				if ( zicket <= MaxZicket ) {
-					// if number of zicket below stability criteria, arm and switch to primary filter
+					// if zicket goes below stability criteria, filter is considered stable and we reset filter with new parameters to resume tracking
+					// filter is now stable, zicket = 0 and Dt = 0;
+					zicket = 0;
+					Dt = 0.0;
+					// we update filter outputs filt, prim 
 					writing = true;
 					gettime = esp_timer_get_time();
-					unfiltered = RawData;
-					prim = _prim;
-					filt = _filt;
-					filter.DSinit( filt );
-					deriv.DSinit( prim );
-					deltat.DSinit( dt );
+					filt = filt_update;
+					prim = prim_update;
 					writing = false;
-					zicket = 0;
+					// we resintialize down sampled values
+					filter.DSinit( filt );		
+					deriv.DSinit( prim );
+					deltat.DSinit( dt );					
 				}						
 			}
 		}
+		// In all cases, update unfiltered output and down scaled flter data
+		unfiltered = RawData;
+		filter.DSupdate( filt );
+		deriv.DSupdate( prim );
+		deltat.DSupdate( dt );
 	}
 }
 
@@ -127,7 +143,7 @@ float AlphaBeta::ABfilt(void) {
 	while( writing ) {
 		if ( abs( (int64_t)esp_timer_get_time() - gettime ) > 1000 ) break; // wait for 1 ms max if writing is in process
 	}
-	return filt;
+	return filt_update;
 }
 
 // AB filter derivative output
@@ -135,7 +151,7 @@ float AlphaBeta::ABprim(void) {
 	while( writing ) {
 		if ( abs( (int64_t)esp_timer_get_time() - gettime ) > 1000 ) break; // wait for 1 ms max if writing is in process
 	}
-	return prim;
+	return prim_update;
 }
 
 // AB filter stability check

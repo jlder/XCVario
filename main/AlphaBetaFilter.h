@@ -13,18 +13,22 @@
 class AlphaBeta {
 private:
 	float unfiltered = 0.0;
+	float Dt = 0.0;
 	float dtAvg = 0.0;
 	float dtMax = 0.0;
 	float dtMin = 0.0;
-	float delta = 0.0;
-	float prim = 0.0;
 	float filt = 0.0;
-	float _delta = 0.0;
-	float _prim = 0.0;
-	float _filt = 0.0;
+	float prim = 0.0;
+	float filt_predict = 0.0;
+	float prim_predict = 0.0;
+	float innovation = 0.0;
+	float filt_update = 0.0;
+	float prim_update = 0.0;
+	float acc_update = 0.0;
 	float NAB;
 	float alpha = 0.0;
 	float beta = 0.0;
+	float gamma = 0.0;
 	float Threshold = 0.0;
 	float primMin = 0.0;
 	float primMax = 0.0;
@@ -34,6 +38,7 @@ private:
 	int zicket = 0;
 	bool writing = false;
 	int64_t gettime = 0.0;
+	void Init( float dt, float val, float valprim, float valacc );
 	DownSample filter, deriv, deltat;
 public:
 	void ABinit( float N, float dtTypical );
