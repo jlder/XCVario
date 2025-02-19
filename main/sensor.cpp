@@ -860,7 +860,7 @@ static void processIMU(void *pvParameters)
 	#define CASPrimmin -30.0
 	#define CASPrimmax 30.0
 	CAS.ABinit( NCAS, processIMUperiod, SpeedOutliers, CASmin, CASmax, CASPrimmin, CASPrimmax );
-	#define NALT 8 // ALT alpha/beta coeff
+	#define NALT 10 // ALT alpha/beta coeff
 	#define AltitudeOutliers 30.0 // 30 m maximum variation sample to sample
 	#define Altmin -500.0
 	#define Altmax 12000
@@ -887,7 +887,7 @@ static void processIMU(void *pvParameters)
 	Wb.ABinit( NBARO, processIMUperiod );
 		
 	// alpha beta gyro and accel module filters parameters
-	#define NModule 4 //  AB Filter parameter
+	#define NModule 5 //  AB Filter parameter
 	GyroModuleSquare.ABinit( NModule, processIMUperiod );
 	AccelModuleSquare.ABinit( NModule, processIMUperiod );	
 
