@@ -898,12 +898,12 @@ static void processIMU(void *pvParameters)
 	#define Vcfperiod 1.5 // 1.5 second complementary filter period
 	VbiPrim.CFinit( processIMUrate, Vcfperiod );
 	Vbi.CFinit( processIMUrate, Vcfperiod );	
-	#define Wcfperiod 0.5 // 0.5 second complementary filter period
+	#define Wcfperiod 0.25 // 0.25 second complementary filter period
 	WbiPrim.CFinit( processIMUrate, Wcfperiod );
 	Wbi.CFinit( processIMUrate, Wcfperiod );
 	
 	// ALTbi complementary filter initilization
-	#define ALTcfperiod 0.5 // 0.5 second compelmentary filter
+	#define ALTcfperiod 0.25 // 0.25 second compelmentary filter
 	ALTbi.CFinit( processIMUrate, ALTcfperiod );
 	
 	// compute once the filter parameters in functions of values in FLASH
