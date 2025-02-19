@@ -1,3 +1,4 @@
+
 #include "AlphaBetaFilter.h"
 #include <esp_timer.h>
 #include <cmath>
@@ -30,11 +31,14 @@ void AlphaBeta::ABinit( float N, float dtTypical, float _Threshold, float _filtM
 
 // AB filter depth N update
 void AlphaBeta::ABNupdate( float N ) {
+	#define Kd 1.3
+	#define Ka 0.25
 	N= round( N );
 	if ( N >= 2.0  ) {
 		NAB = N;
-		alpha =  (2.0 * (2.0 * N - 1.0) / N / (N + 1.0));
-		beta = (6.0 / N / (N + 1.0));
+		alpha =  2.0 * (2.0 * N - 1.0) / N / (N + 1.0);
+		beta = Kd * 6.0 / N / (N + 1.0);
+		gamma = Ka * 12.0 / N / (N + 1.0) / (N + 2.0);
 	}
 }
 
@@ -54,14 +58,15 @@ void AlphaBeta::Init( float dt, float val, float valprim, float valacc ) {
 
 // AB filter update		
 void AlphaBeta::ABupdate(float dt, float RawData ) {
-	#define MaxZicket 3 // maximum number of concecuitives zickets to let the filter track the signal. If zicket is higher a step change in signal is suspected
+	#define MaxZicket 3 // maximum number of concecuitives zickets to let the filter track the signal. If ZicketCount is higher a step change in signal is suspected
 	// process sample if dt above dtMin and below dtMax (dtMin typicaly average dt -/ 3 and dtMax typicaly 3 x average dt)
 	if ( firstpass ) { // initialize filter variables when first called
 		// Initialize filter parameters
 		Init( dt, RawData, 0.0, 0.0 );
-		zicket = 0;
+		ZicketCount = 0;
 		firstpass = false;
 	} else {
+		// if dt is within acceptable limits
 		if ( dt > dtMin && dt < dtMax  ) {
 			// predict filt and prim from previous state
 			Dt = Dt + dt;
@@ -69,19 +74,20 @@ void AlphaBeta::ABupdate(float dt, float RawData ) {
 			prim_predict = prim_update + acc_update * Dt;
 			// innovation is the difference between measured value and prediction 
 			innovation = RawData - filt_predict;
-			// compute filt, prim and acc updates
+			// compute filt, prim and acc updates using innovation
 			filt_update = filt_predict + alpha * innovation;
 			prim_update = prim_predict + beta * innovation / Dt;
-			acc_update = acc_update  + gamma * innovation / Dt / Dt; 
-			if ( zicket <= MaxZicket ) { 
-				// if filter stable (below max zicket) test if data within threshold, filt and prim limits				
+			acc_update = acc_update  + gamma * innovation / Dt / Dt;
+			// 
+			if ( ZicketCount <= MaxZicket ) { 
+				// if filter stable (ZicketCount below max zicket) test if data within threshold, filt and prim limits				
 				if ( ( (abs(innovation) < Threshold ) || (Threshold == 0.0)) &&
 					 ( (filt_update > filtMin && filt_update < filtMax) || ( filtMin == 0.0 && filtMax == 0.0 ) ) &&
 					 ( (prim_update > primMin && prim_update < primMax) || ( primMin == 0.0 && primMax == 0.0 ) )    ) {
 					// new data below threshold
-					// filter is stable, Dt = 0 and zicket = 0, update filter outputs filt, prim 
+					// filter is stable, Dt = 0 and ZicketCount = 0, update filter outputs filt, prim using filt/prim_update with innovation
 					Dt = 0;
-					zicket = 0;
+					ZicketCount = 0;
 					writing = true;
 					gettime = esp_timer_get_time();
 					filt = filt_update;
@@ -89,35 +95,35 @@ void AlphaBeta::ABupdate(float dt, float RawData ) {
 					writing = false;
 				} else {
 					// new data beyond threshold, filt and prim limits
-					// increase zicket
-					zicket++;
-					if ( zicket > MaxZicket ) {
-						// if zicket is above max zicket, filter is considered unstable and we probably are getting into a step change
+					// increase ZicketCount
+					ZicketCount++;
+					if ( ZicketCount > MaxZicket ) {
+						// if ZicketCount is above max zicket, filter is considered unstable and we probably are getting into a step change
 						// we don't update filter outputs filt, prim
 						// we reset filter to start tracking at current value RawData
 						Init( dt, RawData, 0.0, 0.0 );
-						// filter unstable, we increase zicket to create hysteresis
-						zicket = 2 * MaxZicket;
+						// filter unstable, we increase ZicketCount to create hysteresis
+						ZicketCount = 2 * MaxZicket;
 					}
+					// filter still not stable, update filt using last valid filt and prim
+					filt = filt + Dt * prim;
 				}
 			} else {
-				// filter is unstable, we consider we have been through a step change
-				// we don't update filter outputs filt, prim
-				//
+				// filter is unstable, we consider we are through a step change
 				if ( abs(innovation) < Threshold || (Threshold == 0.0) ) {
 					// if innovation is below threshold, filter is converging toward stability and we reduce the zicket number
-					zicket--;
+					ZicketCount--;
 				} else {
-					// if innovation is above threshold, filter is still unstable and we increase zicket to create hysteresis
-					zicket = 2 * MaxZicket;
+					// if innovation is above threshold, filter is still unstable and we increase ZicketCount to create hysteresis
+					ZicketCount = 2 * MaxZicket;
 				}
 				//
-				if ( zicket <= MaxZicket ) {
-					// if zicket goes below stability criteria, filter is considered stable and we reset filter with new parameters to resume tracking
-					// filter is now stable, zicket = 0 and Dt = 0;
-					zicket = 0;
+				if ( ZicketCount <= MaxZicket ) {
+					// if ZicketCount goes below stability criteria, filter is considered stable again and we reset filter with new parameters to resume tracking
+					// filter is now stable, ZicketCount = 0 and Dt = 0;
+					ZicketCount = 0;
 					Dt = 0.0;
-					// we update filter outputs filt, prim 
+					// we update filter outputs filt, prim using latest filt/prim_update with innovation.
 					writing = true;
 					gettime = esp_timer_get_time();
 					filt = filt_update;
@@ -127,7 +133,10 @@ void AlphaBeta::ABupdate(float dt, float RawData ) {
 					filter.DSinit( filt );		
 					deriv.DSinit( prim );
 					deltat.DSinit( dt );					
-				}						
+				} else {
+					// if filter still not stable, update filt using last valid filt and prim
+					filt = filt + Dt * prim;
+				}
 			}
 		}
 		// In all cases, update unfiltered output and down scaled flter data
@@ -157,7 +166,7 @@ float AlphaBeta::ABprim(void) {
 // AB filter stability check
 bool AlphaBeta::ABstable(void) {
 	bool test = true;
-	if ( zicket == 0 ) return test; else return !test;
+	if ( ZicketCount == 0 ) return test; else return !test;
 }
 
 // AB filter unfiltered output

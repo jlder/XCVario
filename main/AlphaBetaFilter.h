@@ -35,7 +35,7 @@ private:
 	float filtMin = 0.0;
 	float filtMax = 0.0;
 	bool firstpass = true;
-	int zicket = 0;
+	int ZicketCount = 0;
 	bool writing = false;
 	int64_t gettime = 0.0;
 	void Init( float dt, float val, float valprim, float valacc );
