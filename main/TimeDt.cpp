@@ -11,7 +11,7 @@ void TimeDt::DTupdate( float val ) {
 	if ( firstpass ) {
 		dtmin = (int16_t)val * 0.33;
 		dtmax = (int16_t)val * 3.0;
-		deltat.DSinit( val );	
+		deltat.DSinit( val );
 		currentime = esp_timer_get_time();
 		previoustime = currentime;
 		firstpass = false;

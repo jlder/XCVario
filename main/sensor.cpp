@@ -917,7 +917,6 @@ static void processIMU(void *pvParameters)
 		mtick++;
 		
 		TickType_t xLastWakeTime_mpu =xTaskGetTickCount();
-		
 		// get gyro data
 		esp_err_t errMPU = MPU.rotation(&gyroRaw);// read raw gyro data
  		if( errMPU == ESP_OK ){ 
@@ -1199,7 +1198,7 @@ static void processIMU(void *pvParameters)
 				Vb in cm/s
 				PseudoHeadingPrim in hundredth of milli rad/s,			
 			*/				
-			if ( mtick % 200 ) { // every 5 seconds ( 200 x 0.025 ms )
+			if ( (mtick % 200) == 0 ) { // every 5 seconds ( 200 x 0.025 ms )
 				// send $S1, $S2 and $S3
 				sprintf(str,"$S1,%lld,%i,%i,%i,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$S3,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$S2,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",				
 					// $S1 stream
@@ -1234,7 +1233,7 @@ static void processIMU(void *pvParameters)
 					);
 				Router::sendXCV(str);
 			} else {
-				if ( mtick % 4 ) { // every 100 ms ( 4 x 0.02 ms)
+				if ( (mtick % 4) == 0 ) { // every 100 ms ( 4 x 0.02 ms)
 					// send $S1 and $S3
 					sprintf(str,"$S1,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$S3,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",
 						(int64_t)(chosenGnss->time*1000.0), (int16_t)(chosenGnss->speed.x*100.0), (int16_t)(chosenGnss->speed.y*100.0), (int16_t)(chosenGnss->speed.z*100.0),
@@ -1264,10 +1263,10 @@ static void processIMU(void *pvParameters)
 
 		Router::routeXCV();
 		
-		ProcessTimeIMU = (esp_timer_get_time()*0.001) - dtGyr.DTgettime();
-		if ( ProcessTimeIMU > 8 && TAS.get() < 15.0 ) {
-			ESP_LOGI(FNAME,"processIMU: %i / 25", (int16_t)(ProcessTimeIMU) );
-		}		
+		ProcessTimeIMU = (esp_timer_get_time() - dtGyr.DTgettime())*0.001;
+		//if ( ProcessTimeIMU > 5 && TAS.get() < 15.0 ) {
+			ESP_LOGI(FNAME,"IMU: %i ms", (int16_t)(ProcessTimeIMU) );
+		//}		
 
 		vTaskDelayUntil(&xLastWakeTime_mpu, 25/portTICK_PERIOD_MS);  // 25 ms = 40 Hz loop
 		if( (mtick % 40) == 0) {  // test stack every second
@@ -2002,10 +2001,10 @@ void readSensors(void *pvParameters){
 			}
 		}	
 
-		ProcessTimeSensors = (esp_timer_get_time()*0.001) - ProcessTimeSensors;
-		if ( ProcessTimeSensors > 30 && TAS.get() < 15.0 ) {
-			ESP_LOGI(FNAME,"readSensors: %i / 100", (int16_t)(ProcessTimeSensors) );
-		}		
+		ProcessTimeSensors = (esp_timer_get_time()*0.001 - ProcessTimeSensors);
+		//if ( ProcessTimeSensors > 20 && TAS.get() < 15.0 ) {
+			ESP_LOGI(FNAME,"Sensors: %i ms", (int16_t)(ProcessTimeSensors) );
+		//}		
 		esp_task_wdt_reset();
 		if( uxTaskGetStackHighWaterMark( bpid ) < 512 && TAS.get() < 15.0)
 			ESP_LOGW(FNAME,"Warning sensor task stack low: %d bytes", uxTaskGetStackHighWaterMark( bpid ) );
@@ -2511,13 +2510,13 @@ void system_startup(void *args){
 		#define TempOutliers 20 // 20° maximum variation sample to sample 
 		OATemp.ABinit( NOAT, OATdt, TempOutliers );
 		temperature = ds18b20.getTemp();
-		OATemp.ABupdate( 0.1, temperature );
 		if( temperature == DEVICE_DISCONNECTED_C ) {
 			ESP_LOGE(FNAME,"Error: Self test Temperatur Sensor failed; returned T=%2.2f", temperature );
 			display->writeText( line++, "Temp Sensor: NOT FOUND");
 			gflags.validTemperature = false;
 			logged_tests += "External Temperature Sensor: NOT FOUND\n";
 		} else {
+			ESP_LOGI(FNAME,"T sensor AB update done");
 			// read OAT sensor multiple times until temperature is within range and stable
 			for ( int nbsample = 0; nbsample < 20 && !OATemp.ABstable(); nbsample++ ) {
 				temperature = ds18b20.getTemp();
@@ -2857,8 +2856,6 @@ void system_startup(void *args){
 	}
 	delay( 100 );
 
-
-
 	if ( SetupCommon::isClient() ){
 		if( wireless == WL_WLAN_CLIENT ){
 			display->clear();
@@ -2910,8 +2907,8 @@ void system_startup(void *args){
 	if( screen_centeraid.get() ){
 		centeraid = new CenterAid( MYUCG );
 	}
-	
-	xTaskCreatePinnedToCore(&processIMU, "processIMU", 4096, NULL, 15, &mpid, 0);
+
+	xTaskCreatePinnedToCore(&processIMU, "processIMU", 8192, NULL, 15, &mpid, 0);
 	
 	if( SetupCommon::isClient() ){
 		xTaskCreatePinnedToCore(&clientLoop, "clientLoop", 4096, NULL, 11, &bpid, 0);

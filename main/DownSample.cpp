@@ -9,7 +9,10 @@ void DownSample::DSinit( float val ) {
 	writing = true;
 	gettime = esp_timer_get_time();
 	index = 0;
-	while ( index < DSratio ) table[ index ] = val;
+	while ( index < DSratio ) {
+		table[ index ] = val;
+		index++;
+	}
 	sum = val * DSratio;
 	average = val;
 	index = 0;

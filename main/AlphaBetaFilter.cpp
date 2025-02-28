@@ -54,16 +54,15 @@ void AlphaBeta::Init( float dt, float val, float valprim, float valacc ) {
 		filter.DSinit( val );		
 		deriv.DSinit( prim );
 		deltat.DSinit( dt );
+		ZicketCount = 2 * MaxZicket;		
 }
 
 // AB filter update		
 void AlphaBeta::ABupdate(float dt, float RawData ) {
-	#define MaxZicket 3 // maximum number of concecuitives zickets to let the filter track the signal. If ZicketCount is higher a step change in signal is suspected
 	// process sample if dt above dtMin and below dtMax (dtMin typicaly average dt -/ 3 and dtMax typicaly 3 x average dt)
 	if ( firstpass ) { // initialize filter variables when first called
 		// Initialize filter parameters
 		Init( dt, RawData, 0.0, 0.0 );
-		ZicketCount = 0;
 		firstpass = false;
 	} else {
 		// if dt is within acceptable limits

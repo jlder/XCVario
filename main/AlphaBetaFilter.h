@@ -9,6 +9,8 @@
 #include <stdint.h>
 #include "DownSample.h"
 
+#define MaxZicket 3 // maximum number of concecuitives zickets to let the filter track the signal. If ZicketCount is higher a step change in signal is suspected
+
 // alpha beta filter class
 class AlphaBeta {
 private:
