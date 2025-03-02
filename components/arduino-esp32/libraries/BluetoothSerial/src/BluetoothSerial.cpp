@@ -41,7 +41,7 @@
 const char * _spp_server_name = "ESP32SPP";
 
 #define RX_QUEUE_SIZE 512
-#define TX_QUEUE_SIZE 32
+#define TX_QUEUE_SIZE 512
 #define SPP_TX_QUEUE_TIMEOUT 1000
 #define SPP_TX_DONE_TIMEOUT 1000
 #define SPP_CONGESTED_TIMEOUT 1000
@@ -163,7 +163,7 @@ static esp_err_t _spp_queue_packet(uint8_t *data, size_t len){
     return ESP_OK;
 }
 
-const uint16_t SPP_TX_MAX = 330;
+const uint16_t SPP_TX_MAX = 512;
 static uint8_t _spp_tx_buffer[SPP_TX_MAX];
 static uint16_t _spp_tx_buffer_len = 0;
 
