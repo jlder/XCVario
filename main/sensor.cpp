@@ -87,6 +87,9 @@
 //!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 //
 #ifdef LS6
+	float KP0 = -0.01; 
+	float KPa2 = 2.28;
+	float Aoa2 = 0.0;
 	float CLA = 5.75;
 	float KAoB = -3.5; // MOD#1 Latest signs
 	float KGx = 4.1;
@@ -103,6 +106,9 @@
 #endif
 
 #ifdef VENTUS3
+	float KP0 = -0.058; 
+	float KPa2 = 0.57;
+	float Aoa2 = 0.006;
 	float CLA = 5.98;
 	float KAoB = -2.97; // MOD#1 Latest signs
 	float KGx = 12.0;
@@ -396,8 +402,10 @@ float PeriodVelbi = 8.0;
 float LastPeriodVelbi = 7.0;
 float fcVelbi1;
 float fcVelbi2;
-float fcVelbiLow1;
-float fcVelbiLow2;
+float fcVelbi_v_1;
+float fcVelbi_v_2;
+float fcVelbi_w_1;
+float fcVelbi_w_2;
 
 float ALTbiN = 9.0;
 float TASbiN = 5.0;
@@ -505,7 +513,7 @@ public:
 			dtMax = dtTypical * 4.0;
 			dtMin = dtTypical / 4.0;
 		}
-		firstpass = true;
+		firstpass = true;.
 		Threshold = _Threshold;
 		filtMin = _filtMin;
 		filtMax = _filtMax;
@@ -1553,40 +1561,27 @@ static void processIMU(void *pvParameters)
 				}
 				fcVelbi1 = ( DynPeriodVelbi / ( DynPeriodVelbi + dtGyr ));
 				fcVelbi2 = ( 1.0 - fcVelbi1 );
-				#define VelbiLow 4.0
-				DynPeriodVelbiLow = DynPeriodVelbi / VelbiLow;
-				fcVelbiLow1 = ( DynPeriodVelbiLow / ( DynPeriodVelbiLow + dtGyr ));
-				fcVelbiLow2 = ( 1.0 - fcVelbi1 );				
+				
+				#define VelbiLow_v 1.0
+				fcVelbi_v_1 = ( VelbiLow_v / ( VelbiLow_v + dtGyr ));
+				fcVelbi_v_2 = ( 1.0 - fcVelbi_v_1 );
+				#define VelbiLow_w 0.5
+				fcVelbi_w_1 = ( VelbiLow_w / ( VelbiLow_w + dtGyr ));
+				fcVelbi_w_2 = ( 1.0 - fcVelbi_w_1 );				
 				
 				// Compute baro interial acceleration ( complementary filter between inertial accel derivatives and baro accels )
 				//xSemaphoreTake( dataMutex, 3/portTICK_PERIOD_MS ); // prevent data conflicts for 3ms max.			
 				UbiPrim = fcVelbi1 * ( UbiPrim + UiPrimF.ABprim() * dtGyr ) + fcVelbi2 * UbPrimS;
-				if( opt_TE == 1 ) {
-					VbiPrim = fcVelbiLow1 * ( VbiPrim + ViPrimF.ABprim() * dtGyr ) + fcVelbiLow2 * VbPrimS;			
-					WbiPrim = fcVelbiLow1 * ( WbiPrim + WiPrimF.ABprim() * dtGyr ) + fcVelbiLow2 * WbPrimS;					
-				} else {
-					VbiPrim = fcVelbi1 * ( VbiPrim + ViPrimF.ABprim() * dtGyr ) + fcVelbi2 * VbPrimS;			
-					WbiPrim = fcVelbi1 * ( WbiPrim + WiPrimF.ABprim() * dtGyr ) + fcVelbi2 * WbPrimS;
-				}
+				VbiPrim = fcVelbiLow1 * ( VbiPrim + ViPrimF.ABprim() * dtGyr ) + fcVelbiLow2 * VbPrimS;			
+				WbiPrim = fcVelbiLow1 * ( WbiPrim + WiPrimF.ABprim() * dtGyr ) + fcVelbiLow2 * WbPrimS;					
 				
 				// Compute baro interial velocity ( complementary filter between baro inertial acceleration and baro speed )
 				Ubi = fcVelbi1 * ( Ubi + UbiPrim * dtGyr ) + fcVelbi2 * Ub;
-				if( opt_TE == 1 ) {
-					Vbi = fcVelbiLow1 * ( Vbi + VbiPrim * dtGyr ) + fcVelbiLow2 * Vb;
-					Wbi = fcVelbiLow1 * ( Wbi + WbiPrim * dtGyr ) + fcVelbiLow2 * Wb;
-					
-				} else {
-					Vbi = Vb;
-					Wbi = fcVelbi1 * ( Wbi + WbiPrim * dtGyr ) + fcVelbi2 * Wb;
-				}				
+				Vbi = fcVelbi_v_1 * ( Vbi + VbiPrim * dtGyr ) + fcVelbi_v_2 * Vb;
+				Wbi = fcVelbi_w_1 * ( Wbi + WbiPrim * dtGyr ) + fcVelbi_w_2 * Wb;
+			
+				TASbiSquare = Ubi * Ubi + Vbi * Vbi + Wbi * Wbi;
 
-				// baro inertial TAS & TAS square in any frame
-				// TASbiSquare = Ubi * Ubi + Vbi * Vbi + Wbi * Wbi;
-				if ( opt_TE == 1 ) {
-					TASbiSquare = Ubi * Ubi + Vbi * Vbi + Wbi * Wbi;
-				} else {
-					TASbiSquare = Ubi * Ubi + Wbi * Wbi; // TODO removed Vbi from calculation due to unexplained high Vbi variations					
-				}
 				TASbi.Set( sqrt( TASbiSquare ) );
 				
 				//xSemaphoreGive( dataMutex );
@@ -2297,7 +2292,8 @@ void readSensors(void *pvParameters){
 			statTime = esp_timer_get_time()/1000; // record static time in milli second
 			dtStat = (statTime - prevstatTime) / 1000.0; // period between last two valid static pressure samples in second	
 			if (dtStat == 0) dtStat = PERIOD10HZ;
-			statP.Set( p );
+			PSerr = dynP.get() * ( KP0 + KPa2 * ( AoA.get() - Aoa2 ) * ( AoA.get() - Aoa2 ) );
+			statP.Set( p - PSerr );
 			baroP = p;	// for compatibility with Eckhard code
 			Prevp = p;
 		} else {
@@ -2326,7 +2322,7 @@ void readSensors(void *pvParameters){
 			dynPTime = esp_timer_get_time()/1000.0; // record dynPTimeTE time in milli second		
 			dtdynP = (dynPTime - prevdynPTime) / 1000.0; // period between last two valid dynamic pressure samples in second
 			if (dtdynP == 0) dtdynP = PERIOD10HZ;
-			dynP.Set( dp );
+			dynP.Set( dp + PSerr );
 		}
 		else {
 			dynamicP = PrevdynP;
