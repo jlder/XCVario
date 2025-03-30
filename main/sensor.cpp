@@ -513,7 +513,7 @@ public:
 			dtMax = dtTypical * 4.0;
 			dtMin = dtTypical / 4.0;
 		}
-		firstpass = true;.
+		firstpass = true;
 		Threshold = _Threshold;
 		filtMin = _filtMin;
 		filtMax = _filtMax;
@@ -1572,8 +1572,8 @@ static void processIMU(void *pvParameters)
 				// Compute baro interial acceleration ( complementary filter between inertial accel derivatives and baro accels )
 				//xSemaphoreTake( dataMutex, 3/portTICK_PERIOD_MS ); // prevent data conflicts for 3ms max.			
 				UbiPrim = fcVelbi1 * ( UbiPrim + UiPrimF.ABprim() * dtGyr ) + fcVelbi2 * UbPrimS;
-				VbiPrim = fcVelbiLow1 * ( VbiPrim + ViPrimF.ABprim() * dtGyr ) + fcVelbiLow2 * VbPrimS;			
-				WbiPrim = fcVelbiLow1 * ( WbiPrim + WiPrimF.ABprim() * dtGyr ) + fcVelbiLow2 * WbPrimS;					
+				VbiPrim = fcVelbi_v_1 * ( VbiPrim + ViPrimF.ABprim() * dtGyr ) + fcVelbi_v_2 * VbPrimS;			
+				WbiPrim = fcVelbi_w_1 * ( WbiPrim + WiPrimF.ABprim() * dtGyr ) + fcVelbi_w_2 * WbPrimS;					
 				
 				// Compute baro interial velocity ( complementary filter between baro inertial acceleration and baro speed )
 				Ubi = fcVelbi1 * ( Ubi + UbiPrim * dtGyr ) + fcVelbi2 * Ub;
@@ -2284,7 +2284,7 @@ void readSensors(void *pvParameters){
 		
 		// get raw static pressure
 		bool ok=false;
-		float p = 0;
+		float p = 0.0, PSerr = 0.0;
 		Prevp = statP.Get();
 		p = baroSensor->readPressure(ok);
 		if ( ok ) {			
@@ -2292,7 +2292,7 @@ void readSensors(void *pvParameters){
 			statTime = esp_timer_get_time()/1000; // record static time in milli second
 			dtStat = (statTime - prevstatTime) / 1000.0; // period between last two valid static pressure samples in second	
 			if (dtStat == 0) dtStat = PERIOD10HZ;
-			PSerr = dynP.get() * ( KP0 + KPa2 * ( AoA.get() - Aoa2 ) * ( AoA.get() - Aoa2 ) );
+			PSerr = dynP.Get() * ( KP0 + KPa2 * ( AoA.Get() - Aoa2 ) * ( AoA.Get() - Aoa2 ) );
 			statP.Set( p - PSerr );
 			baroP = p;	// for compatibility with Eckhard code
 			Prevp = p;
