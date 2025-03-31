@@ -376,6 +376,9 @@ float Bias_AoB = 0.0;
 
 static float GRAVITY = 9.807;
 
+float DPraw = 0.0;
+float PSraw = 0.0;
+
 static float dynamicP; // filtered dynamic pressure
 static float baroP=0; // barometric pressure
 static float temperature=15.0;
@@ -1998,7 +2001,7 @@ static void processIMU(void *pvParameters)
 				// send $S1 and $S2 every 50 cycles = 5 seconds
 				sprintf(str,"$S1,%lld,%i,%i,%i,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$S3,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$S2,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",				
 					// $S1 stream
-					statTime, (int32_t)(statP.Get()*100.0),(int32_t)(teP.Get()*100.0), (int16_t)(dynP.Get()*10), 
+					statTime, (int32_t)(PSraw*100.0),(int32_t)(teP.Get()*100.0), (int16_t)(DPraw*10), 
 					(int64_t)(chosenGnss->time*1000.0), (int16_t)(chosenGnss->speed.x*100), (int16_t)(chosenGnss->speed.y*100), (int16_t)(chosenGnss->speed.z*100),
 					(int32_t)(Pitch*1000.0), (int32_t)(Roll*1000.0), (int32_t)(Yaw*1000.0),
 					(int32_t)(Vzbaro*100),
@@ -2035,7 +2038,7 @@ static void processIMU(void *pvParameters)
 					SENDataReady = false;
 					// send $S1 only every 100ms
 					sprintf(str,"$S1,%lld,%i,%i,%i,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$S3,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",
-						statTime, (int32_t)(statP.Get()*100.0),(int32_t)(teP.Get()*100.0), (int16_t)(dynP.Get()*10), 
+						statTime, (int32_t)(PSraw*100.0),(int32_t)(teP.Get()*100.0), (int16_t)(DPraw*10), 
 						(int64_t)(chosenGnss->time*1000.0), (int16_t)(chosenGnss->speed.x*100), (int16_t)(chosenGnss->speed.y*100), (int16_t)(chosenGnss->speed.z*100),
 						(int32_t)(Pitch*1000.0), (int32_t)(Roll*1000.0), (int32_t)(Yaw*1000.0),
 						(int32_t)(Vzbaro*100),
@@ -2189,7 +2192,6 @@ void readSensors(void *pvParameters){
 	float dAoA = 0.0;
 	float AoARaw = 0.0;
 	float AccelzFiltAoA = 0.0;
-	float dp = 0.0;
 
 	// Wind speed variables
 	float Vgx = 0.0;
@@ -2284,37 +2286,35 @@ void readSensors(void *pvParameters){
 		
 		// get raw static pressure
 		bool ok=false;
-		float p = 0.0, PSerr = 0.0;
+		float PSerr = 0.0;
 		Prevp = statP.Get();
-		p = baroSensor->readPressure(ok);
+		PSraw = baroSensor->readPressure(ok);
 		if ( ok ) {			
 			prevstatTime = statTime;
 			statTime = esp_timer_get_time()/1000; // record static time in milli second
 			dtStat = (statTime - prevstatTime) / 1000.0; // period between last two valid static pressure samples in second	
 			if (dtStat == 0) dtStat = PERIOD10HZ;
-			PSerr = dynP.Get() * ( KP0 + KPa2 * ( AoA.Get() - Aoa2 ) * ( AoA.Get() - Aoa2 ) );
-			statP.Set( p - PSerr );
-			baroP = p;	// for compatibility with Eckhard code
-			Prevp = p;
+			PSerr = dynP.Get() * 100.0 * ( KP0 + KPa2 * ( AoA.Get() - Aoa2 ) * ( AoA.Get() - Aoa2 ) );
+			statP.Set( PSraw - PSerr );
+			baroP = PSraw;	// for compatibility with Eckhard code
 		} else {
 			statP.Set( Prevp );
 			baroP = Prevp;
 		}
 		
 		// get raw te pressure
-		// xSemaphoreTake(xMutex,portMAX_DELAY );
+		float p = 0.0;		
 		p = teSensor->readPressure(ok);
 		if ( ok ) {
 			teP.Set( p );
 			// not sure what is required for compatibility with Eckhard code
 		}
-		// xSemaphoreGive(xMutex);
 		
 		// get raw dynamic pressure
 		if( asSensor ) {
 			PrevdynP = dynP.Get();
 			xSemaphoreTake( I2CMutex, 3/portTICK_PERIOD_MS ); // prevent I2C conflicts for 3ms max.		
-			dp =  asSensor->readPascal(0, ok);
+			DPraw =  asSensor->readPascal(0, ok);
 			xSemaphoreGive( I2CMutex );
 		}
 		if( ok ) {			
@@ -2322,7 +2322,7 @@ void readSensors(void *pvParameters){
 			dynPTime = esp_timer_get_time()/1000.0; // record dynPTimeTE time in milli second		
 			dtdynP = (dynPTime - prevdynPTime) / 1000.0; // period between last two valid dynamic pressure samples in second
 			if (dtdynP == 0) dtdynP = PERIOD10HZ;
-			dynP.Set( dp + PSerr );
+			dynP.Set( DPraw + PSerr / 100.0 );
 		}
 		else {
 			dynamicP = PrevdynP;
