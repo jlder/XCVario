@@ -107,8 +107,8 @@
 
 #ifdef VENTUS3
 	float KP0 = -0.058; 
-	float KPa2 = 0.57;
-	float Aoa2 = 0.006;
+	float KPa2 = 1.29;
+	float Aoa2 = 0.0052;
 	float CLA = 5.98;
 	float KAoB = -2.97; // MOD#1 Latest signs
 	float KGx = 12.0;
@@ -378,6 +378,7 @@ static float GRAVITY = 9.807;
 
 float DPraw = 0.0;
 float PSraw = 0.0;
+float PSerr = 0.0;
 
 static float dynamicP; // filtered dynamic pressure
 static float baroP=0; // barometric pressure
@@ -1993,7 +1994,7 @@ static void processIMU(void *pvParameters)
 				GyroModulePrimLevel  in hundredth of m/s3,
 				GravityModuleErrLevel in thousandth of m/s2
 				Event Event counter in unit
-				Vb in cm/s
+				PSerr in tenth Pa
 				PseudoHeadingPrim in hundredth of milli rad/s,			
 			*/				
 			if ( SEN50DataReady ) {
@@ -2019,7 +2020,7 @@ static void processIMU(void *pvParameters)
 					(int32_t)(Bias_AoB*1000),
 					(int32_t)(RTKNproj*1000),(int32_t)(RTKEproj*1000),(int32_t)(-RTKUproj*1000),(int32_t)(RTKheading*10),(int32_t)(ALTbi*100),
 					(int32_t)(DHeading*1000),(int32_t)(UbFS*100),(int32_t)(VbFS*100),(int32_t)(WbFS*100),
-					(int32_t)(AccelModulePrimLevel*100),(int32_t)(GyroModulePrimLevel*100), (int32_t)(GravityModuleErrLevel*1000), (int32_t)(Event), (int32_t)(Vb*100),
+					(int32_t)(AccelModulePrimLevel*100),(int32_t)(GyroModulePrimLevel*100), (int32_t)(GravityModuleErrLevel*1000), (int32_t)(Event), (int32_t)(PSerr*10),
 					(int32_t)(PseudoHeadingPrim*100000),
 					// $S2 stream
 					(int16_t)(temperatureLP.LowPass1()*10.0), (int16_t)(MPUtempcel*10.0), chosenGnss->fix, chosenGnss->numSV,
@@ -2056,7 +2057,7 @@ static void processIMU(void *pvParameters)
 						(int32_t)(Bias_AoB*1000),
 						(int32_t)(RTKNproj*1000),(int32_t)(RTKEproj*1000),(int32_t)(-RTKUproj*1000),(int32_t)(RTKheading*10),(int32_t)(ALTbi*100),
 						(int32_t)(DHeading*1000),(int32_t)(UbFS*100),(int32_t)(VbFS*100),(int32_t)(WbFS*100),
-						(int32_t)(AccelModulePrimLevel*100),(int32_t)(GyroModulePrimLevel*100), (int32_t)(GravityModuleErrLevel*1000),(int32_t)(Event),(int32_t)(Vb*100),
+						(int32_t)(AccelModulePrimLevel*100),(int32_t)(GyroModulePrimLevel*100), (int32_t)(GravityModuleErrLevel*1000),(int32_t)(Event),(int32_t)(PSerr*10),
 						(int32_t)(PseudoHeadingPrim*100000)						
 					);
 					xSemaphoreTake( BTMutex, 2/portTICK_PERIOD_MS );				
@@ -2286,7 +2287,6 @@ void readSensors(void *pvParameters){
 		
 		// get raw static pressure
 		bool ok=false;
-		float PSerr = 0.0;
 		Prevp = statP.Get();
 		PSraw = baroSensor->readPressure(ok);
 		if ( ok ) {			
@@ -2294,8 +2294,8 @@ void readSensors(void *pvParameters){
 			statTime = esp_timer_get_time()/1000; // record static time in milli second
 			dtStat = (statTime - prevstatTime) / 1000.0; // period between last two valid static pressure samples in second	
 			if (dtStat == 0) dtStat = PERIOD10HZ;
-			PSerr = dynP.Get() * 100.0 * ( KP0 + KPa2 * ( AoA.Get() - Aoa2 ) * ( AoA.Get() - Aoa2 ) );
-			statP.Set( PSraw - PSerr );
+			PSerr = dynP.Get() * ( KP0 + KPa2 * ( AoA.Get() - Aoa2 ) * ( AoA.Get() - Aoa2 ) ); // PSerr en Pa
+			statP.Set( PSraw - PSerr / 100.0 ); // PS error converted to hPa
 			baroP = PSraw;	// for compatibility with Eckhard code
 		} else {
 			statP.Set( Prevp );
@@ -2322,7 +2322,7 @@ void readSensors(void *pvParameters){
 			dynPTime = esp_timer_get_time()/1000.0; // record dynPTimeTE time in milli second		
 			dtdynP = (dynPTime - prevdynPTime) / 1000.0; // period between last two valid dynamic pressure samples in second
 			if (dtdynP == 0) dtdynP = PERIOD10HZ;
-			dynP.Set( DPraw + PSerr / 100.0 );
+			dynP.Set( DPraw + PSerr );
 		}
 		else {
 			dynamicP = PrevdynP;
@@ -2434,7 +2434,9 @@ void readSensors(void *pvParameters){
 		#define fcAoA2 (1.0-fcAoA1)
 		#define FreqBeta 0.66 // Hz
 		#define fcAoB1 (10.0/(10.0+FreqBeta))
-		#define fcAoB2 (1.0-fcAoB1)		
+		#define fcAoB2 (1.0-fcAoB1)
+		#define AoAmin -0.25 // ~ -15°
+		#define AoAmax  0.25 // ~ +15°
 		WingLoad = gross_weight.get() / polar_wingarea.get();  // should be only computed when pilot change weight settings in XCVario
 		//xSemaphoreTake( dataMutex, 3/portTICK_PERIOD_MS ); // prevent data conflicts for 3ms max.		
 		if ( (dynP.Get()>100.0) && (CAS.ABfilt() >10.0) && (TAS.Get()>10.0) && (abs(accelNEDBODYz.ABfilt()) > 1.0) ) { // compute AoA and AoB only when dynamic pressure is above 100 Pa, CAS & TAS abobe 10m/s and accel z above 1 m/s²
@@ -2442,11 +2444,18 @@ void readSensors(void *pvParameters){
 			CL = -AccelzFiltAoA * 2 / RhoSLISA * WingLoad / CAS.ABfilt() / CAS.ABfilt();
 			dAoA = ( CL - prevCL ) / CLA;
 			prevCL = CL;
+			float AoAfilt;			
 			if (abs(AccelzFiltAoA) > 1.0) { //when not close to Az=0, hybridation of aoa from drag & aoa from lift
 				AoARaw = -(accelNEDBODYx.ABfilt()/ accelNEDBODYz.ABfilt()) - Speed2Fly.cw( CAS.ABfilt() ) / Speed2Fly.getN();
-				AoA.Set( fcAoA1 * ( AoA.Get() + dAoA ) + fcAoA2 * AoARaw );
+				AoAfilt = fcAoA1 * ( AoA.Get() + dAoA ) + fcAoA2 * AoARaw;
+				if ( AoAfilt < AoAmin ) AoAfilt = AoAmin;
+				if ( AoAfilt > AoAmax ) AoAfilt = AoAmax;
+				AoA.Set( AoAfilt );
 			}  else { //when  close to Az=0, only aoa from lift considered
-                AoA.Set( AoA.Get() + dAoA ) ;
+				AoAfilt = AoA.Get() + dAoA;
+				if ( AoAfilt < AoAmin ) AoAfilt = AoAmin;
+				if ( AoAfilt > AoAmax ) AoAfilt = AoAmax;			
+                AoA.Set( AoAfilt ) ;
             }			
 			AoB.Set( fcAoB1 * AoB.Get() + fcAoB2 * ( KAoB * WingLoad * accelNEDBODYy.ABfilt()/ dynP.Get() - KGx * gyroCorrx.Get() / TAS.Get()) - Bias_AoB );	
 		} else {
