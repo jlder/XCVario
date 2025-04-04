@@ -1743,7 +1743,7 @@ static void processIMU(void *pvParameters)
 			}	
 		}
 		
-		if ( IMUstream ) {
+		if ( IMUstream && !SENDataReady && !SEN50DataReady ) {
 			/*
 				// Sent at 40Hz when IMUstream selected
 				$I,
@@ -1765,6 +1765,8 @@ static void processIMU(void *pvParameters)
 			xSemaphoreTake( BTMutex, 2/portTICK_PERIOD_MS ); // prevent BT conflicts for 2ms max.
 			Router::sendXCV(str);
 			xSemaphoreGive( BTMutex );
+			
+			Router::routeXCV();			
 		}
 		
 		if ( SENstream ) {
@@ -1834,7 +1836,11 @@ static void processIMU(void *pvParameters)
 			if ( SEN50DataReady ) {
 				SEN50DataReady = false;
 				// send $S1 and $S2 every 50 cycles = 5 seconds
-				sprintf(str,"$S1,%lld,%i,%i,%i,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$S3,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$S2,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",				
+				sprintf(str,"$I,%lld,%i,%i,%i,%i,%i,%i\r\n$S1,%lld,%i,%i,%i,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$S3,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$S2,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",				
+					// $I stream
+					(int64_t)(gyroTime),
+					(int32_t)(accelISUNEDBODY.x*10000.0), (int32_t)(accelISUNEDBODY.y*10000.0), (int32_t)(accelISUNEDBODY.z*10000.0),
+					(int32_t)(gyroISUNEDBODY.x*100000.0), (int32_t)(gyroISUNEDBODY.y*100000.0),(int32_t)(gyroISUNEDBODY.z*100000.0),				
 					// $S1 stream
 					(int64_t)(statTime), (int32_t)(PSraw*100.0),(int32_t)(teP.Get()*100.0), (int32_t)(DPraw*10), 
 					(int64_t)(chosenGnss->time*1000.0), (int32_t)(chosenGnss->speed.x*100), (int32_t)(chosenGnss->speed.y*100), (int32_t)(chosenGnss->speed.z*100),
@@ -1864,12 +1870,17 @@ static void processIMU(void *pvParameters)
 				xSemaphoreTake( BTMutex, 2/portTICK_PERIOD_MS );				
 				Router::sendXCV(str);
 				xSemaphoreGive( BTMutex );
+				Router::routeXCV();				
 			} else {
 				if ( SENDataReady ) {
 					SENDataReady = false;
-					// send $S1 only every 100ms
-					sprintf(str,"$S1,%lld,%i,%i,%i,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$S3,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",
-						statTime, (int32_t)(PSraw*100.0),(int32_t)(teP.Get()*100.0), (int16_t)(DPraw*10), 
+					sprintf(str,"$I,%lld,%i,%i,%i,%i,%i,%i\r\n$S1,%lld,%i,%i,%i,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$S3,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",
+						// $I stream
+						(int64_t)(gyroTime),
+						(int32_t)(accelISUNEDBODY.x*10000.0), (int32_t)(accelISUNEDBODY.y*10000.0), (int32_t)(accelISUNEDBODY.z*10000.0),
+						(int32_t)(gyroISUNEDBODY.x*100000.0), (int32_t)(gyroISUNEDBODY.y*100000.0),(int32_t)(gyroISUNEDBODY.z*100000.0),
+						// $S1 stream
+						(int64_t)(statTime), (int32_t)(PSraw*100.0),(int32_t)(teP.Get()*100.0), (int16_t)(DPraw*10), 
 						(int64_t)(chosenGnss->time*1000.0), (int16_t)(chosenGnss->speed.x*100), (int16_t)(chosenGnss->speed.y*100), (int16_t)(chosenGnss->speed.z*100),
 						(int32_t)(Pitch*1000.0), (int32_t)(Roll*1000.0), (int32_t)(Yaw*1000.0),
 						(int32_t)(Vzbaro*100),
@@ -1890,11 +1901,10 @@ static void processIMU(void *pvParameters)
 					xSemaphoreTake( BTMutex, 2/portTICK_PERIOD_MS );				
 					Router::sendXCV(str);
 					xSemaphoreGive( BTMutex );
+					Router::routeXCV();
 				}					
 			}
 		}		
-
-		Router::routeXCV();
 		
 		ProcessTimeIMU = (esp_timer_get_time()/1000.0) - gyroTime;
 		if ( ProcessTimeIMU > 8 && TAS.Get() < 15.0 ) {
@@ -2653,10 +2663,12 @@ void readSensors(void *pvParameters){
 			if ( !(count % 50) ) { 
 				// send $S1, $S2, $S3 stream
 				SEN50DataReady = true;
+				SENDataReady = false;
 				
 			} else {
 				// send $S1 and $S3 only every 100ms
 				SENDataReady = true;
+				SEN50DataReady = false;
 			}
 		}
 
