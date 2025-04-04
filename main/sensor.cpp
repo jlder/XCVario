@@ -1957,53 +1957,35 @@ static void processIMU(void *pvParameters)
 				XCVtemp (temperature inside vario) in tenth of °C,
 				PeriodVelbi (Baro Inertial period in tenth of seconds),
 				te_filt (TE filter period in tenth of second),
-				Mahonykp in tenthousandth of unit,
 				MagdwickBeta in tenthousandth of unit,
 				ALTbiN ALTbi N A/B filter in tenth of unit,
 				TASbiN delta between ALTbi and TASbi N in tenth of unit,
-				opt_TE 1 or 2,
-				BIAS_Init number of gyro bias estimates on ground,
-				FTVERSION,
-				SOFTVERSION
+				Bias_AoB in mrad				
 			*/	
 			/* 
 				$S3,
 				UiPrim in hundred of m/s²,
 				ViPrim,
 				Wiprim,
-				UbPrimS in hubdred of m/s²,
-				VbPrimS,
-				WbPrimS,
-				UiPrimF.ABprim() in hundred of m/s3,
-				ViPrimF.ABprim(),
-				WiPrimF.ABprim(),			
 				UbiPrim in hundred of m/s²,
 				VbiPrim,
 				WbiPrim,
-				Bias_AoB in mrad
 				RTKNproj in thousandths of meter;
 				RTKEproj in thousandths of meter;
 				RTKDproj in thousandths of meter;
 				RTKheading in tenth of degre;
 				ALTbi in cm,
 				DHeading in mrad,
-				UbFS in cm/s,
-				VbFS in cm/s,
-				WbFS in cm/s,
-				AccelModulePrimLevel in hundredth of m/s3,
-				GyroModulePrimLevel  in hundredth of m/s3,
-				GravityModuleErrLevel in thousandth of m/s2
-				Event Event counter in unit
 				PSerr in tenth Pa
 				PseudoHeadingPrim in hundredth of milli rad/s,			
 			*/				
 			if ( SEN50DataReady ) {
 				SEN50DataReady = false;
 				// send $S1 and $S2 every 50 cycles = 5 seconds
-				sprintf(str,"$S1,%lld,%i,%i,%i,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$S3,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$S2,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",				
+				sprintf(str,"$S1,%lld,%i,%i,%i,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$S3,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$S2,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",				
 					// $S1 stream
-					statTime, (int32_t)(PSraw*100.0),(int32_t)(teP.Get()*100.0), (int16_t)(DPraw*10), 
-					(int64_t)(chosenGnss->time*1000.0), (int16_t)(chosenGnss->speed.x*100), (int16_t)(chosenGnss->speed.y*100), (int16_t)(chosenGnss->speed.z*100),
+					(int64_t)(statTime), (int32_t)(PSraw*100.0),(int32_t)(teP.Get()*100.0), (int32_t)(DPraw*10), 
+					(int64_t)(chosenGnss->time*1000.0), (int32_t)(chosenGnss->speed.x*100), (int32_t)(chosenGnss->speed.y*100), (int32_t)(chosenGnss->speed.z*100),
 					(int32_t)(Pitch*1000.0), (int32_t)(Roll*1000.0), (int32_t)(Yaw*1000.0),
 					(int32_t)(Vzbaro*100),
 					(int32_t)(AoA.Get()*1000), (int32_t)(AoB.Get()*1000),
@@ -2014,22 +1996,18 @@ static void processIMU(void *pvParameters)
 					(int32_t)(DynPeriodVelbi*1000),
 					// $S3 stream
 					(int32_t)(UiPrim*100),(int32_t)(ViPrim*100),(int32_t)(WiPrim*100),
-					(int32_t)(UbPrimS*100), (int32_t)(VbPrimS*100),(int32_t)(WbPrimS*100),
-					(int32_t)(UiPrimF.ABprim()*100), (int32_t)(ViPrimF.ABprim()*100),(int32_t)(WiPrimF.ABprim()*100),	
 					(int32_t)(UbiPrim*100), (int32_t)(VbiPrim*100),(int32_t)(WbiPrim*100),
-					(int32_t)(Bias_AoB*1000),
 					(int32_t)(RTKNproj*1000),(int32_t)(RTKEproj*1000),(int32_t)(-RTKUproj*1000),(int32_t)(RTKheading*10),(int32_t)(ALTbi*100),
-					(int32_t)(DHeading*1000),(int32_t)(UbFS*100),(int32_t)(VbFS*100),(int32_t)(WbFS*100),
-					(int32_t)(AccelModulePrimLevel*100),(int32_t)(GyroModulePrimLevel*100), (int32_t)(GravityModuleErrLevel*1000), (int32_t)(Event), (int32_t)(PSerr*10),
+					(int32_t)(DHeading*1000),
+					(int32_t)(PSerr*10),
 					(int32_t)(PseudoHeadingPrim*100000),
 					// $S2 stream
-					(int16_t)(temperatureLP.LowPass1()*10.0), (int16_t)(MPUtempcel*10.0), chosenGnss->fix, chosenGnss->numSV,
+					(int32_t)(temperatureLP.LowPass1()*10.0), (int32_t)(MPUtempcel*10.0), (int32_t)(chosenGnss->fix), (int32_t)(chosenGnss->numSV),
 					(int32_t)(NewGroundGyroBias.x*100000.0), (int32_t)(NewGroundGyroBias.y*100000.0), (int32_t)(NewGroundGyroBias.z*100000.0),				
 					(int32_t)(BiasQuatGx*100000.0), (int32_t)(BiasQuatGy*100000.0), (int32_t)(BiasQuatGz*100000.0),
-					(int16_t)(XCVTemp*10.0), (int16_t) (PeriodVelbi*10),
-					(int32_t)(te_filt.get()*10),(int32_t)(Mahonykp*10000),(int32_t)(MagdwickBeta*10000), (int32_t)(ALTbiN*10), (int32_t)(TASbiN*10), (int32_t)(opt_TE),
-					(int32_t)BIAS_Init,
-					(int32_t)(FTVERSION),(int32_t)(SOFTVERSION)
+					(int32_t)(XCVTemp*10.0), (int32_t) (PeriodVelbi*10),
+					(int32_t)(te_filt.get()*10),(int32_t)(MagdwickBeta*10000), (int32_t)(ALTbiN*10), (int32_t)(TASbiN*10),
+					(int32_t)(Bias_AoB*1000)					
 					);
 				xSemaphoreTake( BTMutex, 2/portTICK_PERIOD_MS );				
 				Router::sendXCV(str);
@@ -2038,7 +2016,7 @@ static void processIMU(void *pvParameters)
 				if ( SENDataReady ) {
 					SENDataReady = false;
 					// send $S1 only every 100ms
-					sprintf(str,"$S1,%lld,%i,%i,%i,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$S3,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",
+					sprintf(str,"$S1,%lld,%i,%i,%i,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$S3,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",
 						statTime, (int32_t)(PSraw*100.0),(int32_t)(teP.Get()*100.0), (int16_t)(DPraw*10), 
 						(int64_t)(chosenGnss->time*1000.0), (int16_t)(chosenGnss->speed.x*100), (int16_t)(chosenGnss->speed.y*100), (int16_t)(chosenGnss->speed.z*100),
 						(int32_t)(Pitch*1000.0), (int32_t)(Roll*1000.0), (int32_t)(Yaw*1000.0),
@@ -2051,13 +2029,10 @@ static void processIMU(void *pvParameters)
 						(int32_t)(DynPeriodVelbi*1000),
 						// $S3 stream
 						(int32_t)(UiPrim*100),(int32_t)(ViPrim*100),(int32_t)(WiPrim*100),
-						(int32_t)(UbPrimS*100), (int32_t)(VbPrimS*100),(int32_t)(WbPrimS*100),   
-						(int32_t)(UiPrimF.ABprim()*100), (int32_t)(ViPrimF.ABprim()*100),(int32_t)(WiPrimF.ABprim()*100),	
 						(int32_t)(UbiPrim*100), (int32_t)(VbiPrim*100),(int32_t)(WbiPrim*100),
-						(int32_t)(Bias_AoB*1000),
 						(int32_t)(RTKNproj*1000),(int32_t)(RTKEproj*1000),(int32_t)(-RTKUproj*1000),(int32_t)(RTKheading*10),(int32_t)(ALTbi*100),
-						(int32_t)(DHeading*1000),(int32_t)(UbFS*100),(int32_t)(VbFS*100),(int32_t)(WbFS*100),
-						(int32_t)(AccelModulePrimLevel*100),(int32_t)(GyroModulePrimLevel*100), (int32_t)(GravityModuleErrLevel*1000),(int32_t)(Event),(int32_t)(PSerr*10),
+						(int32_t)(DHeading*1000),
+						(int32_t)(PSerr*10),
 						(int32_t)(PseudoHeadingPrim*100000)						
 					);
 					xSemaphoreTake( BTMutex, 2/portTICK_PERIOD_MS );				
