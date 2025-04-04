@@ -230,8 +230,6 @@ mpud::float_axes_t gyroISUNEDMPU;
 mpud::float_axes_t gyroISUNEDBODY;
 mpud::float_axes_t gyroCorr;
 static float GravityModule = 0.0;
-static float GravityModuleErr = 0.0;
-static float GravityModuleErrLevel = 0.0;
 static float AccelGravModuleFilt = 0.0;
 static int32_t gyrobiastemptimer = 0;
 static float integralFBx = 0.0;
@@ -257,15 +255,9 @@ static float Vh = 0.0;
 static float DHeading = 0.0;
 static float cosDHeading = 1.0;
 static float sinDHeading = 0.0;
-static float Ub = 0.0;
-static float Vb = 0.0;
-static float Wb = 0.0;
 static float UiPrim = 0.0;
 static float ViPrim = 0.0;
 static float WiPrim = 0.0;
-static float UiPrimPrimS = 0.0;
-static float ViPrimPrimS = 0.0;
-static float WiPrimPrimS = 0.0;
 static float TASbiSquare = 0.0;
 
 float GnssTrack;// MOD#4 gyro bias
@@ -305,7 +297,6 @@ static int64_t statTime; // time stamp for statP
 static int64_t prevstatTime;
 static float dtStat = PERIOD10HZ;
 static float Prevp = 0.0;
-static int64_t teTime; // time stamp for teP
 static int64_t dynPTime;
 static int64_t prevdynPTime;
 static float dtdynP = PERIOD10HZ;
@@ -483,6 +474,7 @@ class AlphaBeta {
 private:
 	float dtMax = 0.0;
 	float dtMin = 0.0;
+	float rawdata = 0.0;
 	float delta = 0.0;
 	float prim = 0.0;
 	float filt = 0.0;
@@ -533,6 +525,7 @@ public:
 	void ABupdate(float dt, float RawData ) {
 		#define MaxZicket 2 // maximum number of concecuitives zickets to let the filter track the signal. If zicket is higher a step change in signal is suspected
 		// process sample if dt above dtMin and below dtMax (dtMin typicaly average dt / 4 and dtMax typicaly 4 x average dt)
+		rawdata = RawData;
 		writing = false;
 		if ( dt > dtMin && dt < dtMax  ) {
 			if ( firstpass ) { // initialize filter variables when first called
@@ -595,6 +588,12 @@ public:
 				}
 			}
 		}
+	}
+	float ABraw(void) {
+		while( writing ) {
+			if ( abs( esp_timer_get_time() - gettime ) > 0.001 ) break; // wait for 1 ms max if writing is in process
+		}
+		return rawdata;
 	}
 	float ABfilt(void) {
 		while( writing ) {
@@ -689,10 +688,13 @@ AlphaBeta UiPrimF, ViPrimF, WiPrimF;
 AlphaBeta GnssVx, GnssVy, GnssVz;
 
 // alpha beta filters for Energy and average Energy calculations
-AlphaBeta KinEnergy, ALTbiEnergy, TASbiEnergy;
+AlphaBeta ALTbiEnergy, TASbiEnergy;
 
 // declare alpha beta for CAS and ALT
 AlphaBeta CAS, ALT;
+
+// declare alpha beta for Ub, Vb and Wb
+AlphaBeta Ub, Vb, Wb;
 
 // Outside temp alpha beta class 
 AlphaBeta OATemp;
@@ -1246,7 +1248,6 @@ static void processIMU(void *pvParameters)
 	GyroBiasz.LPinit( GyroCutoffPeriod, Gyrodt ); // LP period GyroCutoffPeriod seconds and sample period Gyrodt second
 	float PitchPrim;
 	float RollPrim;
-	float HeadingPrim;
 	
 	// compute once the filter parameters in functions of values in FLASH
 	PeriodVelbi = velbi_period.get(); // period in second for baro/inertial velocity. period long enough to reduce effect of baro wind gradients
@@ -1295,7 +1296,6 @@ static void processIMU(void *pvParameters)
 			gyroDPS = mpud::gyroDegPerSec(gyroRaw, GYRO_FS); // For compatibility with Eckhard code only. Convert raw gyro to Gyro_FS full scale in degre per second 
 			gyroRPS = mpud::gyroRadPerSec(gyroRaw, GYRO_FS); // convert raw gyro to Gyro_FS full scale in radians per second
 			// convert gyro coordinates to ISU : rad/s NED MPU and remove bias
-			//xSemaphoreTake( dataMutex, 3/portTICK_PERIOD_MS ); // prevent data conflicts for 3ms max.
 			// TODO just for flight test. If Magdwick Beta and Mahonykp are set to zero for gyro drift analysis, do not apply bias estimation to gyro values
 			if ( MagdwickBeta != 0.0 || Mahonykp != 0.0 ) {
 				gyroISUNEDMPU.x = -(gyroRPS.z - GroundGyroBias.z);
@@ -1319,7 +1319,6 @@ static void processIMU(void *pvParameters)
 			gyroCorrx.Set( gyroCorr.x );
 			gyroCorr.y = gyroNEDy.ABfilt();
 			gyroCorr.z = gyroNEDz.ABfilt();
-			//xSemaphoreGive( dataMutex );
 		}
 		// get accel data
 		xSemaphoreTake( I2CMutex, 3/portTICK_PERIOD_MS ); // prevent I2C conflicts for 3ms max.		
@@ -1333,7 +1332,6 @@ static void processIMU(void *pvParameters)
 			RawaccelISUNEDMPU.z = ((-accelG.x*9.807) - currentAccelBias.z ) * currentAccelGain.z;
 
 			// convert from MPU to BODY and filter with A/B
-			//xSemaphoreTake( dataMutex, 3/portTICK_PERIOD_MS ); // prevent data conflicts for 3ms max.				
 			accelISUNEDBODY.x = C_T * RawaccelISUNEDMPU.x + STmultSS * RawaccelISUNEDMPU.y + STmultCS * RawaccelISUNEDMPU.z + ( gyroCorr.y * gyroCorr.y + gyroCorr.z * gyroCorr.z ) * DistCGVario ;
 			accelNEDBODYx.ABupdate( dtGyr, accelISUNEDBODY.x );
 			accelISUNEDBODY.y = C_S * RawaccelISUNEDMPU.y - S_S * RawaccelISUNEDMPU.z;
@@ -1341,8 +1339,6 @@ static void processIMU(void *pvParameters)
 			accelISUNEDBODY.z = -S_T * RawaccelISUNEDMPU.x + SSmultCT * RawaccelISUNEDMPU.y + CTmultCS * RawaccelISUNEDMPU.z ;
 			accelNEDBODYz.ABupdate( dtGyr, accelISUNEDBODY.z );
 			accelNEDBODYzNorm = -accelNEDBODYz.ABfilt() / GRAVITY;
-			//xSemaphoreGive( dataMutex );
-						
 		}
 
 		// compute acceleration module variation using unfiltered accels
@@ -1449,17 +1445,6 @@ static void processIMU(void *pvParameters)
 					}
 					MagdwickUpdateIMU( dtGyr, CurrentBeta, gyroCorr.x, gyroCorr.y, gyroCorr.z, -gravISUNEDBODY.x, -gravISUNEDBODY.y, -gravISUNEDBODY.z, GravityModule );
 				}	
-				// compute & filter GravityModule error
-				GravityModuleErr = abs( GravityModule - GRAVITY );
-				// asysmetric filter with fast raise and slow decay
-				#define fcGravModuleErr 3.0 // 3Hz low pass to filter noise
-				#define fcGME1 (40.0/(40.0+fcGravModuleErr))
-				#define fcGME2 (1.0-fcGME1)		
-				if ( GravityModuleErrLevel < GravityModuleErr ) {
-					GravityModuleErrLevel = GravityModuleErr;
-				} else {
-					GravityModuleErrLevel = fcGME1 * GravityModuleErrLevel +  fcGME2 * GravityModuleErr;
-				}
 
 				// Compute Euler angles from IMU quaternion
 				if ( abs(q1 * q3 - q0 * q2) < 0.5 ) {
@@ -1574,22 +1559,18 @@ static void processIMU(void *pvParameters)
 				fcVelbi_w_2 = ( 1.0 - fcVelbi_w_1 );				
 				
 				// Compute baro interial acceleration ( complementary filter between inertial accel derivatives and baro accels )
-				//xSemaphoreTake( dataMutex, 3/portTICK_PERIOD_MS ); // prevent data conflicts for 3ms max.			
-				UbiPrim = fcVelbi1 * ( UbiPrim + UiPrimF.ABprim() * dtGyr ) + fcVelbi2 * UbPrimS;
-				VbiPrim = fcVelbi_v_1 * ( VbiPrim + ViPrimF.ABprim() * dtGyr ) + fcVelbi_v_2 * VbPrimS;			
-				WbiPrim = fcVelbi_w_1 * ( WbiPrim + WiPrimF.ABprim() * dtGyr ) + fcVelbi_w_2 * WbPrimS;					
+				UbiPrim = fcVelbi1 * ( UbiPrim + UiPrimF.ABprim() * dtGyr ) + fcVelbi2 * Ub.ABprim();
+				VbiPrim = fcVelbi_v_1 * ( VbiPrim + ViPrimF.ABprim() * dtGyr ) + fcVelbi_v_2 * Vb.ABprim();			
+				WbiPrim = fcVelbi_w_1 * ( WbiPrim + WiPrimF.ABprim() * dtGyr ) + fcVelbi_w_2 * Wb.ABprim();					
 				
 				// Compute baro interial velocity ( complementary filter between baro inertial acceleration and baro speed )
-				Ubi = fcVelbi1 * ( Ubi + UbiPrim * dtGyr ) + fcVelbi2 * Ub;
-				Vbi = fcVelbi_v_1 * ( Vbi + VbiPrim * dtGyr ) + fcVelbi_v_2 * Vb;
-				Wbi = fcVelbi_w_1 * ( Wbi + WbiPrim * dtGyr ) + fcVelbi_w_2 * Wb;
+				Ubi = fcVelbi1 * ( Ubi + UbiPrim * dtGyr ) + fcVelbi2 * Ub.ABraw();
+				Vbi = fcVelbi_v_1 * ( Vbi + VbiPrim * dtGyr ) + fcVelbi_v_2 * Vb.ABraw();
+				Wbi = fcVelbi_w_1 * ( Wbi + WbiPrim * dtGyr ) + fcVelbi_w_2 * Wb.ABraw();
 			
 				TASbiSquare = Ubi * Ubi + Vbi * Vbi + Wbi * Wbi;
 
 				TASbi.Set( sqrt( TASbiSquare ) );
-				
-				//xSemaphoreGive( dataMutex );
-								
 			}
 			
 			// Gyro bias and local gravity estimates when TAS < 15 m/s and the vario is considered potentially stable on ground
@@ -1761,7 +1742,8 @@ static void processIMU(void *pvParameters)
 				}
 			}	
 		}
-
+		
+		if ( IMUstream ) {
 			/*
 				// Sent at 40Hz when IMUstream selected
 				$I,
@@ -1773,146 +1755,16 @@ static void processIMU(void *pvParameters)
 				Rotation BODY Y-Axis in hundredth of milli rad/s,
 				Rotation BODY Z-Axis in hundredth of milli rad/s,
 				<CR><LF>	
-			*/
-			/*
-				// Sent at 40Hz when AHRSstream selected
-				$J,
-				MPU (gyro) time in milli second,
-				Acceleration in BODY X-Axis in tenth milli m/s²,
-				Acceleration in BODY Y-Axis in tenth milli m/s²,
-				Acceleration in BODU Z-Axis in tenth milli m/s²,				
-				Rotation BODY X-Axis in hundredth of milli rad/s,
-				Rotation BODY Y-Axis in hundredth of milli rad/s,
-				Rotation BODY Z-Axis in hundredth of milli rad/s,
-				UiPrim*10000.0, ViPrim*10000.0),WiPrim*10000.0,
-				UbiPrim*10000.0, VbiPrim*10000.0, WbiPrim*10000.0,
-				gravISUNEDBODY.x*10000.0, gravISUNEDBODY.y*10000.0, gravISUNEDBODY.z*10000.0,
-				q0*100000.0, q1*100000.0,q2*100000.0,q3*100000.0			
-				<CR><LF>	
 			*/			
-			/*
-				// Sent at 1Hz when AHRSstream selected
-				$K,
-				MPU (gyro) time in milli second,
-				Acceleration in BODY X-Axis in tenth milli m/s²,
-				Acceleration in BODY Y-Axis in tenth milli m/s²,
-				Acceleration in BODU Z-Axis in tenth milli m/s²,				
-				Rotation BODY X-Axis in hundredth of milli rad/s,
-				Rotation BODY Y-Axis in hundredth of milli rad/s,
-				Rotation BODY Z-Axis in hundredth of milli rad/s,
-				UiPrim*10000.0, ViPrim*10000.0),WiPrim*10000.0,
-				UbiPrim*10000.0, VbiPrim*10000.0, WbiPrim*10000.0,
-				gravISUNEDBODY.x*10000.0, gravISUNEDBODY.y*10000.0, gravISUNEDBODY.z*10000.0,
-				q0*100000.0, q1*100000.0,q2*100000.0,q3*100000.0,
-				accelNEDBODYx.ABfilt()*10000.0, accelNEDBODYy.ABfilt()*10000.0, accelNEDBODYz.ABfilt()*10000.0,
-				accelNEDBODYx.ABprim()*10000.0, accelNEDBODYy.ABprim()*10000.0, accelNEDBODYz.ABprim()*10000.0,
-				gyroNEDx.ABfilt()*100000.0, gyroNEDy.ABfilt()*100000.0, gyroNEDz.ABfilt()*100000.0,
-				gyroNEDx.ABprim()*100000.0, gyroNEDy.ABprim()*100000.0, gyroNEDz.ABprim()*100000.0,
-				UiPrimF.ABfilt()*10000.0, ViPrimF.ABfilt()*10000.0, WiPrimF.ABfilt()*10000.0),
-				UiPrimF.ABprim()*10000.0, ViPrimF.ABprim()*10000.0, WiPrimF.ABprim()*10000.0)				
-				<CR><LF>	
-			*/			
-			/*
-				// Sent at 10Hz
-				$A,
-				CurrentBeta * 10000
-				dynP * 10
-				TAS * 100
-				AoA * 1000
-				AoB * 1000
-				Speed2Fly.cw( CAS.ABfilt() ) * 10000
-				Speed2Fly.getN() * 100
-				WingLoad * 10
-				fcVelbi1 * 10000 
-				UbPrimS * 10000
-				VbPrimS * 10000
-				WbPrimS * 10000
-				RTKNproj*1000
-				RTKEproj*1000
-				-RTKUproj*1000
-				temperatureLP.LowPass1()*10.0
-				statTime
-				statP*100.0
-				GnssVx.ABfilt()*100
-				GnssVy.ABfilt()*100				
-				GnssVz.ABfilt()*100				
-				<CR><LF>				
-			*/			
-			
-		if ( !(countIMU % 40) && AHRSstream ) {
-			// Send $I and $A
-			sprintf(str,"$K,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$A,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%lld,%i,%i,%i,%i\r\n",
+			// Send $I
+			sprintf(str,"$I,%lld,%i,%i,%i,%i,%i,%i\r\n",
 				gyroTime,
 				(int32_t)(accelISUNEDBODY.x*10000.0), (int32_t)(accelISUNEDBODY.y*10000.0), (int32_t)(accelISUNEDBODY.z*10000.0),
-				(int32_t)(gyroISUNEDBODY.x*100000.0), (int32_t)(gyroISUNEDBODY.y*100000.0),(int32_t)(gyroISUNEDBODY.z*100000.0),
-				(int32_t)(UiPrim*10000.0), (int32_t)(ViPrim*10000.0),(int32_t)(WiPrim*10000.0),
-				(int32_t)(UbiPrim*10000.0), (int32_t)(VbiPrim*10000.0),(int32_t)(WbiPrim*10000.0),
-				(int32_t)(gravISUNEDBODY.x*10000.0), (int32_t)(gravISUNEDBODY.y*10000.0), (int32_t)(gravISUNEDBODY.z*10000.0),
-				(int32_t)(q0*100000.0), (int32_t)(q1*100000.0),(int32_t)(q2*100000.0),(int32_t)(q3*100000.0),
-				(int32_t)(accelNEDBODYx.ABfilt()*10000.0), (int32_t)(accelNEDBODYy.ABfilt()*10000.0), (int32_t)(accelNEDBODYz.ABfilt()*10000.0),
-				(int32_t)(accelNEDBODYx.ABprim()*10000.0), (int32_t)(accelNEDBODYy.ABprim()*10000.0), (int32_t)(accelNEDBODYz.ABprim()*10000.0),
-				(int32_t)(gyroNEDx.ABfilt()*100000.0), (int32_t)(gyroNEDy.ABfilt()*100000.0), (int32_t)(gyroNEDz.ABfilt()*100000.0),
-				(int32_t)(gyroNEDx.ABprim()*100000.0), (int32_t)(gyroNEDy.ABprim()*100000.0), (int32_t)(gyroNEDz.ABprim()*100000.0),
-				(int32_t)(UiPrimF.ABfilt()*10000.0), (int32_t)(ViPrimF.ABfilt()*10000.0), (int32_t)(WiPrimF.ABfilt()*10000.0),
-				(int32_t)(UiPrimF.ABprim()*10000.0), (int32_t)(ViPrimF.ABprim()*10000.0), (int32_t)(WiPrimF.ABprim()*10000.0),
-				(int32_t)(CurrentBeta*10000.0), (int32_t)(dynP.Get()*10.0),(int32_t)(TAS.Get()*100.0),(int32_t)(AoA.Get()*1000.0),(int32_t)(AoB.Get()*1000.0),
-				(int32_t)(Speed2Fly.cw( CAS.ABfilt() )*10000.0), (int32_t)(Speed2Fly.getN()*100.0),(int32_t)(WingLoad*100.0),(int32_t)(fcVelbi1*10000.0),
-				(int32_t)(UbPrimS*10000.0), (int32_t)(VbPrimS*10000.0),(int32_t)(WbPrimS*10000.0),
-				(int32_t)(RTKNproj*1000),(int32_t)(RTKEproj*1000),(int32_t)(-RTKUproj*1000),
-				(int32_t)(temperatureLP.LowPass1()*10.0), statTime, (int32_t)(statP.Get()*100.0), (int32_t)(GnssVx.ABfilt()*100), (int32_t)(GnssVy.ABfilt()*100), (int32_t)(GnssVz.ABfilt()*100)
-				); 
+				(int32_t)(gyroISUNEDBODY.x*100000.0), (int32_t)(gyroISUNEDBODY.y*100000.0),(int32_t)(gyroISUNEDBODY.z*100000.0)
+			);						
 			xSemaphoreTake( BTMutex, 2/portTICK_PERIOD_MS ); // prevent BT conflicts for 2ms max.
 			Router::sendXCV(str);
 			xSemaphoreGive( BTMutex );
-		} else {
-			if ( !(countIMU % 4) && AHRSstream  ) {
-				// Send $J and $A
-				sprintf(str,"$J,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$A,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%lld,%i,%i,%i,%i\r\n",
-					gyroTime,
-					(int32_t)(accelISUNEDBODY.x*10000.0), (int32_t)(accelISUNEDBODY.y*10000.0), (int32_t)(accelISUNEDBODY.z*10000.0),
-					(int32_t)(gyroISUNEDBODY.x*100000.0), (int32_t)(gyroISUNEDBODY.y*100000.0),(int32_t)(gyroISUNEDBODY.z*100000.0),
-					(int32_t)(UiPrim*10000.0), (int32_t)(ViPrim*10000.0),(int32_t)(WiPrim*10000.0),
-					(int32_t)(UbiPrim*10000.0), (int32_t)(VbiPrim*10000.0),(int32_t)(WbiPrim*10000.0),
-					(int32_t)(gravISUNEDBODY.x*10000.0), (int32_t)(gravISUNEDBODY.y*10000.0), (int32_t)(gravISUNEDBODY.z*10000.0),
-					(int32_t)(q0*100000.0), (int32_t)(q1*100000.0),(int32_t)(q2*100000.0),(int32_t)(q3*100000.0),
-					(int32_t)(CurrentBeta*10000.0), (int32_t)(dynP.Get()*10.0),(int32_t)(TAS.Get()*100.0),(int32_t)(AoA.Get()*1000.0),(int32_t)(AoB.Get()*1000.0),
-					(int32_t)(Speed2Fly.cw( CAS.ABfilt() )*10000.0), (int32_t)(Speed2Fly.getN()*100.0),(int32_t)(WingLoad*100.0),(int32_t)(fcVelbi1*10000.0),
-					(int32_t)(UbPrimS*10000.0), (int32_t)(VbPrimS*10000.0),(int32_t)(WbPrimS*10000.0),
-					(int32_t)(RTKNproj*1000),(int32_t)(RTKEproj*1000),(int32_t)(-RTKUproj*1000),
-					(int32_t)(temperatureLP.LowPass1()*10.0), statTime, (int32_t)(statP.Get()*100.0), (int32_t)(GnssVx.ABfilt()*100), (int32_t)(GnssVy.ABfilt()*100), (int32_t)(GnssVz.ABfilt()*100)				
-					); 
-				xSemaphoreTake( BTMutex, 2/portTICK_PERIOD_MS ); // prevent BT conflicts for 2ms max.
-				Router::sendXCV(str);
-				xSemaphoreGive( BTMutex );
-			} else {
-				if ( AHRSstream ) {
-					// Send $J
-					sprintf(str,"$J,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",
-						gyroTime,
-						(int32_t)(accelISUNEDBODY.x*10000.0), (int32_t)(accelISUNEDBODY.y*10000.0), (int32_t)(accelISUNEDBODY.z*10000.0),
-						(int32_t)(gyroISUNEDBODY.x*100000.0), (int32_t)(gyroISUNEDBODY.y*100000.0),(int32_t)(gyroISUNEDBODY.z*100000.0),
-						(int32_t)(UiPrim*10000.0), (int32_t)(ViPrim*10000.0),(int32_t)(WiPrim*10000.0),
-						(int32_t)(UbiPrim*10000.0), (int32_t)(VbiPrim*10000.0),(int32_t)(WbiPrim*10000.0),
-						(int32_t)(gravISUNEDBODY.x*10000.0), (int32_t)(gravISUNEDBODY.y*10000.0), (int32_t)(gravISUNEDBODY.z*10000.0),
-						(int32_t)(q0*100000.0), (int32_t)(q1*100000.0),(int32_t)(q2*100000.0),(int32_t)(q3*100000.0)
-						);
-					xSemaphoreTake( BTMutex, 2/portTICK_PERIOD_MS ); // prevent BT conflicts for 2ms max.
-					Router::sendXCV(str);
-					xSemaphoreGive( BTMutex );						
-				} else {
-					if ( IMUstream ) {
-					// Send $I
-					sprintf(str,"$I,%lld,%i,%i,%i,%i,%i,%i\r\n",
-						gyroTime,
-						(int32_t)(accelISUNEDBODY.x*10000.0), (int32_t)(accelISUNEDBODY.y*10000.0), (int32_t)(accelISUNEDBODY.z*10000.0),
-						(int32_t)(gyroISUNEDBODY.x*100000.0), (int32_t)(gyroISUNEDBODY.y*100000.0),(int32_t)(gyroISUNEDBODY.z*100000.0)
-					);						
-					xSemaphoreTake( BTMutex, 2/portTICK_PERIOD_MS ); // prevent BT conflicts for 2ms max.
-					Router::sendXCV(str);
-					xSemaphoreGive( BTMutex );
-					}
-				}
-			}				
 		}
 		
 		if ( SENstream ) {
@@ -2211,15 +2063,7 @@ void readSensors(void *pvParameters){
 	GnssVy.ABinit( NGNSS, GNSSdt, GNSSOutliers, Vgnssmin, Vgnssmax );
 	GnssVz.ABinit( NGNSS, GNSSdt, GNSSOutliers, Vgnssmin, Vgnssmax );
 
-	// alpha beta filters paramegters for Energy and average Energy
-	#define NTOTENR 6 // Energy alpha/beta coeff
-	#define ENRdt 0.1 // average Energy dt
-	#define EnergyOutliers 10.0 // 10 m/s maximum variation sample to sample
-	#define EnergyPrimMin -30.0
-	#define EnergyPrimMax 30.0
-	KinEnergy.ABinit(  NEnergy,  ENRdt, EnergyOutliers, 0.0, 0.0, EnergyPrimMin, EnergyPrimMax );
-
-	// alpha beta parameters for CAS and TAS
+	// alpha beta parameters for CAS, TAS and ALT
 	#define NCAS 6 // CAS alpha/beta filter coeff
 	#define CASdt 0.1 // average CAS dt	
 	#define SpeedOutliers 30.0 // 30 m/s maximum variation sample to sample
@@ -2234,6 +2078,14 @@ void readSensors(void *pvParameters){
 	#define Altmin -500.0
 	#define Altmax 12000
 	ALT.ABinit( NALT, ALTdt, AltitudeOutliers, Altmin, Altmax );
+	
+	// alpha beta parameters for Ub, Vb and Wb
+	#define NUVWB 6 // CAS alpha/beta filter coeff
+	#define UVWdt 0.1 // average CAS dt	
+	#define UVWOutliers 30.0 // 30 m/s maximum variation sample to sample
+	Ub.ABinit( NUVWB, UVWdt, SpeedOutliers );	
+	Vb.ABinit( NUVWB, UVWdt, SpeedOutliers );	
+	Wb.ABinit( NUVWB, UVWdt, SpeedOutliers );	
 
 	// LP filter initialization
 	BiasAoB.LPinit( 200.0, 0.1 ); // bias AoB LP filter initialization with 200 seconds filter period and 0.1 second sample period
@@ -2458,29 +2310,14 @@ void readSensors(void *pvParameters){
 		cosDHeading = cos( DHeading );
 		sinDHeading = sin( DHeading );
 		// applying DCM from earth to body frame (using Pitch, Roll and DHeading Yaw angles) to Vh and Vzbaro trajectory components in earth frame to reproject speed in TE referential onto body axis. 
-		Ub = cosPitch * cosDHeading * Vh - sinPitch * Vzbaro;
-		Vb = ( sinRoll * sinPitch * cosDHeading - cosRoll * sinDHeading ) * Vh + sinRoll * cosPitch * Vzbaro;
-		Wb = ( cosRoll * sinPitch * cosDHeading + sinRoll * sinDHeading ) * Vh + cosRoll * cosPitch * Vzbaro;
+		Ub.ABupdate( dtStat, cosPitch * cosDHeading * Vh - sinPitch * Vzbaro );
+		Vb.ABupdate( dtStat, (sinRoll * sinPitch * cosDHeading - cosRoll * sinDHeading ) * Vh + sinRoll * cosPitch * Vzbaro );
+		Wb.ABupdate( dtStat, ( cosRoll * sinPitch * cosDHeading + sinRoll * sinDHeading ) * Vh + cosRoll * cosPitch * Vzbaro );
 
-		// Baro acceleration derivative Short period alpha/beta filter
-		// U/V/WbPrimS are used to compute U/V/WbiPrim, baro inertial accelerations
-		#define NBaroAccS 7.0 // accel kinetic alpha/beta filter coeff
-		#define alphaBaroAccS (2.0 * (2.0 * NBaroAccS - 1.0) / NBaroAccS / (NBaroAccS + 1.0))
-		#define betaBaroAccS (6.0 / NBaroAccS / (NBaroAccS + 1.0) )			
-		deltaUbS = Ub - UbFS;
-		UbPrimS = UbPrimS + betaBaroAccS * deltaUbS / dtStat;
-		UbFS = UbFS + alphaBaroAccS * deltaUbS + UbPrimS * dtStat;
-		deltaVbS = Vb - VbFS;
-		VbPrimS = VbPrimS + betaBaroAccS * deltaVbS / dtStat;
-		VbFS = VbFS + alphaBaroAccS * deltaVbS + VbPrimS * dtStat;			
-		deltaWbS = Wb - WbFS;
-		WbPrimS = WbPrimS + betaBaroAccS * deltaWbS / dtStat;
-		WbFS = WbFS + alphaBaroAccS * deltaWbS + WbPrimS * dtStat;
-			
 		// baro interial speed in earth frame
-		Vxbi = cosPitch * Ubi + sinRoll * sinPitch * Vb + cosRoll * sinPitch * Wbi;
-		Vybi = cosRoll * Vb - sinRoll * Wbi;
-		Vzbi = -sinPitch * Ubi + sinRoll * cosPitch * Vb + cosRoll * cosPitch * Wbi;
+		Vxbi = cosPitch * Ubi + sinRoll * sinPitch * Vbi + cosRoll * sinPitch * Wbi;
+		Vybi = cosRoll * Vbi - sinRoll * Wbi;
+		Vzbi = -sinPitch * Ubi + sinRoll * cosPitch * Vbi + cosRoll * cosPitch * Wbi;
 
 		// baro inertial altitude
 		// ALTbi is computed using a complementary filter with baro altitude and baro inertial vertical speed in earth frame
@@ -2489,35 +2326,6 @@ void readSensors(void *pvParameters){
 		#define fcAltbi2 ( 1.0 - fcAltbi1 )		
 		ALTbi = fcAltbi1 * ( ALTbi - Vzbi * dtStat ) + fcAltbi2	* ALT.ABfilt();
 
-		// Energy variation d(TE)/dt options
-		/*
-		if (opt_TE == 1.0 ) {
-			// option 1
-			// energy variation calculation d(E/mg)/dt = - Vzbi + d(1/2 1/g TASbi²)/dt
-			// update kinetic energy filter
-			KinEnergy.ABupdate( dtStat, ( TASbiSquare / GRAVITY / 2.0 ) );
-			// filter total energy variation for display to pilot
-			//TotalEnergy.LPupdate( te_filt.get(), dtStat, (-Vzbi + KinEnergy.ABprim()) );
-			Vztotbi.Set( -Vzbi + KinEnergy.ABprim() );
-		} else {
-			// option 2
-			// energy variation calculation d(E/mg)/dt = d(ALT)/dt + d(1/2 1/g TAS²)/dt
-			// compute and filter with AB using different N value both terms of equation
-			// check if A/B filters N has changed and update
-			if ( NALTbiTASbiChanged ) {
-				#define ALTbiTASbiEnergdt 0.1 // average Energy dt
-				#define ALTbiTASbiEnergyOutliers 10.0 // 10 m/s maximum variation sample to sample
-				#define ALTbiTASbiEnergyPrimMin -50.0
-				#define ALTbiTASbiEnergyPrimMax 50.0
-				ALTbiEnergy.ABinit(  ALTbiN,  ALTbiTASbiEnergdt, ALTbiTASbiEnergyOutliers, 0.0, 0.0, ALTbiTASbiEnergyPrimMin, ALTbiTASbiEnergyPrimMax );
-				TASbiEnergy.ABinit(  ALTbiN + TASbiN,  ALTbiTASbiEnergdt, ALTbiTASbiEnergyOutliers, 0.0, 0.0, ALTbiTASbiEnergyPrimMin, ALTbiTASbiEnergyPrimMax );
-				NALTbiTASbiChanged = false;
-			}
-			ALTbiEnergy.ABupdate( dtStat, ALTbi );
-			TASbiEnergy.ABupdate( dtStat, ( TASbiSquare / GRAVITY / 2.0 ) );			
-			// Total Energy is sum of both potential and kinetic energies variations
-			Vztotbi.Set( ALTbiEnergy.ABprim() + TASbiEnergy.ABprim() );
-		} */
 		// TODO only use second solution to compute total energy variation
 		// energy variation calculation d(E/mg)/dt = d(ALT)/dt + d(1/2 1/g TAS²)/dt
 		// compute and filter with AB using different N value both terms of equation
@@ -2536,7 +2344,6 @@ void readSensors(void *pvParameters){
 		// Total Energy is sum of both potential and kinetic energies variations
 		Vztotbi.Set( ALTbiEnergy.ABprim() + TASbiEnergy.ABprim() );
 
-		
 		// long term average filter
 		AverageTotalEnergy.LPupdate( Vztotbi.Get() );		
 
