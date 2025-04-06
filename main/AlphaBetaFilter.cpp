@@ -62,13 +62,11 @@ void AlphaBeta::ABupdate(float dt, float RawData ) {
 	if ( firstpass ) { // initialize filter variables when first called
 		// Initialize filter parameters
 		Init( dt, RawData, 0.0, 0.0 );
-		Dt = 0;
 		firstpass = false;
 	} else {
 		// if dt is within acceptable limits
 		if ( dt > dtMin && dt < dtMax  ) {
 			// predict filt and prim from previous state
-			Dt = Dt + dt;
 			filt_predict = filt_update + dt * prim_update + 0.5 * dt * dt * acc_update;
 			prim_predict = prim_update + acc_update * dt;
 			// innovation is the difference between measured value and prediction 
@@ -84,8 +82,7 @@ void AlphaBeta::ABupdate(float dt, float RawData ) {
 					 ( (filt_update > filtMin && filt_update < filtMax) || ( filtMin == 0.0 && filtMax == 0.0 ) ) &&
 					 ( (prim_update > primMin && prim_update < primMax) || ( primMin == 0.0 && primMax == 0.0 ) )    ) {
 					// new data below threshold
-					// filter is stable, Dt = 0 and ZicketCount = 0, update filter outputs filt, prim using filt/prim_update with innovation
-					Dt = 0;
+					// filter is stable, ZicketCount = 0, update filter outputs filt, prim using filt/prim_update with innovation
 					ZicketCount = 0;
 					writing = true;
 					gettime = esp_timer_get_time();
@@ -96,8 +93,8 @@ void AlphaBeta::ABupdate(float dt, float RawData ) {
 					// new data beyond threshold, filt and prim limits
 					// increase ZicketCount
 					ZicketCount++;
-					// filter is stable but we have a zicket, update filt using last valid filt and prim. Dt is the sum of dt since begining of zicket
-					filt = filt + Dt * prim;
+					// filter is stable but we have a zicket, update filt using last valid filt and prim.
+					filt = filt + dt * prim;
 					if ( ZicketCount > MaxZicket ) {
 						// if ZicketCount is above max zicket, filter is considered unstable and we probably are getting into a step change
 						// we reset filter to start tracking at current value RawData
@@ -118,9 +115,8 @@ void AlphaBeta::ABupdate(float dt, float RawData ) {
 				//
 				if ( ZicketCount <= MaxZicket ) {
 					// if ZicketCount goes below stability criteria, filter is considered stable again and we reset filter with new parameters to resume tracking
-					// filter is now stable, ZicketCount = 0 and Dt = 0;
+					// filter is now stable, ZicketCount = 0
 					ZicketCount = 0;
-					Dt = 0.0;
 					// we update filter outputs filt, prim using latest filt/prim_update with innovation.
 					writing = true;
 					gettime = esp_timer_get_time();
@@ -133,7 +129,7 @@ void AlphaBeta::ABupdate(float dt, float RawData ) {
 					deltat.DSinit( dt );					
 				} else {
 					// if filter still not stable, update filt using last valid filt and prim
-					filt = filt + Dt * prim;
+					filt = filt + dt * prim;
 				}
 			}
 			// In all cases, update unfiltered output and down scaled flter data

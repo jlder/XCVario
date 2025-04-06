@@ -15,7 +15,6 @@
 class AlphaBeta {
 private:
 	float unfiltered = 0.0;
-	float Dt = 0.0;
 	float dtAvg = 0.0;
 	float dtMax = 0.0;
 	float dtMin = 0.0;
