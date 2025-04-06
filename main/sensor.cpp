@@ -491,13 +491,13 @@ public:
     }
 	float LowPass1(void) {
 		while( writing ) {
-			if ( abs( esp_timer_get_time() - gettime ) > 0.001 ) break; // wait for 1 ms max if writing is in process
+			if ( fabs( esp_timer_get_time() - gettime ) > 0.001 ) break; // wait for 1 ms max if writing is in process
 		}		
 		return output1;
 	}
 	float LowPass2(void) {
 		while( writing ) {
-			if ( abs( esp_timer_get_time() - gettime ) > 0.001 ) break; // wait for 1 ms max if writing is in process
+			if ( fabs( esp_timer_get_time() - gettime ) > 0.001 ) break; // wait for 1 ms max if writing is in process
 		}		
 		return output2;
 	}
@@ -518,7 +518,7 @@ public:
 	}
     float Get( void ) {
 		while( writing ) {
-			if ( abs( esp_timer_get_time() - gettime ) > 0.001 ) break; // wait for 1 ms max if writing is in process
+			if ( fabs( esp_timer_get_time() - gettime ) > 0.001 ) break; // wait for 1 ms max if writing is in process
 		}
 		return data; 
     }
@@ -572,7 +572,7 @@ LowPassFilter BiasAoB;
 
 
 // declare SetGet class to reduce read write conflicts between tasks
-SetGet statP, teP, dynP, TAS, Vztotbi, TASbi, AoA, AoB, gyroCorrx;
+SetGet statP, teP, dynP, TAS, Vztotbi, TASbi, AoA, AoB;
 
 #define GYRO_FS (mpud::GYRO_FS_250DPS)
 
@@ -621,7 +621,7 @@ void drawDisplay(void *pvParameters){
 					float acceleration=accelG[0];
 					if( acceleration < 0.3 )
 						acceleration = 0.3;  // limit acceleration effect to minimum 30% of 1g
-					float acc_stall= stall_speed.get() * sqrt( acceleration + ( ballast.get()/100));  // accelerated and ballast(ed) stall speed
+					float acc_stall= stall_speed.get() * sqrtf( acceleration + ( ballast.get()/100));  // accelerated and ballast(ed) stall speed
 					if( ias.get() < acc_stall && ias.get() > acc_stall*0.7 ){
 						if( !gflags.stall_warning_active ){
 							Audio::alarm( true );
@@ -826,7 +826,7 @@ void MagdwickUpdateIMU(	float dt, float Beta, float gx, float gy, float gz, floa
 	qDot4 = 0.5 * (q0 * gz + q1 * gy - q2 * gx);
 
 	// Compute feedback only if accelerometer measurement valid (avoids NaN in accelerometer normalisation)
-	AccelGravModule = sqrt(ax * ax + ay * ay + az * az);
+	AccelGravModule = sqrtf(ax * ax + ay * ay + az * az);
 	if ( AccelGravModule != 0.0 ) {
 		recipNorm = 1.0 / AccelGravModule;
 		// Normalise accelerometer measurement
@@ -854,7 +854,7 @@ void MagdwickUpdateIMU(	float dt, float Beta, float gx, float gy, float gz, floa
 		s3 = 4.0 * q1q1 * q3 - _2q1 * ax + 4.0 * q2q2 * q3 - _2q2 * ay;
 		if ( (s0 + s1 + s2 + s3) != 0 ) {
 			// normalise step magnitude
-			recipNorm = 1.0 / sqrt(s0 * s0 + s1 * s1 + s2 * s2 + s3 * s3);
+			recipNorm = 1.0 / sqrtf(s0 * s0 + s1 * s1 + s2 * s2 + s3 * s3);
 			s0 = s0 * recipNorm;
 			s1 = s1 * recipNorm;
 			s2 = s2 * recipNorm;
@@ -874,7 +874,7 @@ void MagdwickUpdateIMU(	float dt, float Beta, float gx, float gy, float gz, floa
 
 	// Normalise quaternion*/
 	if ( (q0 * q1 * q2 * q3) != 0 ) {
-		recipNorm = 1.0 / sqrt( q0 * q0 + q1 * q1 + q2 * q2 + q3 * q3 );
+		recipNorm = 1.0 / sqrtf( q0 * q0 + q1 * q1 + q2 * q2 + q3 * q3 );
 	} else {
 		recipNorm = 1.0;
 	}
@@ -918,7 +918,7 @@ float dynKi = Kp/10;
 	gz = gzraw;// + Bias_Gz; // error on z should be added to gyro
 	
 	// Compute feedback error only if accelerometer measurement is valid (avoids NaN in accelerometer normalisation)
-	AccelGravModule = sqrt( ax * ax + ay * ay + az * az );
+	AccelGravModule = sqrtf( ax * ax + ay * ay + az * az );
 	if ( AccelGravModule != 0.0) {
 		// gyro should be corrected using error between vertical from IMU quaternion and observered vertical from accels.
 		// gyro correction is performed with PI feedback using Kp and Ki (proportional & integral) coefficients.
@@ -962,7 +962,7 @@ float dynKi = Kp/10;
 	q3 += (qa * gz + qb * gy - qc * gx);
 
 	// Normalise IMU quaternion
-	QuatModule = sqrt(q0 * q0 + q1 * q1 + q2 * q2 + q3 * q3);
+	QuatModule = sqrtf(q0 * q0 + q1 * q1 + q2 * q2 + q3 * q3);
 	if ( QuatModule != 0.0) {	
 		recipNorm = 1.0 / QuatModule;	
 		q0 *= recipNorm;
@@ -1172,7 +1172,6 @@ static void processIMU(void *pvParameters)
 			gyroNEDz.ABupdate(dtGyr, gyroISUNEDBODY.z );			
 			// apply gyro filters
 			gyroCorr.x = gyroNEDx.ABfilt();
-			gyroCorrx.Set( gyroCorr.x );
 			gyroCorr.y = gyroNEDy.ABfilt();
 			gyroCorr.z = gyroNEDz.ABfilt();
 		}
@@ -1199,15 +1198,15 @@ static void processIMU(void *pvParameters)
 
 		// compute acceleration module variation using unfiltered accels
 		// update accel module filter
-		AccelModule.ABupdate(dtGyr, sqrt(RawaccelISUNEDMPU.x * RawaccelISUNEDMPU.x + RawaccelISUNEDMPU.y * RawaccelISUNEDMPU.y + RawaccelISUNEDMPU.z * RawaccelISUNEDMPU.z ) );
+		AccelModule.ABupdate(dtGyr, sqrtf(RawaccelISUNEDMPU.x * RawaccelISUNEDMPU.x + RawaccelISUNEDMPU.y * RawaccelISUNEDMPU.y + RawaccelISUNEDMPU.z * RawaccelISUNEDMPU.z ) );
 		// asysmetric filter with fast raise and slow decay
 		#define fcAccelLevel 3.0 // 3Hz low pass to filter 
 		#define fcAL1 (40.0/(40.0+fcAccelLevel))
 		#define fcAL2 (1.0-fcAL1)		
-		if ( AccelModulePrimLevel < abs(AccelModule.ABprim()) ) {
-			AccelModulePrimLevel = abs(AccelModule.ABprim());
+		if ( AccelModulePrimLevel < fabs(AccelModule.ABprim()) ) {
+			AccelModulePrimLevel = fabs(AccelModule.ABprim());
 		} else {
-			AccelModulePrimLevel = fcAL1 * AccelModulePrimLevel +  fcAL2 * abs(AccelModule.ABprim());
+			AccelModulePrimLevel = fcAL1 * AccelModulePrimLevel +  fcAL2 * fabs(AccelModule.ABprim());
 		}
 		// Adjust Accel A/B filter N value in function of accel module prim level
 		// asysmetric filter with fast rise ~0.5 second and slow decay ~3 seconds period
@@ -1231,15 +1230,15 @@ static void processIMU(void *pvParameters)
 		
 		// compute gyro module variation using unfiltered gyros
 		// update gyro module filter
-		GyroModule.ABupdate( dtGyr, sqrt(gyroISUNEDMPU.x * gyroISUNEDMPU.x + gyroISUNEDMPU.y * gyroISUNEDMPU.y + gyroISUNEDMPU.z * gyroISUNEDMPU.z ) );
+		GyroModule.ABupdate( dtGyr, sqrtf(gyroISUNEDMPU.x * gyroISUNEDMPU.x + gyroISUNEDMPU.y * gyroISUNEDMPU.y + gyroISUNEDMPU.z * gyroISUNEDMPU.z ) );
 		// asymetric filter with fast raise and slow decay
 		#define fcGyroLevel 3.0 // 3Hz low pass to filter 
 		#define fcGL1 (40.0/(40.0+fcGyroLevel))
 		#define fcGL2 (1.0-fcGL1)		
-		if ( GyroModulePrimLevel < abs(GyroModule.ABprim()) ) {
-			GyroModulePrimLevel = abs(GyroModule.ABprim());
+		if ( GyroModulePrimLevel < fabs(GyroModule.ABprim()) ) {
+			GyroModulePrimLevel = fabs(GyroModule.ABprim());
 		} else {
-			GyroModulePrimLevel = fcGL1 * GyroModulePrimLevel +  fcGL2 * abs(GyroModule.ABprim());
+			GyroModulePrimLevel = fcGL1 * GyroModulePrimLevel +  fcGL2 * fabs(GyroModule.ABprim());
 		}
 
 		// attitude initialization when XCVario starts during first 100 iterations 
@@ -1247,11 +1246,11 @@ static void processIMU(void *pvParameters)
 			if ( AttitudeInit >= 50 ) { // skip first 49 samples before calculating attitude from accels
 				if ( AttitudeInit == 50 ) {
 					RollInit = atan2(-accelNEDBODYy.ABfilt(), -accelNEDBODYz.ABfilt());
-					PitchInit = asin( accelNEDBODYx.ABfilt()/ sqrt(accelNEDBODYx.ABfilt()* accelNEDBODYx.ABfilt()+ accelNEDBODYy.ABfilt()* accelNEDBODYy.ABfilt()+ accelNEDBODYz.ABfilt() * accelNEDBODYz.ABfilt() ));
+					PitchInit = asin( accelNEDBODYx.ABfilt()/ sqrtf(accelNEDBODYx.ABfilt()* accelNEDBODYx.ABfilt()+ accelNEDBODYy.ABfilt()* accelNEDBODYy.ABfilt()+ accelNEDBODYz.ABfilt() * accelNEDBODYz.ABfilt() ));
 					YawInit   = 0.0;
 				} else {
 					RollInit = RollInit + atan2(-accelNEDBODYy.ABfilt(), -accelNEDBODYz.ABfilt());
-					PitchInit = PitchInit + asin( accelNEDBODYx.ABfilt()/ sqrt(accelNEDBODYx.ABfilt()* accelNEDBODYx.ABfilt()+ accelNEDBODYy.ABfilt()* accelNEDBODYy.ABfilt()+ accelNEDBODYz.ABfilt() * accelNEDBODYz.ABfilt() ));
+					PitchInit = PitchInit + asin( accelNEDBODYx.ABfilt()/ sqrtf(accelNEDBODYx.ABfilt()* accelNEDBODYx.ABfilt()+ accelNEDBODYy.ABfilt()* accelNEDBODYy.ABfilt()+ accelNEDBODYz.ABfilt() * accelNEDBODYz.ABfilt() ));
 					if ( AttitudeInit == 100 ) {
 						RollInit = RollInit / 50.0;
 						PitchInit = PitchInit / 50.0;
@@ -1289,9 +1288,9 @@ static void processIMU(void *pvParameters)
 						#define BetaRollx10 0.0 // Roll at which Beta is 10 times MagdwickBeta
 						#define BetaGain  (BetaRollMax - BetaRollx10)
 						#define MaxGravityError 0.12					
-						GravModuleLP = 0.9 * GravModuleLP  + 0.1 * abs( GravityModule - GRAVITY );					
+						GravModuleLP = 0.9 * GravModuleLP  + 0.1 * fabs( GravityModule - GRAVITY );					
 						if ( (RollModuleLevel < BetaRollMax) && ( GravModuleLP < MaxGravityError ) ) {
-							CurrentBeta = MagdwickBeta * pow( 10.0, (BetaRollMax - RollModuleLevel) / BetaGain );
+							CurrentBeta = MagdwickBeta * powf( 10.0, (BetaRollMax - RollModuleLevel) / BetaGain );
 						} else {
 							CurrentBeta = MagdwickBeta;
 						}
@@ -1303,7 +1302,7 @@ static void processIMU(void *pvParameters)
 				}	
 
 				// Compute Euler angles from IMU quaternion
-				if ( abs(q1 * q3 - q0 * q2) < 0.5 ) {
+				if ( fabs(q1 * q3 - q0 * q2) < 0.5 ) {
 					Pitch = asin(-2.0 * (q1 * q3 - q0 * q2));
 				} else {
 					Pitch = M_PI / 2.0 * signbit((q0 * q2 - q1 * q3 ));
@@ -1314,7 +1313,7 @@ static void processIMU(void *pvParameters)
 				if (Yaw > 2.0 * M_PI) Yaw = Yaw - 2.0 * M_PI;
 
 				// compute & filter RollModule
-				RollModule = 0.8 * RollModule + 0.2 * abs( atan2(-gravISUNEDBODY.y, -gravISUNEDBODY.z) );
+				RollModule = 0.8 * RollModule + 0.2 * fabs( atan2(-gravISUNEDBODY.y, -gravISUNEDBODY.z) );
 				// asysmetric filter with fast raise and slow decay
 				#define fcRollModuleDn 1.0 // 1Hz low pass slow decay to filter noise and fast pilot roll variations
 				#define fcRMD1 (40.0/(40.0+fcRollModuleDn))
@@ -1341,25 +1340,25 @@ static void processIMU(void *pvParameters)
 				#define PitchLimit 0.175 // max longitudinal gravity acceleration (normalized acceleration) for 10° pitch
 				#define HeadingPrimLimit 0.175 // max heading variation to avoid outliers,0.175 rad/s ~ 10°/s
 				#define GMaxBias 0.005 // limit biais correction to 5 mrad/s
-				if ( (TAS.Get() > 15.0) && (abs(Roll) < RollLimit)  && (abs(Pitch) < PitchLimit) ) {
+				if ( (TAS.Get() > 15.0) && (fabs(Roll) < RollLimit)  && (fabs(Pitch) < PitchLimit) ) {
 					// When there is no outliers from d(roll)/dt and d(pitch)/dt, compute bias as Gx - d(roll)/dt and Gy - d(pitch)/dt long term average.
 					RollPrim = RollAHRS.ABprim();
-					if ( abs(RollPrim) < RollLimit ) GyroBiasx.LPupdate( gyroCorr.x - RollPrim );
+					if ( fabs(RollPrim) < RollLimit ) GyroBiasx.LPupdate( gyroCorr.x - RollPrim );
 					PitchPrim = PitchAHRS.ABprim();
-					if ( abs(PitchPrim) < PitchLimit ) GyroBiasy.LPupdate( gyroCorr.y - PitchPrim );					
+					if ( fabs(PitchPrim) < PitchLimit ) GyroBiasy.LPupdate( gyroCorr.y - PitchPrim );					
 					// compute pseudo heading from GNSS
 					GnssTrack = atan2( GnssVy.ABfilt(), GnssVx.ABfilt() );
 					PseudoHeadingPrim = ( GnssVy.ABprim() * cos(GnssTrack) - GnssVx.ABprim() * sin(GnssTrack) ) / TASbi.Get();
 					// compute Gz - pseudo heading variation long term average.		
-					if ( abs(PseudoHeadingPrim) < HeadingPrimLimit ) GyroBiasz.LPupdate( gyroCorr.z - PseudoHeadingPrim );
+					if ( fabs(PseudoHeadingPrim) < HeadingPrimLimit ) GyroBiasz.LPupdate( gyroCorr.z - PseudoHeadingPrim );
 					// update gyros biases variables
 					BiasQuatGx = GyroBiasx.LowPass2();
 					BiasQuatGy = GyroBiasy.LowPass2();
 					BiasQuatGz = GyroBiasz.LowPass2();		
 					// limit bias estimation	
-					if ( abs(BiasQuatGx) > GMaxBias ) BiasQuatGx = copysign( GMaxBias, BiasQuatGx);
-					if ( abs(BiasQuatGy) > GMaxBias ) BiasQuatGy = copysign( GMaxBias, BiasQuatGy);		
-					if ( abs(BiasQuatGz) > GMaxBias ) BiasQuatGz = copysign( GMaxBias, BiasQuatGz);		
+					if ( fabs(BiasQuatGx) > GMaxBias ) BiasQuatGx = copysign( GMaxBias, BiasQuatGx);
+					if ( fabs(BiasQuatGy) > GMaxBias ) BiasQuatGy = copysign( GMaxBias, BiasQuatGy);		
+					if ( fabs(BiasQuatGz) > GMaxBias ) BiasQuatGz = copysign( GMaxBias, BiasQuatGz);		
 				}
 				#endif		
 				
@@ -1397,7 +1396,7 @@ static void processIMU(void *pvParameters)
 				#define PeriodVelbiGain 2.0
 				#define GyrAmplitudeLimit 0.4
 				// Gyro x and z amplitude used to adjust Baro Inertial filter
-				GyrxzAmplitudeBIdyn = abs(gyroCorr.x)*0.9 + abs(gyroCorr.z)*0.4;			
+				GyrxzAmplitudeBIdyn = fabs(gyroCorr.x)*0.9 + fabs(gyroCorr.z)*0.4;			
 				if ( GyrxzAmplitudeBIdyn < GyrAmplitudeLimit ) {
 					//DynPeriodVelbi = 0.95 * DynPeriodVelbi + 0.05 * PeriodVelbi / ( 1 + GyrxzAmplitudeBIdyn / (GyrAmplitudeLimit/PeriodVelbiGain) );
 					DynPeriodVelbi = 0.95 * DynPeriodVelbi + 0.05 * PeriodVelbi / ( 1 + GyrxzAmplitudeBIdyn * (PeriodVelbiGain - 1.0) / GyrAmplitudeLimit );					
@@ -1426,7 +1425,7 @@ static void processIMU(void *pvParameters)
 			
 				TASbiSquare = Ubi * Ubi + Vbi * Vbi + Wbi * Wbi;
 
-				TASbi.Set( sqrt( TASbiSquare ) );
+				TASbi.Set( sqrtf( TASbiSquare ) );
 			}
 			
 			// Gyro bias and local gravity estimates when TAS < 15 m/s and the vario is considered potentially stable on ground
@@ -1470,7 +1469,7 @@ static void processIMU(void *pvParameters)
 										Gravx /= averagecount;
 										Gravy /= averagecount;
 										Gravz /= averagecount;
-										GRAVITY = sqrt(Gravx*Gravx+Gravy*Gravy+Gravz*Gravz);
+										GRAVITY = sqrtf(Gravx*Gravx+Gravy*Gravy+Gravz*Gravz);
 										AccelGravModuleFilt = GRAVITY;
 										BIAS_Init++;
 										//sprintf(str,"$BIAS,%lld,%.6f,%.6f,%.6f,%.6f\r\n", gyroTime, NewGroundGyroBias.z, NewGroundGyroBias.y, NewGroundGyroBias.x, GRAVITY );					
@@ -1497,9 +1496,9 @@ static void processIMU(void *pvParameters)
 				}
 				// Adjust progressively ground gyro bias with new ground bias estimate
 				if ( MagdwickBeta != 0.0 || Mahonykp != 0.0 ) {
-					if ( abs(GroundGyroBias.x - NewGroundGyroBias.x) > 0.00001 ) GroundGyroBias.x = 0.995 * GroundGyroBias.x + 0.005 * NewGroundGyroBias.x;
-					if ( abs(GroundGyroBias.y - NewGroundGyroBias.y) > 0.00001 ) GroundGyroBias.y = 0.995 * GroundGyroBias.y + 0.005 * NewGroundGyroBias.y;	
-					if ( abs(GroundGyroBias.z - NewGroundGyroBias.z) > 0.00001 ) GroundGyroBias.z = 0.995 * GroundGyroBias.z + 0.005 * NewGroundGyroBias.z;			
+					if ( fabs(GroundGyroBias.x - NewGroundGyroBias.x) > 0.00001 ) GroundGyroBias.x = 0.995 * GroundGyroBias.x + 0.005 * NewGroundGyroBias.x;
+					if ( fabs(GroundGyroBias.y - NewGroundGyroBias.y) > 0.00001 ) GroundGyroBias.y = 0.995 * GroundGyroBias.y + 0.005 * NewGroundGyroBias.y;	
+					if ( fabs(GroundGyroBias.z - NewGroundGyroBias.z) > 0.00001 ) GroundGyroBias.z = 0.995 * GroundGyroBias.z + 0.005 * NewGroundGyroBias.z;			
 				} 				
 				// Only for laboratory calibration of the accelerometers
 				// stream accel data and compute offsts/gains
@@ -2102,14 +2101,14 @@ void readSensors(void *pvParameters){
 		}
 
 		// update CAS filter
-		CAS.ABupdate( dtdynP, sqrt(2 * dynP.Get() / RhoSLISA) );
+		CAS.ABupdate( dtdynP, sqrtf(2 * dynP.Get() / RhoSLISA) );
 		
 		// update TAS filter
-		Rhocorr = sqrt(RhoSLISA/Rho);
+		Rhocorr = sqrtf(RhoSLISA/Rho);
 		TAS.Set( Rhocorr * CAS.ABfilt() );
 
 		// update altitude filter
-		ALT.ABupdate( dtStat, (1.0 - pow( (statP.Get()-(QNH.get()-1013.25)) * 0.000986923 , 0.1902891634 ) ) * (273.15 + 15) * 153.846153846 );
+		ALT.ABupdate( dtStat, (1.0 - powf( (statP.Get()-(QNH.get()-1013.25)) * 0.000986923 , 0.1902891634 ) ) * (273.15 + 15) * 153.846153846 );
 		
 		// Initialize ALTbi
 		if (ALTbiFirstPass) {
@@ -2132,14 +2131,14 @@ void readSensors(void *pvParameters){
 		#define AoAmax  0.25 // ~ +15°
 		WingLoad = gross_weight.get() / polar_wingarea.get();  // should be only computed when pilot change weight settings in XCVario
 		//xSemaphoreTake( dataMutex, 3/portTICK_PERIOD_MS ); // prevent data conflicts for 3ms max.		
-		if ( (dynP.Get()>100.0) && (CAS.ABfilt() >10.0) && (TAS.Get()>10.0) && (abs(accelNEDBODYz.ABfilt()) > 1.0) ) { // compute AoA and AoB only when dynamic pressure is above 100 Pa, CAS & TAS abobe 10m/s and accel z above 1 m/s²
-			AccelzFiltAoA = 0.8 * AccelzFiltAoA + 0.2 * accelNEDBODYz.ABfilt(); // simple ~3 Hz low pass on accel z
+		if ( (dynP.Get()>100.0) && (CAS.ABfilt() >10.0) && (TAS.Get()>10.0) && (fabs(accelNEDBODYz.ABfilt()) > 1.0) ) { // compute AoA and AoB only when dynamic pressure is above 100 Pa, CAS & TAS abobe 10m/s and accel z above 1 m/s²
+			AccelzFiltAoA = 0.8 * AccelzFiltAoA + 0.2 * accelNEDBODYz.ABfiltds(); // simple ~3 Hz low pass on accel z
 			CL = -AccelzFiltAoA * 2 / RhoSLISA * WingLoad / CAS.ABfilt() / CAS.ABfilt();
 			dAoA = ( CL - prevCL ) / CLA;
 			prevCL = CL;
 			float AoAfilt;			
-			if (abs(AccelzFiltAoA) > 1.0) { //when not close to Az=0, hybridation of aoa from drag & aoa from lift
-				AoARaw = -(accelNEDBODYx.ABfilt()/ accelNEDBODYz.ABfilt()) - Speed2Fly.cw( CAS.ABfilt() ) / Speed2Fly.getN();
+			if (fabs(AccelzFiltAoA) > 1.0) { //when not close to Az=0, hybridation of aoa from drag & aoa from lift
+				AoARaw = -(accelNEDBODYx.ABfiltds()/ accelNEDBODYz.ABfiltds()) - Speed2Fly.cw( CAS.ABfilt() ) / Speed2Fly.getN();
 				AoAfilt = fcAoA1 * ( AoA.Get() + dAoA ) + fcAoA2 * AoARaw;
 				if ( AoAfilt < AoAmin ) AoAfilt = AoAmin;
 				if ( AoAfilt > AoAmax ) AoAfilt = AoAmax;
@@ -2150,7 +2149,7 @@ void readSensors(void *pvParameters){
 				if ( AoAfilt > AoAmax ) AoAfilt = AoAmax;			
                 AoA.Set( AoAfilt ) ;
             }			
-			AoB.Set( fcAoB1 * AoB.Get() + fcAoB2 * ( KAoB * WingLoad * accelNEDBODYy.ABfilt()/ dynP.Get() - KGx * gyroCorrx.Get() / TAS.Get()) - Bias_AoB );	
+			AoB.Set( fcAoB1 * AoB.Get() + fcAoB2 * ( KAoB * WingLoad * accelNEDBODYy.ABfiltds()/ dynP.Get() - KGx * gyroNEDx.ABfiltds() / TAS.Get()) - Bias_AoB );	
 		} else {
 			AoA.Set( 0.0 );
 			AoB.Set( 0.0 );
@@ -2161,10 +2160,10 @@ void readSensors(void *pvParameters){
 			#define RollLimitAoB 0.08 // max roll for AoB bias estimation
 			#define MinTASAoB 30.0 // minimum speed to evaluate AoB bias
 			#define AoBMaxBias 0.1 // limit biais correction to 100 mrad/s
-			if ( ( TAS.Get() > MinTASAoB ) && ( abs(Roll) < RollLimitAoB ) ) {
+			if ( ( TAS.Get() > MinTASAoB ) && ( fabs(Roll) < RollLimitAoB ) ) {
 				BiasAoB.LPupdate( AoB.Get() );
 				Bias_AoB = BiasAoB.LowPass2();
-				if ( abs(Bias_AoB) > AoBMaxBias ) Bias_AoB = copysign( AoBMaxBias, Bias_AoB);
+				if ( fabs(Bias_AoB) > AoBMaxBias ) Bias_AoB = copysign( AoBMaxBias, Bias_AoB);
 			}
 		#endif
 		
@@ -2206,7 +2205,7 @@ void readSensors(void *pvParameters){
 			NALTbiTASbiChanged = false;
 		}
 		ALTbiEnergy.ABupdate( dtStat, ALTbi );
-		TASbiEnergy.ABupdate( dtStat, ( TASbiSquare / GRAVITY / 2.0 ) );			
+		TASbiEnergy.ABupdate( dtStat, ( TASbiSquare / GRAVITY * 0.5 ) );			
 		// Total Energy is sum of both potential and kinetic energies variations
 		Vztotbi.Set( ALTbiEnergy.ABprim() + TASbiEnergy.ABprim() );
 
@@ -2221,13 +2220,13 @@ void readSensors(void *pvParameters){
 		DeltaVgx = Vgx-VgxPrev; // Variation of x speed coordinate
 		DeltaVgy = Vgy-VgyPrev; // Variation of y speed coordinate
 		SegmentSquare = DeltaVgx*DeltaVgx+DeltaVgy*DeltaVgy; // squared module of segment between speed vectors extremities
-		Segment = sqrt(SegmentSquare); // module of segment
-		float Vhbi = sqrt( Vxbi * Vxbi + Vybi * Vybi ); // Vhbi baro inertiel horizontal speed in earth frame
+		Segment = sqrtf(SegmentSquare); // module of segment
+		float Vhbi = sqrtf( Vxbi * Vxbi + Vybi * Vybi ); // Vhbi baro inertiel horizontal speed in earth frame
 		VhAvg = ( Vhbi + VhPrev ) / 2; // average horizontal speed
 		if ( (Segment > 0.75) && (VhAvg > Segment/2) && (VgxPrev != 0.0) && (VgyPrev != 0.0) && (DeltaVgx != 0.0) && (DeltaVgy != 0.0) ) {
 			MidSegmentx = (Vgx+VgxPrev)/2; // mid segment x
 			MidSegmenty = (Vgy+VgyPrev)/2; // mid segment y
-			Median = sqrt(VhAvg*VhAvg-SegmentSquare/4); // module of median between segment center and true airspedd origin (usinf average of current and previous true airspeed
+			Median = sqrtf(VhAvg*VhAvg-SegmentSquare/4); // module of median between segment center and true airspedd origin (usinf average of current and previous true airspeed
 			MedianDirx = -DeltaVgy/Segment; // direction of median x
 			MedianDiry = DeltaVgx/Segment; // direction of median y
 			Windx = MidSegmentx + Median * MedianDirx; // wind x coordinate
@@ -2273,7 +2272,7 @@ void readSensors(void *pvParameters){
 		Vgy = 0.5 * Vgy + 0.5 * GnssVy.ABfilt();
 
 		// compute Vhbi baro inertial horizontal speed in earth frame
-		Vhbi = sqrt( Vxbi * Vxbi + Vybi * Vybi );
+		Vhbi = sqrtf( Vxbi * Vxbi + Vybi * Vybi );
 
 		// consider last 15 samples to verify if speed variation is significant enough and compute wind as soon as condition is met
 		for ( int i=0; i<15 ; i++ ) {
@@ -2283,14 +2282,14 @@ void readSensors(void *pvParameters){
 				DeltaVgy = Vgy-Vgypast[i];
 				// compute segment length corresponding to GNSS speed variation ( segment square and segment)
 				SegmentSquare = DeltaVgx*DeltaVgx+DeltaVgy*DeltaVgy; // squared module of segment between gnss speed vectors
-				Segment = sqrt(SegmentSquare); // module of segment between gnss speed vectors
+				Segment = sqrtf(SegmentSquare); // module of segment between gnss speed vectors
 				// algorithm expects horizontal true airspeed to be constant but average is used to reduce error
 				VhbiAvg = ( Vhbi + Vhbipast[i] ) / 2; // average horizontal baro inertial speed
 				// test if no wind yet and long enough segment and conditions met to avoid calc errors
 				if ( (Segment > MINSEGMENT ) && (VhbiAvg > Segment/2) && (Vgxpast[i] != 0.0) && (Vgypast[i] != 0.0) && (DeltaVgx != 0.0) && (DeltaVgy != 0.0) ) {
 					MidSegmentx = (Vgx+Vgxpast[i])/2; // mid segment x
 					MidSegmenty = (Vgy+Vgypast[i])/2; // mid segment y
-					Median = sqrt(VhbiAvg*VhbiAvg-SegmentSquare/4); // module of median between segment center and true airspedd origin (usinf average of current and previous true airspeed
+					Median = sqrtf(VhbiAvg*VhbiAvg-SegmentSquare/4); // module of median between segment center and true airspedd origin (usinf average of current and previous true airspeed
 					MedianDirx = -DeltaVgy/Segment; // direction of median x
 					MedianDiry = DeltaVgx/Segment; // direction of median y
 					// There are two solutions to the problem
@@ -2571,7 +2570,7 @@ void readTemp(void *pvParameters){
 				if( temperature > 65.0 )
 					temperature = 20 - ALT.ABfilt() * .0065;  // if temperature error, switch to standard ISA + 5
 				temperatureLP.LPupdate( temperature );
-				if( abs(temperatureLP.LowPass1() - temp_prev) > 0.1 ){
+				if( fabs(temperatureLP.LowPass1() - temp_prev) > 0.1 ){
 					OAT.set( std::round(temperatureLP.LowPass1()*10)/10 );
 					//ESP_LOGI(FNAME,"NEW temperature=%2.1f, prev T=%2.1f", temperatureLP.LowPass1(), temp_prev );
 					temp_prev = temperatureLP.LowPass1();
@@ -2799,12 +2798,12 @@ void system_startup(void *args){
 
 		// check GRAVITY and accels offset/gain 
 		GRAVITY = gravity.get();
-		if(abs(GRAVITY-9.807) > 0.5 ) GRAVITY = 9.807;
+		if(fabs(GRAVITY-9.807) > 0.5 ) GRAVITY = 9.807;
 		currentAccelBias = accl_bias.get();
 		currentAccelGain = accl_gain.get();	
 		// Check value just in case FLASH is not correct to reset to neutral values (OK range is +- 2 m/s² for bias and +-20% on gain)
-		if ( abs(currentAccelBias.x)>2.0 || abs(currentAccelBias.y)>2.0 || abs(currentAccelBias.z)>2.0 || 
-			abs(currentAccelGain.x-1.0)>0.2 || abs(currentAccelGain.y-1.0)>0.2 || abs(currentAccelGain.z-1.0)>0.2 ){
+		if ( fabs(currentAccelBias.x)>2.0 || fabs(currentAccelBias.y)>2.0 || fabs(currentAccelBias.z)>2.0 || 
+			fabs(currentAccelGain.x-1.0)>0.2 || fabs(currentAccelGain.y-1.0)>0.2 || fabs(currentAccelGain.z-1.0)>0.2 ){
 				currentAccelBias.x = 0.0;
 				currentAccelBias.y = 0.0;
 				currentAccelBias.z = 0.0;
@@ -2817,7 +2816,7 @@ void system_startup(void *args){
 			// get last known ground gyro biases
 			GroundGyroBias = gyro_bias.get();
 			// Check value just in case FLASH is not correct to reset to neutral values (OK range is +-0.2 rad/s)
-			if ( abs(GroundGyroBias.x)>0.2 || abs(GroundGyroBias.y)>0.2 || abs(GroundGyroBias.z)>0.2 ) {
+			if ( fabs(GroundGyroBias.x)>0.2 || fabs(GroundGyroBias.y)>0.2 || fabs(GroundGyroBias.z)>0.2 ) {
 					GroundGyroBias.x = 0.0;
 					GroundGyroBias.y = 0.0;
 					GroundGyroBias.z = 0.0;
@@ -2836,7 +2835,7 @@ void system_startup(void *args){
 		if ( DistCGVario < 0.0 || DistCGVario > 3.0 ) DistCGVario = 0.0;
 		Sway = sway.get();
 		Tilt = tilt.get();
-		if ( abs(Sway) > 0.4 || abs(Tilt) > 0.4 ) {
+		if ( fabs(Sway) > 0.4 || fabs(Tilt) > 0.4 ) {
 			Sway = 0.0;
 			Tilt = 0.0;
 		}
@@ -2867,7 +2866,7 @@ void system_startup(void *args){
 			ESP_LOGI( FNAME,"MPU %.2f", accelG[0] );
 			delay( 5 );
 			if( i>0 )
-				accel += sqrt(accelG[0]*accelG[0]+accelG[1]*accelG[1]+accelG[2]*accelG[2]);
+				accel += sqrtf(accelG[0]*accelG[0]+accelG[1]*accelG[1]+accelG[2]*accelG[2]);
 		}
 		sprintf( ahrs,"AHRS Sensor: OK (%.2f g)", accel/10 );
 		display->writeText( line++, ahrs );
@@ -3133,28 +3132,28 @@ void system_startup(void *args){
 	}
 	if( tetest && batest ) {
 		ESP_LOGI(FNAME,"Both absolute pressure sensor TESTs SUCCEEDED, now test deltas");
-		if( (abs(ba_t - te_t) >4.0)  && ( ias.get() < 50 ) ) {   // each sensor has deviations, and new PCB has more heat sources
+		if( (fabs(ba_t - te_t) >4.0)  && ( ias.get() < 50 ) ) {   // each sensor has deviations, and new PCB has more heat sources
 			selftestPassed = false;
-			ESP_LOGE(FNAME,"Severe T delta > 4 °C between Baro and TE sensor: °C %f", abs(ba_t - te_t) );
+			ESP_LOGE(FNAME,"Severe T delta > 4 °C between Baro and TE sensor: °C %f", fabs(ba_t - te_t) );
 			display->writeText( line++, "TE/Baro Temp: Unequal");
 			logged_tests += "TE/Baro Sensor T diff. <4°C: FAILED\n";
 		}
 		else{
-			ESP_LOGI(FNAME,"Abs p sensors temp. delta test PASSED, delta: %f °C",  abs(ba_t - te_t));
+			ESP_LOGI(FNAME,"Abs p sensors temp. delta test PASSED, delta: %f °C",  fabs(ba_t - te_t));
 			// display->writeText( line++, "TE/Baro Temp: OK");
 			logged_tests += "TE/Baro Sensor T diff. <2°C: PASSED\n";
 		}
 		float delta = 2.5; // in factory we test at normal temperature, so temperature change is ignored.
-		if( abs(factory_volt_adjust.get() - 0.00815) < 0.00001 )
+		if( fabs(factory_volt_adjust.get() - 0.00815) < 0.00001 )
 			delta += 1.8; // plus 1.5 Pa per Kelvin, for 60K T range = 90 Pa or 0.9 hPa per Sensor, for both there is 2.5 plus 1.8 hPa to consider
-		if( (abs(ba_p - te_p) >delta)  && ( ias.get() < 50 ) ) {
+		if( (fabs(ba_p - te_p) >delta)  && ( ias.get() < 50 ) ) {
 			selftestPassed = false;
-			ESP_LOGI(FNAME,"Abs p sensors deviation delta > 2.5 hPa between Baro and TE sensor: %f", abs(ba_p - te_p) );
+			ESP_LOGI(FNAME,"Abs p sensors deviation delta > 2.5 hPa between Baro and TE sensor: %f", fabs(ba_p - te_p) );
 			display->writeText( line++, "TE/Baro P: Unequal");
 			logged_tests += "TE/Baro Sensor P diff. <2hPa: FAILED\n";
 		}
 		else
-			ESP_LOGI(FNAME,"Abs p sensor deta test PASSED, delta: %f hPa", abs(ba_p - te_p) );
+			ESP_LOGI(FNAME,"Abs p sensor deta test PASSED, delta: %f hPa", fabs(ba_p - te_p) );
 		// display->writeText( line++, "TE/Baro P: OK");
 		logged_tests += "TE/Baro Sensor P diff. <2hPa: PASSED\n";
 
@@ -3243,7 +3242,7 @@ void system_startup(void *args){
 		else
 			result += ",S2 FAIL";
 	}
-	if( abs(factory_volt_adjust.get() - 0.00815) < 0.00001 ){
+	if( fabs(factory_volt_adjust.get() - 0.00815) < 0.00001 ){
 		display->writeText( line++, result.c_str() );
 	}
 	Serial::taskStart();
@@ -3338,12 +3337,12 @@ void system_startup(void *args){
 				else
 					alt = baroSensor->readAltitude( qnh, ok);
 				float diff = alt - ae;
-				// ESP_LOGI(FNAME,"Alt diff=%4.2f  abs=%4.2f", diff, abs(diff) );
-				if( abs( diff ) < 100 )
+				// ESP_LOGI(FNAME,"Alt diff=%4.2f  abs=%4.2f", diff, fabs(diff) );
+				if( fabs( diff ) < 100 )
 					step=1.0;  // 8m
-				if( abs( diff ) < 10 )
+				if( fabs( diff ) < 10 )
 					step=0.05;  // 0.4 m
-				if( abs( diff ) < abs(min) ) {
+				if( fabs( diff ) < fabs(min) ) {
 					min = diff;
 					qnh_best = qnh;
 					// ESP_LOGI(FNAME,"New min=%4.2f", min);

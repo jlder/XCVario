@@ -80,7 +80,7 @@ void AlphaBeta::ABupdate(float dt, float RawData ) {
 			// 
 			if ( ZicketCount <= MaxZicket ) { 
 				// if filter stable (ZicketCount below max zicket) test if data within threshold, filt and prim limits				
-				if ( ( (abs(innovation) < Threshold ) || (Threshold == 0.0)) &&
+				if ( ( (fabs(innovation) < Threshold ) || (Threshold == 0.0)) &&
 					 ( (filt_update > filtMin && filt_update < filtMax) || ( filtMin == 0.0 && filtMax == 0.0 ) ) &&
 					 ( (prim_update > primMin && prim_update < primMax) || ( primMin == 0.0 && primMax == 0.0 ) )    ) {
 					// new data below threshold
@@ -108,7 +108,7 @@ void AlphaBeta::ABupdate(float dt, float RawData ) {
 				}
 			} else {
 				// filter is unstable, we consider we are through a step change
-				if ( abs(innovation) < Threshold || (Threshold == 0.0) ) {
+				if ( fabs(innovation) < Threshold || (Threshold == 0.0) ) {
 					// if innovation is below threshold, filter is converging toward stability and we reduce the zicket number
 					ZicketCount--;
 				} else {
