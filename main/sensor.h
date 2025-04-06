@@ -56,6 +56,8 @@
 #include "vector_3d.h"
 #include "BMPVario.h"
 #include "AirspeedSensor.h"
+#include "AlphaBetaFilter.h"
+#include "DownSample.h"
 
 // Display 4 Wire SPI and Display CS
 #define RESET_Display  GPIO_NUM_5       // Reset pin for Display
