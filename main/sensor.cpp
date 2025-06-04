@@ -1743,104 +1743,171 @@ static void processIMU(void *pvParameters)
 			}	
 		}
 		
-		if ( IMUstream && !SENDataReady && !SEN50DataReady ) {
-			/*
-				// Sent at 40Hz when IMUstream selected
-				$I,
-				MPU (gyro) time in milli second,
-				Acceleration in BODY X-Axis in tenth milli m/s²,
-				Acceleration in BODY Y-Axis in tenth milli m/s²,
-				Acceleration in BODU Z-Axis in tenth milli m/s²,				
-				Rotation BODY X-Axis in hundredth of milli rad/s,
-				Rotation BODY Y-Axis in hundredth of milli rad/s,
-				Rotation BODY Z-Axis in hundredth of milli rad/s,
-				<CR><LF>	
-			*/			
-			// Send $I
-			sprintf(str,"$I,%lld,%i,%i,%i,%i,%i,%i\r\n",
-				gyroTime,
-				(int32_t)(accelISUNEDBODY.x*10000.0), (int32_t)(accelISUNEDBODY.y*10000.0), (int32_t)(accelISUNEDBODY.z*10000.0),
-				(int32_t)(gyroISUNEDBODY.x*100000.0), (int32_t)(gyroISUNEDBODY.y*100000.0),(int32_t)(gyroISUNEDBODY.z*100000.0)
-			);						
-			xSemaphoreTake( BTMutex, 2/portTICK_PERIOD_MS ); // prevent BT conflicts for 2ms max.
-			Router::sendXCV(str);
-			xSemaphoreGive( BTMutex );
-			
-			Router::routeXCV();			
-		}
-		
-		if ( SENstream ) {
-			/* Sensor data
-				$S1,			
-				static time in milli second,
-				static pressure in Pa,
-				TE pressure in Pa,
-				Dynamic pressure in tenth of Pa,
-				GNSS time in milli second,
-				GNSS speed x or north in centimeters/s,
-				GNSS speed y or east in centimeters/s,
-				GNSS speed z or down in centimeters/s,
-				Pitch in milli rad,
-				Roll in milli rad,
-				Yaw in milli rad,
-				Vzbaro in cm/s,
-				AoA angle in mrad,
-				AoB  angle in mrad,
-				Ubi in cm/s,
-				Vbi in cm/s,
-				Wbi in cm/s,
-				Vzbi in cm/s,			
-				TotalEnergy in cm/s,
-				CurrentBeta in tenthousand of unit,
-				NAccel in ten of unit,
-				DynPeriodVelbi in thousands of second
-				<CR><LF>		
-			*/
-			/* 
-				$S2,
-				Outside Air Temperature in tenth of °C,
-				MPU temperature in tenth °C,
-				GNSS fix 0 to 6   3=3D   4= 3D diff  5= RTK Float  6 = RTK integer
-				GNSS number of satelites used  or  RTK ratio * 10 
-				New Ground Gyro bias z in hundredth of milli rad/s,
-				New Ground Gyro bias y in hundredth of milli rad/s,
-				New Ground Gyro bias x in hundredth of milli rad/s,			
-				IMU Gyro bias x in hundredth of milli rad/s,
-				IMU Gyro bias y in hundredth of milli rad/s,
-				IMU Gyro bias z in hundredth of milli rad/s,
-				XCVtemp (temperature inside vario) in tenth of °C,
-				PeriodVelbi (Baro Inertial period in tenth of seconds),
-				te_filt (TE filter period in tenth of second),
-				MagdwickBeta in tenthousandth of unit,
-				ALTbiN ALTbi N A/B filter in tenth of unit,
-				TASbiN delta between ALTbi and TASbi N in tenth of unit,
-				Bias_AoB in mrad				
-			*/	
-			/* 
-				$S3,
-				UiPrim in hundred of m/s²,
-				ViPrim,
-				Wiprim,
-				UbiPrim in hundred of m/s²,
-				VbiPrim,
-				WbiPrim,
-				RTKNproj in thousandths of meter;
-				RTKEproj in thousandths of meter;
-				RTKDproj in thousandths of meter;
-				RTKheading in tenth of degre;
-				ALTbi in cm,
-				DHeading in mrad,
-				PSerr in tenth Pa
-				PseudoHeadingPrim in hundredth of milli rad/s,			
-			*/				
+		/*
+			// Sent at 40Hz when IMUstream selected
+			$I,
+			MPU (gyro) time in milli second,
+			Acceleration in BODY X-Axis in tenth milli m/s²,
+			Acceleration in BODY Y-Axis in tenth milli m/s²,
+			Acceleration in BODU Z-Axis in tenth milli m/s²,				
+			Rotation BODY X-Axis in hundredth of milli rad/s,
+			Rotation BODY Y-Axis in hundredth of milli rad/s,
+			Rotation BODY Z-Axis in hundredth of milli rad/s,
+			<CR><LF>	
+		*/
+		/* Sensor data
+			$S1,			
+			static time in milli second,
+			static pressure in Pa,
+			TE pressure in Pa,
+			Dynamic pressure in tenth of Pa,
+			GNSS time in milli second,
+			GNSS speed x or north in centimeters/s,
+			GNSS speed y or east in centimeters/s,
+			GNSS speed z or down in centimeters/s,
+			Pitch in milli rad,
+			Roll in milli rad,
+			Yaw in milli rad,
+			Vzbaro in cm/s,
+			AoA angle in mrad,
+			AoB  angle in mrad,
+			Ubi in cm/s,
+			Vbi in cm/s,
+			Wbi in cm/s,
+			Vzbi in cm/s,			
+			TotalEnergy in cm/s,
+			CurrentBeta in tenthousand of unit,
+			NAccel in ten of unit,
+			DynPeriodVelbi in thousands of second
+			<CR><LF>		
+		*/
+		/* 
+			$S2,
+			Outside Air Temperature in tenth of °C,
+			MPU temperature in tenth °C,
+			GNSS fix 0 to 6   3=3D   4= 3D diff  5= RTK Float  6 = RTK integer
+			GNSS number of satelites used  or  RTK ratio * 10 
+			New Ground Gyro bias z in hundredth of milli rad/s,
+			New Ground Gyro bias y in hundredth of milli rad/s,
+			New Ground Gyro bias x in hundredth of milli rad/s,			
+			IMU Gyro bias x in hundredth of milli rad/s,
+			IMU Gyro bias y in hundredth of milli rad/s,
+			IMU Gyro bias z in hundredth of milli rad/s,
+			XCVtemp (temperature inside vario) in tenth of °C,
+			PeriodVelbi (Baro Inertial period in tenth of seconds),
+			te_filt (TE filter period in tenth of second),
+			MagdwickBeta in tenthousandth of unit,
+			ALTbiN ALTbi N A/B filter in tenth of unit,
+			TASbiN delta between ALTbi and TASbi N in tenth of unit,
+			Bias_AoB in mrad				
+		*/	
+		/* 
+			$S3,
+			UiPrim in hundred of m/s²,
+			ViPrim,
+			Wiprim,
+			UbiPrim in hundred of m/s²,
+			VbiPrim,
+			WbiPrim,
+			RTKNproj in thousandths of meter;
+			RTKEproj in thousandths of meter;
+			RTKDproj in thousandths of meter;
+			RTKheading in tenth of degre;
+			ALTbi in cm,
+			DHeading in mrad,
+			PSerr in tenth Pa
+			PseudoHeadingPrim in hundredth of milli rad/s,			
+		*/		
+		if ( IMUstream ) {
+			if ( !SENDataReady && !SEN50DataReady ) {			
+				// Send $I
+				sprintf(str,"$I,%lld,%i,%i,%i,%i,%i,%i\r\n",
+					gyroTime,
+					(int32_t)(accelISUNEDBODY.x*10000.0), (int32_t)(accelISUNEDBODY.y*10000.0), (int32_t)(accelISUNEDBODY.z*10000.0),
+					(int32_t)(gyroISUNEDBODY.x*100000.0), (int32_t)(gyroISUNEDBODY.y*100000.0),(int32_t)(gyroISUNEDBODY.z*100000.0)
+				);						
+				xSemaphoreTake( BTMutex, 2/portTICK_PERIOD_MS ); // prevent BT conflicts for 2ms max.
+				Router::sendXCV(str);
+				Router::routeXCV();	
+				xSemaphoreGive( BTMutex );
+			} else {
+				if ( SEN50DataReady ) {
+					SEN50DataReady = false;
+					// send $I, $S1 and $S2 every 50 cycles = 5 seconds
+					sprintf(str,"$I,%lld,%i,%i,%i,%i,%i,%i\r\n$S1,%lld,%i,%i,%i,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$S3,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$S2,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",				
+						// $I stream
+						(int64_t)(gyroTime),
+						(int32_t)(accelISUNEDBODY.x*10000.0), (int32_t)(accelISUNEDBODY.y*10000.0), (int32_t)(accelISUNEDBODY.z*10000.0),
+						(int32_t)(gyroISUNEDBODY.x*100000.0), (int32_t)(gyroISUNEDBODY.y*100000.0),(int32_t)(gyroISUNEDBODY.z*100000.0),				
+						// $S1 stream
+						(int64_t)(statTime), (int32_t)(PSraw*100.0),(int32_t)(teP.Get()*100.0), (int32_t)(DPraw*10), 
+						(int64_t)(chosenGnss->time*1000.0), (int32_t)(chosenGnss->speed.x*100), (int32_t)(chosenGnss->speed.y*100), (int32_t)(chosenGnss->speed.z*100),
+						(int32_t)(Pitch*1000.0), (int32_t)(Roll*1000.0), (int32_t)(Yaw*1000.0),
+						(int32_t)(Vzbaro*100),
+						(int32_t)(AoA.Get()*1000), (int32_t)(AoB.Get()*1000),
+						(int32_t)(Ubi*100), (int32_t)(Vbi*100),(int32_t)(Wbi*100), (int32_t)(Vzbi*100),				
+						(int32_t)(Vztotbi.Get()*100),
+						(int32_t)(CurrentBeta*10000), 
+						(int32_t)(NAccel * 10),
+						(int32_t)(DynPeriodVelbi*1000),
+						// $S3 stream
+						(int32_t)(UiPrim*100),(int32_t)(ViPrim*100),(int32_t)(WiPrim*100),
+						(int32_t)(UbiPrim*100), (int32_t)(VbiPrim*100),(int32_t)(WbiPrim*100),
+						(int32_t)(RTKNproj*1000),(int32_t)(RTKEproj*1000),(int32_t)(-RTKUproj*1000),(int32_t)(RTKheading*10),(int32_t)(ALTbi*100),
+						(int32_t)(DHeading*1000),
+						(int32_t)(PSerr*10),
+						(int32_t)(PseudoHeadingPrim*100000),
+						// $S2 stream
+						(int32_t)(temperatureLP.LowPass1()*10.0), (int32_t)(MPUtempcel*10.0), (int32_t)(chosenGnss->fix), (int32_t)(chosenGnss->numSV),
+						(int32_t)(NewGroundGyroBias.x*100000.0), (int32_t)(NewGroundGyroBias.y*100000.0), (int32_t)(NewGroundGyroBias.z*100000.0),				
+						(int32_t)(BiasQuatGx*100000.0), (int32_t)(BiasQuatGy*100000.0), (int32_t)(BiasQuatGz*100000.0),
+						(int32_t)(XCVTemp*10.0), (int32_t) (PeriodVelbi*10),
+						(int32_t)(te_filt.get()*10),(int32_t)(MagdwickBeta*10000), (int32_t)(ALTbiN*10), (int32_t)(TASbiN*10),
+						(int32_t)(Bias_AoB*1000)					
+					);
+					xSemaphoreTake( BTMutex, 2/portTICK_PERIOD_MS );				
+					Router::sendXCV(str);
+					Router::routeXCV();
+					xSemaphoreGive( BTMutex );
+				} else {
+					if ( SENDataReady ) {
+						SENDataReady = false;
+						sprintf(str,"$I,%lld,%i,%i,%i,%i,%i,%i\r\n$S1,%lld,%i,%i,%i,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$S3,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",
+							// $I stream
+							(int64_t)(gyroTime),
+							(int32_t)(accelISUNEDBODY.x*10000.0), (int32_t)(accelISUNEDBODY.y*10000.0), (int32_t)(accelISUNEDBODY.z*10000.0),
+							(int32_t)(gyroISUNEDBODY.x*100000.0), (int32_t)(gyroISUNEDBODY.y*100000.0),(int32_t)(gyroISUNEDBODY.z*100000.0),
+							// $S1 stream
+							(int64_t)(statTime), (int32_t)(PSraw*100.0),(int32_t)(teP.Get()*100.0), (int16_t)(DPraw*10), 
+							(int64_t)(chosenGnss->time*1000.0), (int16_t)(chosenGnss->speed.x*100), (int16_t)(chosenGnss->speed.y*100), (int16_t)(chosenGnss->speed.z*100),
+							(int32_t)(Pitch*1000.0), (int32_t)(Roll*1000.0), (int32_t)(Yaw*1000.0),
+							(int32_t)(Vzbaro*100),
+							(int32_t)(AoA.Get()*1000), (int32_t)(AoB.Get()*1000),
+							(int32_t)(Ubi*100), (int32_t)(Vbi*100),(int32_t)(Wbi*100), (int32_t)(Vzbi*100),				
+							(int32_t)(Vztotbi.Get()*100),
+							(int32_t)(CurrentBeta*10000), 
+							(int32_t)NAccel * 10,
+							(int32_t)(DynPeriodVelbi*1000),
+							// $S3 stream
+							(int32_t)(UiPrim*100),(int32_t)(ViPrim*100),(int32_t)(WiPrim*100),
+							(int32_t)(UbiPrim*100), (int32_t)(VbiPrim*100),(int32_t)(WbiPrim*100),
+							(int32_t)(RTKNproj*1000),(int32_t)(RTKEproj*1000),(int32_t)(-RTKUproj*1000),(int32_t)(RTKheading*10),(int32_t)(ALTbi*100),
+							(int32_t)(DHeading*1000),
+							(int32_t)(PSerr*10),
+							(int32_t)(PseudoHeadingPrim*100000)						
+						);
+						xSemaphoreTake( BTMutex, 2/portTICK_PERIOD_MS );				
+						Router::sendXCV(str);
+						Router::routeXCV();
+						xSemaphoreGive( BTMutex );
+					}
+				}
+			}				
+		} else {
 			if ( SEN50DataReady ) {
 				SEN50DataReady = false;
 				// send $S1 and $S2 every 50 cycles = 5 seconds
-				sprintf(str,"$I,%lld,%i,%i,%i,%i,%i,%i\r\n$S1,%lld,%i,%i,%i,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$S3,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$S2,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",				
-					// $I stream
-					(int64_t)(gyroTime),
-					(int32_t)(accelISUNEDBODY.x*10000.0), (int32_t)(accelISUNEDBODY.y*10000.0), (int32_t)(accelISUNEDBODY.z*10000.0),
-					(int32_t)(gyroISUNEDBODY.x*100000.0), (int32_t)(gyroISUNEDBODY.y*100000.0),(int32_t)(gyroISUNEDBODY.z*100000.0),				
+				sprintf(str,"$S1,%lld,%i,%i,%i,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$S3,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$S2,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",				
 					// $S1 stream
 					(int64_t)(statTime), (int32_t)(PSraw*100.0),(int32_t)(teP.Get()*100.0), (int32_t)(DPraw*10), 
 					(int64_t)(chosenGnss->time*1000.0), (int32_t)(chosenGnss->speed.x*100), (int32_t)(chosenGnss->speed.y*100), (int32_t)(chosenGnss->speed.z*100),
@@ -1866,19 +1933,15 @@ static void processIMU(void *pvParameters)
 					(int32_t)(XCVTemp*10.0), (int32_t) (PeriodVelbi*10),
 					(int32_t)(te_filt.get()*10),(int32_t)(MagdwickBeta*10000), (int32_t)(ALTbiN*10), (int32_t)(TASbiN*10),
 					(int32_t)(Bias_AoB*1000)					
-					);
+				);
 				xSemaphoreTake( BTMutex, 2/portTICK_PERIOD_MS );				
 				Router::sendXCV(str);
+				Router::routeXCV();
 				xSemaphoreGive( BTMutex );
-				Router::routeXCV();				
 			} else {
 				if ( SENDataReady ) {
 					SENDataReady = false;
-					sprintf(str,"$I,%lld,%i,%i,%i,%i,%i,%i\r\n$S1,%lld,%i,%i,%i,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$S3,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",
-						// $I stream
-						(int64_t)(gyroTime),
-						(int32_t)(accelISUNEDBODY.x*10000.0), (int32_t)(accelISUNEDBODY.y*10000.0), (int32_t)(accelISUNEDBODY.z*10000.0),
-						(int32_t)(gyroISUNEDBODY.x*100000.0), (int32_t)(gyroISUNEDBODY.y*100000.0),(int32_t)(gyroISUNEDBODY.z*100000.0),
+					sprintf(str,"$S1,%lld,%i,%i,%i,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$S3,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",
 						// $S1 stream
 						(int64_t)(statTime), (int32_t)(PSraw*100.0),(int32_t)(teP.Get()*100.0), (int16_t)(DPraw*10), 
 						(int64_t)(chosenGnss->time*1000.0), (int16_t)(chosenGnss->speed.x*100), (int16_t)(chosenGnss->speed.y*100), (int16_t)(chosenGnss->speed.z*100),
@@ -1900,10 +1963,10 @@ static void processIMU(void *pvParameters)
 					);
 					xSemaphoreTake( BTMutex, 2/portTICK_PERIOD_MS );				
 					Router::sendXCV(str);
-					xSemaphoreGive( BTMutex );
 					Router::routeXCV();
-				}					
-			}
+					xSemaphoreGive( BTMutex );
+				}
+			}			
 		}		
 		
 		ProcessTimeIMU = (esp_timer_get_time()/1000.0) - gyroTime;
