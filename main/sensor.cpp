@@ -2195,7 +2195,8 @@ void readSensors(void *pvParameters){
 			dtStat = (statTime - prevstatTime) / 1000.0; // period between last two valid static pressure samples in second	
 			if (dtStat == 0) dtStat = PERIOD10HZ;
 			PSerr = dynP.Get() * ( KP0 + KPa2 * ( AoA.Get() - Aoa2 ) * ( AoA.Get() - Aoa2 ) ); // PSerr en Pa
-			statP.Set( PSraw - PSerr / 100.0 ); // PS error converted to hPa
+			// statP.Set( PSraw - PSerr / 100.0 ); // PS error converted to hPa
+			statP.Set( PSraw ); // remove PS correction until equation validated
 			baroP = PSraw;	// for compatibility with Eckhard code
 		} else {
 			statP.Set( Prevp );
@@ -2222,7 +2223,8 @@ void readSensors(void *pvParameters){
 			dynPTime = esp_timer_get_time()/1000.0; // record dynPTimeTE time in milli second		
 			dtdynP = (dynPTime - prevdynPTime) / 1000.0; // period between last two valid dynamic pressure samples in second
 			if (dtdynP == 0) dtdynP = PERIOD10HZ;
-			dynP.Set( DPraw + PSerr );
+			// dynP.Set( DPraw + PSerr );
+			dynP.Set( DPraw );	// remove PS correction until equation validated		
 		}
 		else {
 			dynamicP = PrevdynP;

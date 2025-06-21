@@ -289,8 +289,8 @@ SetupNG<int>  			serial2_tx_inverted( "SERIAL1_TX_INV", RS232_NORMAL ); // norma
 SetupNG<int>  			serial2_rx_inverted( "SERIAL1_RX_INV", RS232_NORMAL ); // normal for LS6 AllUblox GNSS TTL
 #endif
 #ifdef VENTUS3
-SetupNG<int>  			serial2_tx_inverted( "SERIAL1_TX_INV", RS232_INVERTED ); // normal for LS6 RS232 RTK
-SetupNG<int>  			serial2_rx_inverted( "SERIAL1_RX_INV", RS232_INVERTED ); // normal for LS6 RS232 RTK
+SetupNG<int>  			serial2_tx_inverted( "SERIAL1_TX_INV", RS232_NORMAL ); // normal to send data to OpenLog
+SetupNG<int>  			serial2_rx_inverted( "SERIAL1_RX_INV", RS232_INVERTED ); // inverted to receive for RS232 RTK
 #endif
 SetupNG<int>  			serial2_tx_enable( "SER2_TX_ENA", 1 );
 SetupNG<int>  			software_update( "SOFTWARE_UPDATE", 0 );
