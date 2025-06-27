@@ -438,8 +438,8 @@ SetupNG<float>			tilt("XCV_TILT", -0.223);
 SetupNG<float>			sway("XCV_SWAY", 0.024);
 SetupNG<float>			distCG("DIST_CG_XCVARIO", 1.42);
 SetupNG<float>          mpu_temperature("MPUTEMP", 45.0, true, SYNC_FROM_MASTER, PERSISTENT, chg_mpu_target );    // default for AHRS chip temperature (XCV 2023)
-SetupNG<float>			ALTbi_N("ALTbi N",9.0, true, SYNC_FROM_MASTER, PERSISTENT, change_ALTbiN );
-SetupNG<float>			TASbi_N("TASbi N Delta",1.0, true, SYNC_FROM_MASTER, PERSISTENT, change_TASbiN );
+SetupNG<float>			ALTbi_N("ALTbi N", 15.0, true, SYNC_FROM_MASTER, PERSISTENT, change_ALTbiN );
+SetupNG<float>			TASbi_N("TASbi N Delta", 0.0, true, SYNC_FROM_MASTER, PERSISTENT, change_TASbiN );
 #endif	
 
 #ifdef VENTUS3
@@ -449,8 +449,8 @@ SetupNG<float>			tilt("XCV_TILT", -0.063);
 SetupNG<float>			sway("XCV_SWAY", 0.024);
 SetupNG<float>			distCG("DIST_CG_XCVARIO", 1.4);
 SetupNG<float>          mpu_temperature("MPUTEMP", 50.0, true, SYNC_FROM_MASTER, PERSISTENT, chg_mpu_target );    // 
-SetupNG<float>			ALTbi_N("ALTbi N",9.0, true, SYNC_FROM_MASTER, PERSISTENT, change_ALTbiN );
-SetupNG<float>			TASbi_N("TASbi N Delta",5.0, true, SYNC_FROM_MASTER, PERSISTENT, change_TASbiN );
+SetupNG<float>			ALTbi_N("ALTbi N", 15.0, true, SYNC_FROM_MASTER, PERSISTENT, change_ALTbiN );
+SetupNG<float>			TASbi_N("TASbi N Delta", 0.0, true, SYNC_FROM_MASTER, PERSISTENT, change_TASbiN );
 #endif
 
 SetupNG<mpud::float_axes_t>	gyro_bias("GYRO_BIAS", load_float_axes_t( 0.0, 0.0, 0.0) );

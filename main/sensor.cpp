@@ -369,7 +369,6 @@ static float GRAVITY = 9.807;
 
 float DPraw = 0.0;
 float PSraw = 0.0;
-float PSerr = 0.0;
 
 static float dynamicP; // filtered dynamic pressure
 static float baroP=0; // barometric pressure
@@ -402,8 +401,8 @@ float fcVelbi_v_2;
 float fcVelbi_w_1;
 float fcVelbi_w_2;
 
-float ALTbiN = 9.0;
-float TASbiN = 5.0;
+float ALTbiN = 15.0;
+float TASbiN = 0.0;
 bool NALTbiTASbiChanged = true;
 
 static float Ubi = 0.0;
@@ -692,6 +691,9 @@ AlphaBeta ALTbiEnergy, TASbiEnergy;
 
 // declare alpha beta for CAS and ALT
 AlphaBeta CAS, ALT;
+
+// declare alpha beta for PSerr
+AlphaBeta PSerr;
 
 // declare alpha beta for Ub, Vb and Wb
 AlphaBeta Ub, Vb, Wb;
@@ -1815,7 +1817,7 @@ static void processIMU(void *pvParameters)
 			RTKheading in tenth of degre;
 			ALTbi in cm,
 			DHeading in mrad,
-			PSerr in tenth Pa
+			PSerr.ABfilt() in tenth Pa
 			PseudoHeadingPrim in hundredth of milli rad/s,			
 		*/		
 		if ( IMUstream ) {
@@ -1855,7 +1857,7 @@ static void processIMU(void *pvParameters)
 						(int32_t)(UbiPrim*100), (int32_t)(VbiPrim*100),(int32_t)(WbiPrim*100),
 						(int32_t)(RTKNproj*1000),(int32_t)(RTKEproj*1000),(int32_t)(-RTKUproj*1000),(int32_t)(RTKheading*10),(int32_t)(ALTbi*100),
 						(int32_t)(DHeading*1000),
-						(int32_t)(PSerr*10),
+						(int32_t)(PSerr.ABfilt()*10),
 						(int32_t)(PseudoHeadingPrim*100000),
 						// $S2 stream
 						(int32_t)(temperatureLP.LowPass1()*10.0), (int32_t)(MPUtempcel*10.0), (int32_t)(chosenGnss->fix), (int32_t)(chosenGnss->numSV),
@@ -1893,7 +1895,7 @@ static void processIMU(void *pvParameters)
 							(int32_t)(UbiPrim*100), (int32_t)(VbiPrim*100),(int32_t)(WbiPrim*100),
 							(int32_t)(RTKNproj*1000),(int32_t)(RTKEproj*1000),(int32_t)(-RTKUproj*1000),(int32_t)(RTKheading*10),(int32_t)(ALTbi*100),
 							(int32_t)(DHeading*1000),
-							(int32_t)(PSerr*10),
+							(int32_t)(PSerr.ABfilt()*10),
 							(int32_t)(PseudoHeadingPrim*100000)						
 						);
 						xSemaphoreTake( BTMutex, 2/portTICK_PERIOD_MS );				
@@ -1924,7 +1926,7 @@ static void processIMU(void *pvParameters)
 					(int32_t)(UbiPrim*100), (int32_t)(VbiPrim*100),(int32_t)(WbiPrim*100),
 					(int32_t)(RTKNproj*1000),(int32_t)(RTKEproj*1000),(int32_t)(-RTKUproj*1000),(int32_t)(RTKheading*10),(int32_t)(ALTbi*100),
 					(int32_t)(DHeading*1000),
-					(int32_t)(PSerr*10),
+					(int32_t)(PSerr.ABfilt()*10),
 					(int32_t)(PseudoHeadingPrim*100000),
 					// $S2 stream
 					(int32_t)(temperatureLP.LowPass1()*10.0), (int32_t)(MPUtempcel*10.0), (int32_t)(chosenGnss->fix), (int32_t)(chosenGnss->numSV),
@@ -1958,7 +1960,7 @@ static void processIMU(void *pvParameters)
 						(int32_t)(UbiPrim*100), (int32_t)(VbiPrim*100),(int32_t)(WbiPrim*100),
 						(int32_t)(RTKNproj*1000),(int32_t)(RTKEproj*1000),(int32_t)(-RTKUproj*1000),(int32_t)(RTKheading*10),(int32_t)(ALTbi*100),
 						(int32_t)(DHeading*1000),
-						(int32_t)(PSerr*10),
+						(int32_t)(PSerr.ABfilt()*10),
 						(int32_t)(PseudoHeadingPrim*100000)						
 					);
 					xSemaphoreTake( BTMutex, 2/portTICK_PERIOD_MS );				
@@ -2158,7 +2160,15 @@ void readSensors(void *pvParameters){
 	#define UVWOutliers 30.0 // 30 m/s maximum variation sample to sample
 	Ub.ABinit( NUVWB, UVWdt, SpeedOutliers );	
 	Vb.ABinit( NUVWB, UVWdt, SpeedOutliers );	
-	Wb.ABinit( NUVWB, UVWdt, SpeedOutliers );	
+	Wb.ABinit( NUVWB, UVWdt, SpeedOutliers );
+
+	// alpha beta parameters for PSerr
+	#define NPSERR 6 // PSerr alpha/beta filter coeff
+	#define PSERRdt 0.1 // average PSerr dt	
+	#define PSERROutliers 100.0 // 100 Pa maximum variation sample to sample
+	#define PSERRmin -500.0 // -500 Pa min
+	#define PSERRmax 500.0 // +500 Pa max
+	PSerr.ABinit( NPSERR, PSERRdt, PSERROutliers, PSERRmin, PSERRmax );	
 
 	// LP filter initialization
 	BiasAoB.LPinit( 200.0, 0.1 ); // bias AoB LP filter initialization with 200 seconds filter period and 0.1 second sample period
@@ -2194,9 +2204,8 @@ void readSensors(void *pvParameters){
 			statTime = esp_timer_get_time()/1000; // record static time in milli second
 			dtStat = (statTime - prevstatTime) / 1000.0; // period between last two valid static pressure samples in second	
 			if (dtStat == 0) dtStat = PERIOD10HZ;
-			PSerr = dynP.Get() * ( KP0 + KPa2 * ( AoA.Get() - Aoa2 ) * ( AoA.Get() - Aoa2 ) ); // PSerr en Pa
-			 statP.Set( PSraw + PSerr / 100.0 ); // PS error converted to hPa
-			//statP.Set( PSraw ); // remove PS correction until equation validated
+			PSerr.ABupdate( dtStat, dynP.Get() * ( KP0 + KPa2 * ( AoA.Get() - Aoa2 ) * ( AoA.Get() - Aoa2 ) ) ); // PSerr en Pa
+			statP.Set( PSraw + PSerr.ABfilt() / 100.0 ); // add PS error converted to hPa
 			baroP = PSraw;	// for compatibility with Eckhard code
 		} else {
 			statP.Set( Prevp );
@@ -2223,8 +2232,7 @@ void readSensors(void *pvParameters){
 			dynPTime = esp_timer_get_time()/1000.0; // record dynPTimeTE time in milli second		
 			dtdynP = (dynPTime - prevdynPTime) / 1000.0; // period between last two valid dynamic pressure samples in second
 			if (dtdynP == 0) dtdynP = PERIOD10HZ;
-			dynP.Set( DPraw - PSerr );
-			//dynP.Set( DPraw );	// remove PS correction until equation validated		
+			dynP.Set( DPraw - PSerr.ABfilt() );
 		}
 		else {
 			dynamicP = PrevdynP;
