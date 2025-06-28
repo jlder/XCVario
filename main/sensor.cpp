@@ -1836,7 +1836,7 @@ static void processIMU(void *pvParameters)
 				if ( SEN50DataReady ) {
 					SEN50DataReady = false;
 					// send $I, $S1 and $S2 every 50 cycles = 5 seconds
-					sprintf(str,"$I,%lld,%i,%i,%i,%i,%i,%i\r\n$S1,%lld,%i,%i,%i,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$S3,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$S2,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",				
+					sprintf(str,"$I,%lld,%i,%i,%i,%i,%i,%i\r\n$S1,%lld,%i,%i,%i,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$S3,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$S2,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",				
 						// $I stream
 						(int64_t)(gyroTime),
 						(int32_t)(accelISUNEDBODY.x*10000.0), (int32_t)(accelISUNEDBODY.y*10000.0), (int32_t)(accelISUNEDBODY.z*10000.0),
@@ -1859,6 +1859,7 @@ static void processIMU(void *pvParameters)
 						(int32_t)(DHeading*1000),
 						(int32_t)(PSerr.ABfilt()*10),
 						(int32_t)(PseudoHeadingPrim*100000),
+						(int32_t) Event,
 						// $S2 stream
 						(int32_t)(temperatureLP.LowPass1()*10.0), (int32_t)(MPUtempcel*10.0), (int32_t)(chosenGnss->fix), (int32_t)(chosenGnss->numSV),
 						(int32_t)(NewGroundGyroBias.x*100000.0), (int32_t)(NewGroundGyroBias.y*100000.0), (int32_t)(NewGroundGyroBias.z*100000.0),				
@@ -1874,7 +1875,7 @@ static void processIMU(void *pvParameters)
 				} else {
 					if ( SENDataReady ) {
 						SENDataReady = false;
-						sprintf(str,"$I,%lld,%i,%i,%i,%i,%i,%i\r\n$S1,%lld,%i,%i,%i,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$S3,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",
+						sprintf(str,"$I,%lld,%i,%i,%i,%i,%i,%i\r\n$S1,%lld,%i,%i,%i,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$S3,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",
 							// $I stream
 							(int64_t)(gyroTime),
 							(int32_t)(accelISUNEDBODY.x*10000.0), (int32_t)(accelISUNEDBODY.y*10000.0), (int32_t)(accelISUNEDBODY.z*10000.0),
@@ -1896,7 +1897,8 @@ static void processIMU(void *pvParameters)
 							(int32_t)(RTKNproj*1000),(int32_t)(RTKEproj*1000),(int32_t)(-RTKUproj*1000),(int32_t)(RTKheading*10),(int32_t)(ALTbi*100),
 							(int32_t)(DHeading*1000),
 							(int32_t)(PSerr.ABfilt()*10),
-							(int32_t)(PseudoHeadingPrim*100000)						
+							(int32_t)(PseudoHeadingPrim*100000),
+							(int32_t) Event
 						);
 						xSemaphoreTake( BTMutex, 2/portTICK_PERIOD_MS );				
 						Router::sendXCV(str);
@@ -1909,7 +1911,7 @@ static void processIMU(void *pvParameters)
 			if ( SEN50DataReady ) {
 				SEN50DataReady = false;
 				// send $S1 and $S2 every 50 cycles = 5 seconds
-				sprintf(str,"$S1,%lld,%i,%i,%i,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$S3,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$S2,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",				
+				sprintf(str,"$S1,%lld,%i,%i,%i,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$S3,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$S2,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",				
 					// $S1 stream
 					(int64_t)(statTime), (int32_t)(PSraw*100.0),(int32_t)(teP.Get()*100.0), (int32_t)(DPraw*10), 
 					(int64_t)(chosenGnss->time*1000.0), (int32_t)(chosenGnss->speed.x*100), (int32_t)(chosenGnss->speed.y*100), (int32_t)(chosenGnss->speed.z*100),
@@ -1928,6 +1930,7 @@ static void processIMU(void *pvParameters)
 					(int32_t)(DHeading*1000),
 					(int32_t)(PSerr.ABfilt()*10),
 					(int32_t)(PseudoHeadingPrim*100000),
+					(int32_t) Event,
 					// $S2 stream
 					(int32_t)(temperatureLP.LowPass1()*10.0), (int32_t)(MPUtempcel*10.0), (int32_t)(chosenGnss->fix), (int32_t)(chosenGnss->numSV),
 					(int32_t)(NewGroundGyroBias.x*100000.0), (int32_t)(NewGroundGyroBias.y*100000.0), (int32_t)(NewGroundGyroBias.z*100000.0),				
@@ -1943,7 +1946,7 @@ static void processIMU(void *pvParameters)
 			} else {
 				if ( SENDataReady ) {
 					SENDataReady = false;
-					sprintf(str,"$S1,%lld,%i,%i,%i,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$S3,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",
+					sprintf(str,"$S1,%lld,%i,%i,%i,%lld,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n$S3,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i\r\n",
 						// $S1 stream
 						(int64_t)(statTime), (int32_t)(PSraw*100.0),(int32_t)(teP.Get()*100.0), (int16_t)(DPraw*10), 
 						(int64_t)(chosenGnss->time*1000.0), (int16_t)(chosenGnss->speed.x*100), (int16_t)(chosenGnss->speed.y*100), (int16_t)(chosenGnss->speed.z*100),
@@ -1961,7 +1964,8 @@ static void processIMU(void *pvParameters)
 						(int32_t)(RTKNproj*1000),(int32_t)(RTKEproj*1000),(int32_t)(-RTKUproj*1000),(int32_t)(RTKheading*10),(int32_t)(ALTbi*100),
 						(int32_t)(DHeading*1000),
 						(int32_t)(PSerr.ABfilt()*10),
-						(int32_t)(PseudoHeadingPrim*100000)						
+						(int32_t)(PseudoHeadingPrim*100000),
+						(int32_t) Event
 					);
 					xSemaphoreTake( BTMutex, 2/portTICK_PERIOD_MS );				
 					Router::sendXCV(str);

@@ -8,7 +8,7 @@
 //!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 //
 #define FTVERSION 16
-#define SOFTVERSION 04
+#define SOFTVERSION 05
 //
 #define COMPUTEBIAS   // code to estimate gyro bias
 //
