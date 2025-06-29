@@ -8,7 +8,7 @@
 //!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 //
 #define FTVERSION 16
-#define SOFTVERSION 05
+#define SOFTVERSION 06
 //
 #define COMPUTEBIAS   // code to estimate gyro bias
 //
@@ -25,8 +25,8 @@
 //
 //!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 //
-//#define LS6
-#define VENTUS3
+#define LS6
+//#define VENTUS3
 
 
 #ifdef LS6

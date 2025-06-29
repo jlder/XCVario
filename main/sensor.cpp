@@ -401,8 +401,8 @@ float fcVelbi_v_2;
 float fcVelbi_w_1;
 float fcVelbi_w_2;
 
-float ALTbiN = 15.0;
-float TASbiN = 0.0;
+float ALTbiN = 10.0;
+float TASbiN = 5.0;
 bool NALTbiTASbiChanged = true;
 
 static float Ubi = 0.0;
@@ -2169,7 +2169,7 @@ void readSensors(void *pvParameters){
 	// alpha beta parameters for PSerr
 	#define NPSERR 6 // PSerr alpha/beta filter coeff
 	#define PSERRdt 0.1 // average PSerr dt	
-	#define PSERROutliers 100.0 // 100 Pa maximum variation sample to sample
+	#define PSERROutliers 1000.0 // 100 Pa maximum variation sample to sample
 	#define PSERRmin -500.0 // -500 Pa min
 	#define PSERRmax 500.0 // +500 Pa max
 	PSerr.ABinit( NPSERR, PSERRdt, PSERROutliers, PSERRmin, PSERRmax );	
@@ -2428,8 +2428,8 @@ void readSensors(void *pvParameters){
 		}
 		ALTbiEnergy.ABupdate( dtStat, ALTbi );
 		TASbiEnergy.ABupdate( dtStat, ( TASbiSquare / GRAVITY / 2.0 ) );			
-		// Total Energy is sum of both potential and kinetic energies variations
-		Vztotbi.Set( ALTbiEnergy.ABprim() + TASbiEnergy.ABprim() );
+		// Total Energy is sum of both potential and kinetic energies variations with small Low Pass TODO chnage to real Low Pass.
+		Vztotbi.Set( 0.8 * Vztotbi.Get() + 0.2 * ALTbiEnergy.ABprim() + TASbiEnergy.ABprim() );
 
 		// long term average filter
 		AverageTotalEnergy.LPupdate( Vztotbi.Get() );		
@@ -2725,12 +2725,14 @@ void readSensors(void *pvParameters){
 		if ( (ESPRotary::readLongPressed()) && (EventHoldTime == 0) ) {
 			Event++;
 			EventHoldTime = 5;
-			Audio::alarm( true, 60, AUDIO_ALARM_STALL );
+			display->drawWarning( "! EVENT !", true );
+			//Audio::alarm( true, 60, AUDIO_ALARM_STALL );
 		} else {
 			if ( EventHoldTime > 0 ) {
 				EventHoldTime--;
 			} else {
-				Audio::alarm( false, 60, AUDIO_ALARM_STALL );
+				display->clear();
+				//Audio::alarm( false, 60, AUDIO_ALARM_STALL );
 				EventHoldTime = 0;
 			}
 		}	
