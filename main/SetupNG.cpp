@@ -42,7 +42,8 @@ void change_mc() {
 }
 
 void change_tefilter() {
-		NEnergy = te_filt.get(); // Total Energy alpha/beta filter N
+		LPEnergy = te_filt.get(); // Total Energy low pass period
+		LPEnergyChanged = true;
 }
 
 void change_teopt(){
@@ -438,7 +439,7 @@ SetupNG<float>			tilt("XCV_TILT", -0.223);
 SetupNG<float>			sway("XCV_SWAY", 0.024);
 SetupNG<float>			distCG("DIST_CG_XCVARIO", 1.42);
 SetupNG<float>          mpu_temperature("MPUTEMP", 45.0, true, SYNC_FROM_MASTER, PERSISTENT, chg_mpu_target );    // default for AHRS chip temperature (XCV 2023)
-SetupNG<float>			ALTbi_N("ALTbi N", 10.0, true, SYNC_FROM_MASTER, PERSISTENT, change_ALTbiN );
+SetupNG<float>			ALTbi_N("ALTbi N", 9.0, true, SYNC_FROM_MASTER, PERSISTENT, change_ALTbiN );
 SetupNG<float>			TASbi_N("TASbi N Delta", 0.0, true, SYNC_FROM_MASTER, PERSISTENT, change_TASbiN );
 #endif	
 
@@ -449,7 +450,7 @@ SetupNG<float>			tilt("XCV_TILT", -0.063);
 SetupNG<float>			sway("XCV_SWAY", 0.024);
 SetupNG<float>			distCG("DIST_CG_XCVARIO", 1.4);
 SetupNG<float>          mpu_temperature("MPUTEMP", 50.0, true, SYNC_FROM_MASTER, PERSISTENT, chg_mpu_target );    // 
-SetupNG<float>			ALTbi_N("ALTbi N", 10.0, true, SYNC_FROM_MASTER, PERSISTENT, change_ALTbiN );
+SetupNG<float>			ALTbi_N("ALTbi N", 9.0, true, SYNC_FROM_MASTER, PERSISTENT, change_ALTbiN );
 SetupNG<float>			TASbi_N("TASbi N Delta", 5.0, true, SYNC_FROM_MASTER, PERSISTENT, change_TASbiN );
 #endif
 

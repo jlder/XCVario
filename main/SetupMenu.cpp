@@ -2020,7 +2020,8 @@ int teopt_adj( SetupMenuValFloat * p ){
 }
 
 int tefilt_adj( SetupMenuValFloat * p ){
-		NEnergy = te_filt.get(); // Total Energy alpha/beta filter N
+		LPEnergy = te_filt.get(); // Total Energy low pass period
+		LPEnergyChanged = true;
 	return 0;
 }
 
@@ -2085,7 +2086,7 @@ void SetupMenu::flighttest_menu_create( MenuEntry *top ){
 	NALTbi->setPrecision(3);
 	top->addEntry( NALTbi );	
 	
-	SetupMenuValFloat * NTASbi = new SetupMenuValFloat( "TASbi N Delta", "unit",	-10.0, 10.0, 0.5, TASbi_N_adj, true, &TASbi_N );
+	SetupMenuValFloat * NTASbi = new SetupMenuValFloat( "TASbi N Delta", "unit", 0.0, 10.0, 1.0, TASbi_N_adj, true, &TASbi_N );
 	NTASbi->setHelp(PROGMEM"TASbi filter N Delta");
 	NTASbi->setPrecision(3);
 	top->addEntry( NTASbi );	

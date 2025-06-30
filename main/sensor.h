@@ -8,7 +8,7 @@
 //!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 //
 #define FTVERSION 16
-#define SOFTVERSION 07
+#define SOFTVERSION 08
 //
 #define COMPUTEBIAS   // code to estimate gyro bias
 //
@@ -25,8 +25,8 @@
 //
 //!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 //
-//#define LS6
-#define VENTUS3
+#define LS6
+//#define VENTUS3
 
 
 #ifdef LS6
@@ -161,7 +161,7 @@ extern bool TSTstream;
 extern bool LABtest;
 extern bool AHRSstream;
 extern float localGravity;
-extern float NEnergy;
+extern float LPEnergy;
 extern float alphaEnergy;
 extern float betaEnergy;
 extern float PeriodVelbi;
@@ -171,6 +171,7 @@ extern float MagdwickBeta;
 extern float ALTbiN;
 extern float TASbiN;
 extern bool NALTbiTASbiChanged;
+extern bool LPEnergyChanged;
 extern float opt_TE;
 
 extern double RTKtime;

@@ -389,7 +389,8 @@ static float Vzbaro = 0.0;
 // static float TEPrim = 0.0;
 //static float TEFilt = 0.0;
 
-float NEnergy = 20.0;
+float LPEnergy = 1.0;
+bool LPEnergyChanged = true;
 float alphaEnergy;
 float betaEnergy;
 float PeriodVelbi = 8.0;
@@ -401,9 +402,10 @@ float fcVelbi_v_2;
 float fcVelbi_w_1;
 float fcVelbi_w_2;
 
-float ALTbiN = 10.0;
+float ALTbiN = 9.0;
 float TASbiN = 5.0;
 bool NALTbiTASbiChanged = true;
+
 
 static float Ubi = 0.0;
 static float Vbi = 0.0;
@@ -717,9 +719,12 @@ LowPassFilter temperatureLP;
 // declare low pass for AoB bias
 LowPassFilter BiasAoB;
 
+// declare low pass for total energy Vztotbi
+LowPassFilter Vztotbi;
+
 
 // declare SetGet class to reduce read write conflicts between tasks
-SetGet statP, teP, dynP, TAS, Vztotbi, TASbi, AoA, AoB, gyroCorrx;
+SetGet statP, teP, dynP, TAS, TASbi, AoA, AoB, gyroCorrx;
 
 #define GYRO_FS (mpud::GYRO_FS_250DPS)
 
@@ -897,10 +902,10 @@ void drawDisplay(void *pvParameters){
 				// ESP_LOGI(FNAME,"TE=%2.3f", te_vario.get() );
 // modif gfm affichage d'une tension batterie nulle tant que les biais gyros n'ont pas été initialisés
 				if (  (BIAS_Init > 0)  || (TAS.Get() > 15.0) ){
-					display->drawDisplay( airspeed, Vztotbi.Get() /*te_vario.get()*/, AverageTotalEnergy.LowPass1()/*aTE*/, polar_sink, altitude.get(), t, battery, s2f_delta, as2f, average_climb.get(), Switch::getCruiseState(), gflags.standard_setting, flap_pos.get() );
+					display->drawDisplay( airspeed, Vztotbi.LowPass1() /*te_vario.get()*/, AverageTotalEnergy.LowPass1()/*aTE*/, polar_sink, altitude.get(), t, battery, s2f_delta, as2f, average_climb.get(), Switch::getCruiseState(), gflags.standard_setting, flap_pos.get() );
 				}	
 				else {
-					display->drawDisplay( airspeed,  Vztotbi.Get() /*te_vario.get()*/, AverageTotalEnergy.LowPass1() /*aTE*/, polar_sink, altitude.get(), t, 0.0, s2f_delta, as2f, average_climb.get(), Switch::getCruiseState(), gflags.standard_setting, flap_pos.get() );
+					display->drawDisplay( airspeed,  Vztotbi.LowPass1() /*te_vario.get()*/, AverageTotalEnergy.LowPass1() /*aTE*/, polar_sink, altitude.get(), t, 0.0, s2f_delta, as2f, average_climb.get(), Switch::getCruiseState(), gflags.standard_setting, flap_pos.get() );
 				}
 // fin modif gfm
 				}
@@ -923,18 +928,18 @@ void drawDisplay(void *pvParameters){
 // depending on mode calculate value for Audio and set values accordingly
 void doAudio(){
 	polar_sink = Speed2Fly.sink( ias.get() );
-	float netto = Vztotbi.Get() /*te_vario.get()*/ - polar_sink; // TODO clean new energt calcul / audio
+	float netto = Vztotbi.LowPass1() /*te_vario.get()*/ - polar_sink; // TODO clean new energt calcul / audio
 	as2f = Speed2Fly.speed( netto, !Switch::getCruiseState() );
 	s2f_delta = s2f_delta + ((as2f - ias.get()) - s2f_delta)* (1/(s2f_delay.get()*10)); // low pass damping moved to the correct place
 	// ESP_LOGI( FNAME, "te: %f, polar_sink: %f, netto %f, s2f: %f  delta: %f", aTES2F, polar_sink, netto, as2f, s2f_delta );
 	if( vario_mode.get() == VARIO_NETTO || (Switch::getCruiseState() &&  (vario_mode.get() == CRUISE_NETTO)) ){
 		if( netto_mode.get() == NETTO_RELATIVE )
-			Audio::setValues( Vztotbi.Get() /*te_vario.get()*/ - polar_sink + Speed2Fly.circlingSink( ias.get() ), s2f_delta );// TODO clean new energt calcul / audio
+			Audio::setValues( Vztotbi.LowPass1() /*te_vario.get()*/ - polar_sink + Speed2Fly.circlingSink( ias.get() ), s2f_delta );// TODO clean new energt calcul / audio
 		else if( netto_mode.get() == NETTO_NORMAL )
-			Audio::setValues( Vztotbi.Get() /*te_vario.get()*/ - polar_sink, s2f_delta );// TODO clean new energt calcul / audio
+			Audio::setValues( Vztotbi.LowPass1() /*te_vario.get()*/ - polar_sink, s2f_delta );// TODO clean new energt calcul / audio
 	}
 	else {
-		Audio::setValues( Vztotbi.Get() /*te_vario.get()*/, s2f_delta ); // TODO add 1.5 factor to vario audio to make sound more "nervous"
+		Audio::setValues( Vztotbi.LowPass1() /*te_vario.get()*/, s2f_delta ); // TODO add 1.5 factor to vario audio to make sound more "nervous"
 	}
 }
 
@@ -1849,7 +1854,7 @@ static void processIMU(void *pvParameters)
 						(int32_t)(Vzbaro*100),
 						(int32_t)(AoA.Get()*1000), (int32_t)(AoB.Get()*1000),
 						(int32_t)(Ubi*100), (int32_t)(Vbi*100),(int32_t)(Wbi*100), (int32_t)(Vzbi*100),				
-						(int32_t)(Vztotbi.Get()*100),
+						(int32_t)(Vztotbi.LowPass1()*100),
 						(int32_t)(CurrentBeta*10000), 
 						(int32_t)(NAccel * 10),
 						(int32_t)(DynPeriodVelbi*1000),
@@ -1888,7 +1893,7 @@ static void processIMU(void *pvParameters)
 							(int32_t)(Vzbaro*100),
 							(int32_t)(AoA.Get()*1000), (int32_t)(AoB.Get()*1000),
 							(int32_t)(Ubi*100), (int32_t)(Vbi*100),(int32_t)(Wbi*100), (int32_t)(Vzbi*100),				
-							(int32_t)(Vztotbi.Get()*100),
+							(int32_t)(Vztotbi.LowPass1()*100),
 							(int32_t)(CurrentBeta*10000), 
 							(int32_t)NAccel * 10,
 							(int32_t)(DynPeriodVelbi*1000),
@@ -1920,7 +1925,7 @@ static void processIMU(void *pvParameters)
 					(int32_t)(Vzbaro*100),
 					(int32_t)(AoA.Get()*1000), (int32_t)(AoB.Get()*1000),
 					(int32_t)(Ubi*100), (int32_t)(Vbi*100),(int32_t)(Wbi*100), (int32_t)(Vzbi*100),				
-					(int32_t)(Vztotbi.Get()*100),
+					(int32_t)(Vztotbi.LowPass1()*100),
 					(int32_t)(CurrentBeta*10000), 
 					(int32_t)(NAccel * 10),
 					(int32_t)(DynPeriodVelbi*1000),
@@ -1955,7 +1960,7 @@ static void processIMU(void *pvParameters)
 						(int32_t)(Vzbaro*100),
 						(int32_t)(AoA.Get()*1000), (int32_t)(AoB.Get()*1000),
 						(int32_t)(Ubi*100), (int32_t)(Vbi*100),(int32_t)(Wbi*100), (int32_t)(Vzbi*100),				
-						(int32_t)(Vztotbi.Get()*100),
+						(int32_t)(Vztotbi.LowPass1()*100),
 						(int32_t)(CurrentBeta*10000), 
 						(int32_t)NAccel * 10,
 						(int32_t)(DynPeriodVelbi*1000),
@@ -2181,9 +2186,6 @@ void readSensors(void *pvParameters){
 
 	#define DSR 15 // maximum number of samples spacing to compute wind.
 	int16_t tickDSR = 1;
-	
-	// compute once the filter parameters in functions of values in FLASH
-	NEnergy = te_filt.get(); // Total Energy alpha/beta N
 	
 	opt_TE = te_opt.get(); // get last d(TE)/dt calculation option
 	
@@ -2430,10 +2432,15 @@ void readSensors(void *pvParameters){
 		ALTbiEnergy.ABupdate( dtStat, ALTbi );
 		TASbiEnergy.ABupdate( dtStat, ( TASbiSquare / GRAVITY / 2.0 ) );			
 		// Total Energy is sum of both potential and kinetic energies variations with small Low Pass TODO chnage to real Low Pass.
-		Vztotbi.Set( 0.8 * Vztotbi.Get() + 0.2 * ALTbiEnergy.ABprim() + TASbiEnergy.ABprim() );
+		if (LPEnergyChanged ) {
+			LPEnergy = te_filt.get(); // Total Energy low pas period
+			Vztotbi.LPinit( LPEnergy, 0.1 ); // LPEnergy period and 0.1 s sample rate
+			LPEnergyChanged = false;
+		}
+		Vztotbi.LPupdate( ALTbiEnergy.ABprim() + TASbiEnergy.ABprim() );
 
 		// long term average filter
-		AverageTotalEnergy.LPupdate( Vztotbi.Get() );		
+		AverageTotalEnergy.LPupdate( Vztotbi.LowPass1() );		
 
 		#ifdef COMPUTEWIND1
 		// TODO test and optimze wind calculation
