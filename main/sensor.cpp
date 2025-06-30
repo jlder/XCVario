@@ -415,6 +415,7 @@ static float ALTbi = 0.0;
 
 // TODO event counter
 int16_t Event = 0;
+bool Eventstat = false;
 int16_t EventHoldTime = 0;
 
 static float battery=0.0;
@@ -2726,12 +2727,16 @@ void readSensors(void *pvParameters){
 			Event++;
 			EventHoldTime = 5;
 			display->drawWarning( "! EVENT !", true );
+			Eventstat = true;
 			//Audio::alarm( true, 60, AUDIO_ALARM_STALL );
 		} else {
 			if ( EventHoldTime > 0 ) {
 				EventHoldTime--;
 			} else {
-				display->clear();
+				if ( Eventstat ) {
+					display->clear();
+					Eventstat = false;
+				}
 				//Audio::alarm( false, 60, AUDIO_ALARM_STALL );
 				EventHoldTime = 0;
 			}
