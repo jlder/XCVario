@@ -417,7 +417,7 @@ static float ALTbi = 0.0;
 
 // TODO event counter
 int16_t Event = 0;
-bool Eventstat = false;
+bool EventFlag = false;
 int16_t EventHoldTime = 0;
 
 static float battery=0.0;
@@ -897,8 +897,26 @@ void drawDisplay(void *pvParameters){
 					}
 				}
 			}
+			
+		// TODO event counter
+		if ( ESPRotary::readLongPressed()) {
+			if ( !EventFlag ) {
+				Event++;
+				EventHoldTime = 5;
+				EventFlag = true;
+				display->drawWarning( "! EVENT !", true );
+			}
+		} else {
+			if ( EventFlag && (EventHoldTime == 0) ) {
+				display->clear();
+				EventFlag = false;
+			}
+		}
+		if ( EventHoldTime > 0 ) EventHoldTime--;
+
+			
 			// Vario Screen
-			if( !(gflags.stall_warning_active || gflags.gear_warning_active || gflags.flarmWarning || gflags.gLoadDisplay )  ) {
+			if( !(gflags.stall_warning_active || gflags.gear_warning_active || gflags.flarmWarning || gflags.gLoadDisplay || EventFlag )  ) {
 				// ESP_LOGI(FNAME,"TE=%2.3f", te_vario.get() );
 // modif gfm affichage d'une tension batterie nulle tant que les biais gyros n'ont pas été initialisés
 				if (  (BIAS_Init > 0)  || (TAS.Get() > 15.0) ){
@@ -2728,27 +2746,7 @@ void readSensors(void *pvParameters){
 			// ESP_LOGI(FNAME,"MPU temp control; T=%.2f", MPU.getTemperature() );
 			MPU.temp_control( count,XCVTemp);
 		}
-		
-		// TODO event counter
-		if ( (ESPRotary::readLongPressed()) && (EventHoldTime == 0) ) {
-			Event++;
-			EventHoldTime = 5;
-			display->drawWarning( "! EVENT !", true );
-			Eventstat = true;
-			//Audio::alarm( true, 60, AUDIO_ALARM_STALL );
-		} else {
-			if ( EventHoldTime > 0 ) {
-				EventHoldTime--;
-			} else {
-				if ( Eventstat ) {
-					display->clear();
-					Eventstat = false;
-				}
-				//Audio::alarm( false, 60, AUDIO_ALARM_STALL );
-				EventHoldTime = 0;
-			}
-		}	
-
+				
 		if ( SENstream ) {
 			// see definition of $S1, $S2, $S3 in IMU section
 			if ( !(count % 50) ) { 
@@ -3278,13 +3276,14 @@ void system_startup(void *args){
 		#define TempOutliers 20 // 20° maximum variation sample to sample 
 		OATemp.ABinit( NOAT, OATdt, TempOutliers );
 		temperature = ds18b20.getTemp();
-		OATemp.ABupdate( 0.1, temperature );
+		//OATemp.ABupdate( 0.1, temperature );
 		if( temperature == DEVICE_DISCONNECTED_C ) {
 			ESP_LOGE(FNAME,"Error: Self test Temperatur Sensor failed; returned T=%2.2f", temperature );
 			display->writeText( line++, "Temp Sensor: NOT FOUND");
 			gflags.validTemperature = false;
 			logged_tests += "External Temperature Sensor: NOT FOUND\n";
 		} else {
+			OATemp.ABupdate( 0.1, temperature );
 			// read OAT sensor multiple times until temperature is within range and stable
 			for ( int nbsample = 0; nbsample < 20 && !OATemp.Stable(); nbsample++ ) {
 				temperature = ds18b20.getTemp();
@@ -3678,14 +3677,14 @@ void system_startup(void *args){
 		centeraid = new CenterAid( MYUCG );
 	}
 	
-	xTaskCreatePinnedToCore(&processIMU, "processIMU", 4096, NULL, 15, &mpid, 0);
+	xTaskCreatePinnedToCore(&processIMU, "processIMU", 5120, NULL, 15, &mpid, 0);
 	
 	if( SetupCommon::isClient() ){
 		xTaskCreatePinnedToCore(&clientLoop, "clientLoop", 4096, NULL, 11, &bpid, 0);
 		xTaskCreatePinnedToCore(&audioTask, "audioTask", 4096, NULL, 11, &apid, 0);
 	}
 	else {
-		xTaskCreatePinnedToCore(&readSensors, "readSensors", 5120, NULL, 14, &bpid, 0);
+		xTaskCreatePinnedToCore(&readSensors, "readSensors", 6144, NULL, 14, &bpid, 0);
 
 	}
 	xTaskCreatePinnedToCore(&readTemp, "readTemp", 3000, NULL, 5, &tpid, 0);       // increase stack by 500 byte

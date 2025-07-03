@@ -212,7 +212,13 @@ SetupNG<int>  			chopping_mode( "CHOPPING_MODE",  VARIO_CHOP );
 SetupNG<int>  			chopping_style( "CHOP_STYLE",  AUDIO_CHOP_SOFT );
 SetupNG<int>  			amplifier_shutdown( "AMP_DIS", 0 );
 
+#ifdef LS6
 SetupNG<int>  			wireless_type( "BT_ENABLE" ,  WL_BLUETOOTH );
+#endif
+#ifdef VENTUS3
+SetupNG<int>  			wireless_type( "BT_ENABLE" ,  WL_DISABLE );
+#endif
+
 SetupNG<float>  		wifi_max_power( "WIFI_MP" ,  50);
 SetupNG<int>  			factory_reset( "FACTORY_RES" , 0 );
 SetupNG<int>  			audio_range( "AUDIO_RANGE" , AUDIO_RANGE_5_MS );
@@ -279,15 +285,23 @@ SetupNG<int>  			rt_s1_can( "S2_TX_CAN", 0, false, SYNC_NONE, VOLATILE );
 SetupNG<int>  			serial1_tx_inverted( "SERIAL2_TX_INV", RS232_INVERTED );
 SetupNG<int>  			serial1_rx_inverted( "SERIAL2_RX_INV", RS232_INVERTED );
 SetupNG<int>  			serial1_tx_enable( "SER1_TX_ENA", 1 );
+
+
 SetupNG<int>  			serial2_speed( "SERIAL1_SPEED", 6 ); // 115200 bps for Skytraq RTK PX1122R or Allystar TAU1201
 SetupNG<int>  			serial2_pins_twisted( "SERIAL1_PINS", 0 );
 SetupNG<int>  			serial2_tx( "SERIAL1_TX", 0 );     //  BT device and XCVario, Serial2 is foreseen for Protocols or Kobo
+#ifdef VENTUS3
+SetupNG<int>  			rt_s2_xcv( "S1_TX_XCV", 1, true, SYNC_NONE, VOLATILE );
+#endif
+#ifdef LS6
 SetupNG<int>  			rt_s2_xcv( "S1_TX_XCV", 1, false, SYNC_NONE, VOLATILE );
+#endif
+
 SetupNG<int>  			rt_s2_wl( "S1_TX_WL", 0, false, SYNC_NONE, VOLATILE );
 SetupNG<int>  			rt_s2_can( "S1_TX_CAN", 0,false, SYNC_NONE, VOLATILE );
 #ifdef LS6
-SetupNG<int>  			serial2_tx_inverted( "SERIAL1_TX_INV", RS232_NORMAL ); // normal for LS6 Allystar & Ublox GNSS TTL
-SetupNG<int>  			serial2_rx_inverted( "SERIAL1_RX_INV", RS232_NORMAL ); // normal for LS6 AllUblox GNSS TTL
+SetupNG<int>  			serial2_tx_inverted( "SERIAL1_TX_INV", RS232_NORMAL ); // normal to send data to OpenLog
+SetupNG<int>  			serial2_rx_inverted( "SERIAL1_RX_INV", RS232_NORMAL ); // normal for LS6 Allysatr or Ublox TTL GNSS
 #endif
 #ifdef VENTUS3
 SetupNG<int>  			serial2_tx_inverted( "SERIAL1_TX_INV", RS232_NORMAL ); // normal to send data to OpenLog
