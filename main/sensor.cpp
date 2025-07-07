@@ -1438,9 +1438,9 @@ static void processIMU(void *pvParameters)
 				if ( TAS.Get() > 15.0 ) {	// Update IMU, only consider centrifugal forces if TAS > 15 m/s
 					// estimate gravity in body frame taking into account centrifugal corrections
 					//xSemaphoreTake( dataMutex, 3/portTICK_PERIOD_MS ); // prevent data conflicts for 3ms max.
-					gravISUNEDBODY.x = accelNEDBODYx.ABfilt()- gyroCorr.y * TASbi.Get() * AoA.Get() + gyroCorr.z * TASbi.Get() * AoB.Get() - UbiPrim;
-					gravISUNEDBODY.y = accelNEDBODYy.ABfilt()- gyroCorr.z * TASbi.Get() + gyroCorr.x * TASbi.Get() * AoA.Get() - VbiPrim;
-					gravISUNEDBODY.z = accelNEDBODYz.ABfilt()+ gyroCorr.y * TASbi.Get() - gyroCorr.x * TASbi.Get() * AoB.Get() - WbiPrim;
+					gravISUNEDBODY.x = accelNEDBODYx.ABfilt()- gyroCorr.y * TAS.Get() * AoA.Get() + gyroCorr.z * TAS.Get() * AoB.Get() - Rhocorr * CAS.ABprim();
+					gravISUNEDBODY.y = accelNEDBODYy.ABfilt()- gyroCorr.z * TAS.Get() + gyroCorr.x * TAS.Get() * AoA.Get();
+					gravISUNEDBODY.z = accelNEDBODYz.ABfilt()+ gyroCorr.y * TAS.Get() - gyroCorr.x * TAS.Get() * AoB.Get();
 					//xSemaphoreGive( dataMutex );
 				} else {
 					// estimate gravity in body frame using accels only
@@ -1842,7 +1842,8 @@ static void processIMU(void *pvParameters)
 			ALTbi in cm,
 			DHeading in mrad,
 			PSerr.ABfilt() in tenth Pa
-			PseudoHeadingPrim in hundredth of milli rad/s,			
+			PseudoHeadingPrim in hundredth of milli rad/s,
+			Event			
 		*/		
 		if ( IMUstream ) {
 			if ( !SENDataReady && !SEN50DataReady ) {			
@@ -3264,49 +3265,56 @@ void system_startup(void *args){
 		selftestPassed = false;
 		asSensor = 0;
 	}
+	
 	ESP_LOGI(FNAME,"Now start T sensor test");
 	// Temp Sensor test
-
 	if( !SetupCommon::isClient()  ) {
 		ESP_LOGI(FNAME,"Now start T sensor test");
-		ds18b20.begin();
-		// OAT alpha beta filter parameters
-		#define NOAT 6 // Outside Temp AB filter coeff
-		#define OATdt 1.0 // average OAT dt		
-		#define TempOutliers 20 // 20° maximum variation sample to sample 
-		OATemp.ABinit( NOAT, OATdt, TempOutliers );
-		temperature = ds18b20.getTemp();
-		//OATemp.ABupdate( 0.1, temperature );
-		if( temperature == DEVICE_DISCONNECTED_C ) {
-			ESP_LOGE(FNAME,"Error: Self test Temperatur Sensor failed; returned T=%2.2f", temperature );
-			display->writeText( line++, "Temp Sensor: NOT FOUND");
-			gflags.validTemperature = false;
-			logged_tests += "External Temperature Sensor: NOT FOUND\n";
-		} else {
-			OATemp.ABupdate( 0.1, temperature );
-			// read OAT sensor multiple times until temperature is within range and stable
-			for ( int nbsample = 0; nbsample < 20 && !OATemp.Stable(); nbsample++ ) {
-				temperature = ds18b20.getTemp();
-				// if temperature out of range, re-init the filter
-				if ( temperature < -45.0 || temperature > 65.0 ) OATemp.ABinit( NOAT, OATdt, TempOutliers ); else OATemp.ABupdate( 0.1, temperature );
-				delay( 100 );
-			}
-			if ( OATemp.Stable() ) {
-				ESP_LOGI(FNAME,"Self test Temperature Sensor PASSED; returned T=%2.2f", temperature );
-				display->writeText( line++, "Temp Sensor: OK");
-				gflags.validTemperature = true;
-				logged_tests += "External Temperature Sensor:PASSED\n";
-				OAT.set( OATemp.ABfilt() ); 
+		if ( ds18b20.begin() ) {
+			// OAT alpha beta filter parameters
+			#define NOAT 6 // Outside Temp AB filter coeff
+			#define OATdt 1.0 // average OAT dt		
+			#define TempOutliers 20 // 20° maximum variation sample to sample 
+			OATemp.ABinit( NOAT, OATdt, TempOutliers );
+			temperature = ds18b20.getTemp();
+			if( temperature == DEVICE_DISCONNECTED_C ) {
+				ESP_LOGE(FNAME,"Error: Self test Temperatur Sensor failed; returned T=%2.2f", temperature );
+				display->writeText( line++, "Temp Sensor: NOT FOUND");
+				gflags.validTemperature = false;
+				logged_tests += "External Temperature Sensor: NOT FOUND\n";
 			} else {
-				ESP_LOGI(FNAME,"Self test Temperatur Sensor FAILED; not stable returned T=%2.2f", temperature );
-				display->writeText( line++, "Temp Sensor: FAILED use 15°C");
-				gflags.validTemperature = true;
-				logged_tests += "External Temperature Sensor:UNSTABLE use 15°C\n";
-				OAT.set( 15.0 );
+				OATemp.ABupdate( 0.1, temperature );
+				// read OAT sensor multiple times until temperature is within range and stable
+				for ( int nbsample = 0; nbsample < 20 && !OATemp.Stable(); nbsample++ ) {
+					temperature = ds18b20.getTemp();
+					// if temperature out of range, re-init the filter
+					if ( temperature < -45.0 || temperature > 65.0 ) OATemp.ABinit( NOAT, OATdt, TempOutliers ); else OATemp.ABupdate( 0.1, temperature );
+					delay( 100 );
+				}
+				if ( OATemp.Stable() ) {
+					ESP_LOGI(FNAME,"Self test Temperature Sensor PASSED; returned T=%2.2f", temperature );
+					display->writeText( line++, "Temp Sensor: OK");
+					gflags.validTemperature = true;
+					logged_tests += "External Temperature Sensor:PASSED\n";
+					OAT.set( OATemp.ABfilt() ); 
+				} else {
+					ESP_LOGI(FNAME,"Self test Temperatur Sensor FAILED; not stable returned T=%2.2f", temperature );
+					display->writeText( line++, "Temp Sensor: FAILED use 15°C");
+					gflags.validTemperature = true;
+					logged_tests += "External Temperature Sensor:UNSTABLE use 15°C\n";
+					OAT.set( 15.0 );
+				}
 			}
+		} else {
+			OAT.set( 15.0 );
+			ESP_LOGI(FNAME,"Temp sensor failed,  OAT set to 15°");
+			display->writeText( line++, "OAT sensor failed 15° used");
+			gflags.validTemperature = true;
+			logged_tests += "External Temperature Sensor: NOT FOUND\n";			
 		}
 		ESP_LOGI(FNAME,"End T sensor test");
 	}
+	
 	ESP_LOGI(FNAME,"Absolute pressure sensors init, detect type of sensor type..");
 
 	float ba_t, ba_p, te_t, te_p;
