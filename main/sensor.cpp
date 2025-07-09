@@ -1268,7 +1268,7 @@ static void processIMU(void *pvParameters)
 	WiPrimF.ABinit( NIPRIM, IPrimdt );
 	
 	// LP filter initialization
-	#define GyroCutoffPeriod 500 //  very long term average ~500 seconds
+	#define GyroCutoffPeriod 1000 //  very long term average ~1000 seconds
 	GyroBiasx.LPinit( GyroCutoffPeriod, Gyrodt ); // LP period GyroCutoffPeriod seconds and sample period Gyrodt second
 	GyroBiasy.LPinit( GyroCutoffPeriod, Gyrodt ); // LP period GyroCutoffPeriod seconds and sample period Gyrodt second
 	GyroBiasz.LPinit( GyroCutoffPeriod, Gyrodt ); // LP period GyroCutoffPeriod seconds and sample period Gyrodt second
