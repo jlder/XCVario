@@ -1268,7 +1268,7 @@ static void processIMU(void *pvParameters)
 	WiPrimF.ABinit( NIPRIM, IPrimdt );
 	
 	// LP filter initialization
-	#define GyroCutoffPeriod 1000 //  very long term average ~1000 seconds
+	#define GyroCutoffPeriod 1200 //  very long term average ~1200 seconds
 	GyroBiasx.LPinit( GyroCutoffPeriod, Gyrodt ); // LP period GyroCutoffPeriod seconds and sample period Gyrodt second
 	GyroBiasy.LPinit( GyroCutoffPeriod, Gyrodt ); // LP period GyroCutoffPeriod seconds and sample period Gyrodt second
 	GyroBiasz.LPinit( GyroCutoffPeriod, Gyrodt ); // LP period GyroCutoffPeriod seconds and sample period Gyrodt second
@@ -1303,7 +1303,10 @@ static void processIMU(void *pvParameters)
 		AHRSstream = true;
 	} else
 		AHRSstream = false;
-		
+	
+	// use opt_TE as a switch to use the estimated gyro biais
+	opt_TE = te_opt.get(); // get last d(TE)/dt calculation option
+	
 	while (1) {
 		countIMU++;
 		TickType_t xLastWakeTime_mpu =xTaskGetTickCount();
@@ -1324,14 +1327,22 @@ static void processIMU(void *pvParameters)
 			// convert gyro coordinates to ISU : rad/s NED MPU and remove bias
 			// TODO just for flight test. If Magdwick Beta and Mahonykp are set to zero for gyro drift analysis, do not apply bias estimation to gyro values
 			if ( MagdwickBeta != 0.0 || Mahonykp != 0.0 ) {
-				gyroISUNEDMPU.x = -(gyroRPS.z - GroundGyroBias.z);
-				gyroISUNEDMPU.y = -(gyroRPS.y - GroundGyroBias.y);
-				gyroISUNEDMPU.z = -(gyroRPS.x - GroundGyroBias.x);				
+				// if opt_TE = 1 no bias correction. if opt_TE = 2 bias correction
+				if ( opt_TE == 1 ) {
+					gyroISUNEDMPU.x = -(gyroRPS.z - GroundGyroBias.z);
+					gyroISUNEDMPU.y = -(gyroRPS.y - GroundGyroBias.y);
+					gyroISUNEDMPU.z = -(gyroRPS.x - GroundGyroBias.x);
+				} else {
+					gyroISUNEDMPU.x = -(gyroRPS.z - (GroundGyroBias.z - BiasQuatGx) );
+					gyroISUNEDMPU.y = -(gyroRPS.y - (GroundGyroBias.y - BiasQuatGy) );
+					gyroISUNEDMPU.z = -(gyroRPS.x - (GroundGyroBias.x - BiasQuatGz) );			
+				}
 			} else {
 				gyroISUNEDMPU.x = -gyroRPS.z;
 				gyroISUNEDMPU.y = -gyroRPS.y;
 				gyroISUNEDMPU.z = -gyroRPS.x;
-			}			
+			}
+			
 			// convert NEDMPU to NEDBODY and apply bias estimation
 			gyroISUNEDBODY.x = C_T * gyroISUNEDMPU.x + STmultSS * gyroISUNEDMPU.y + STmultCS * gyroISUNEDMPU.z; // + BiasQuatGx;
 			gyroISUNEDBODY.y = C_S * gyroISUNEDMPU.y - S_S * gyroISUNEDMPU.z; //+ BiasQuatGy;
@@ -2205,8 +2216,6 @@ void readSensors(void *pvParameters){
 
 	#define DSR 15 // maximum number of samples spacing to compute wind.
 	int16_t tickDSR = 1;
-	
-	opt_TE = te_opt.get(); // get last d(TE)/dt calculation option
 	
 	statTime = (esp_timer_get_time()/1000) - 25 ; // initialize statTime to get a 25ms dtStat at startup
 
