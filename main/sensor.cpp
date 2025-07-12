@@ -1603,9 +1603,9 @@ static void processIMU(void *pvParameters)
 				WbiPrim = fcVelbi_w_1 * ( WbiPrim + WiPrimF.ABprim() * dtGyr ) + fcVelbi_w_2 * Wb.ABprim();					
 				
 				// Compute baro interial velocity ( complementary filter between baro inertial acceleration and baro speed )
-				Ubi = fcVelbi1 * ( Ubi + UbiPrim * dtGyr ) + fcVelbi2 * Ub.ABraw();
-				Vbi = fcVelbi_v_1 * ( Vbi + VbiPrim * dtGyr ) + fcVelbi_v_2 * Vb.ABraw();
-				Wbi = fcVelbi_w_1 * ( Wbi + WbiPrim * dtGyr ) + fcVelbi_w_2 * Wb.ABraw();
+				Ubi = fcVelbi1 * ( Ubi + UbiPrim * dtGyr ) + fcVelbi2 * Ub.ABfilt();
+				Vbi = fcVelbi_v_1 * ( Vbi + VbiPrim * dtGyr ) + fcVelbi_v_2 * Vb.ABfilt();
+				Wbi = fcVelbi_w_1 * ( Wbi + WbiPrim * dtGyr ) + fcVelbi_w_2 * Wb.ABfilt();
 			
 				TASbiSquare = Ubi * Ubi + Vbi * Vbi + Wbi * Wbi;
 
@@ -2197,7 +2197,7 @@ void readSensors(void *pvParameters){
 	ALT.ABinit( NALT, ALTdt, AltitudeOutliers, Altmin, Altmax );
 	
 	// alpha beta parameters for Ub, Vb and Wb
-	#define NUVWB 6 // CAS alpha/beta filter coeff
+	#define NUVWB 8 // CAS alpha/beta filter coeff
 	#define UVWdt 0.1 // average CAS dt	
 	#define UVWOutliers 30.0 // 30 m/s maximum variation sample to sample
 	Ub.ABinit( NUVWB, UVWdt, SpeedOutliers );	
