@@ -8,7 +8,7 @@
 //!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 //
 #define FTVERSION 16
-#define SOFTVERSION 11
+#define SOFTVERSION 12
 //
 #define COMPUTEBIAS   // code to estimate gyro bias
 //
@@ -161,7 +161,7 @@ extern bool TSTstream;
 extern bool LABtest;
 extern bool AHRSstream;
 extern float localGravity;
-extern float LPEnergy;
+extern float VztotbiN;
 extern float alphaEnergy;
 extern float betaEnergy;
 extern float PeriodVelbi;
@@ -171,7 +171,7 @@ extern float MagdwickBeta;
 extern float ALTbiN;
 extern float TASbiN;
 extern bool NALTbiTASbiChanged;
-extern bool LPEnergyChanged;
+extern bool VztotbiNChanged;
 extern float opt_TE;
 
 extern double RTKtime;

@@ -2019,9 +2019,9 @@ int teopt_adj( SetupMenuValFloat * p ){
 	return 0;
 }
 
-int tefilt_adj( SetupMenuValFloat * p ){
-		LPEnergy = te_filt.get(); // Total Energy low pass period
-		LPEnergyChanged = true;
+int VztotbiN_adj( SetupMenuValFloat * p ){
+		VztotbiN = Vztotbi_N.get(); // Total Energy low pass period
+		VztotbiNChanged = true;
 	return 0;
 }
 
@@ -2061,13 +2061,13 @@ void SetupMenu::flighttest_menu_create( MenuEntry *top ){
 	teopt->setPrecision(1);
 	top->addEntry( teopt );
 
-	SetupMenuValFloat * tefilt = new SetupMenuValFloat( "TE LP filter", "S", 0.3, 5, 0.1, tefilt_adj, true, &te_filt );
-	tefilt->setHelp(PROGMEM"TE LP filter Sec.");
-	tefilt->setPrecision(3);
-	top->addEntry( tefilt );
+	SetupMenuValFloat * NVztotbi = new SetupMenuValFloat( "Vztotbi N", "S", 5, 50, 5, VztotbiN_adj, true, &Vztotbi_N );
+	NVztotbi->setHelp(PROGMEM"Vztotbi AB filter N unit");
+	NVztotbi->setPrecision(3);
+	top->addEntry( NVztotbi );
 	
 	SetupMenuValFloat * velbiperiod = new SetupMenuValFloat( "Baro Inert Vel period", "S",	4.0, 20.0, 1.0, bifilt_adj, true, &velbi_period );
-	velbiperiod->setHelp(PROGMEM"TE filter time");
+	velbiperiod->setHelp(PROGMEM"Baro/inert filter time");
 	velbiperiod->setPrecision(1);
 	top->addEntry( velbiperiod );
 	

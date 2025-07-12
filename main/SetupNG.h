@@ -501,7 +501,7 @@ extern SetupNG<float>  		average_climb;
 extern SetupNG<float>  		flap_pos;
 extern SetupNG<float>  		altitude;
 extern SetupNG<float>  		ias;
-extern SetupNG<float>		te_filt;
+extern SetupNG<float>		Vztotbi_N;
 extern SetupNG<float>		te_opt;
 extern SetupNG<float>  		te_vario;
 extern SetupNG<float>  		velbi_period;
