@@ -2056,12 +2056,12 @@ int TASbi_N_adj( SetupMenuValFloat * p ){
 
 void SetupMenu::flighttest_menu_create( MenuEntry *top ){
 	
-	SetupMenuValFloat * teopt = new SetupMenuValFloat( "TE option", "",	1, 2, 1, teopt_adj, true, &te_opt );
-	teopt->setHelp(PROGMEM"TE option");
+	SetupMenuValFloat * teopt = new SetupMenuValFloat( "Gyro Bias", "",	1, 2, 1, teopt_adj, true, &te_opt );
+	teopt->setHelp(PROGMEM"Gyro bias cor 1:no 2:yes");
 	teopt->setPrecision(1);
 	top->addEntry( teopt );
 
-	SetupMenuValFloat * NVztotbi = new SetupMenuValFloat( "Vztotbi N", "S", 5, 50, 5, VztotbiN_adj, true, &Vztotbi_N );
+	SetupMenuValFloat * NVztotbi = new SetupMenuValFloat( "Vztotbi N", "unit", 5, 50, 5, VztotbiN_adj, true, &Vztotbi_N );
 	NVztotbi->setHelp(PROGMEM"Vztotbi AB filter N unit");
 	NVztotbi->setPrecision(3);
 	top->addEntry( NVztotbi );

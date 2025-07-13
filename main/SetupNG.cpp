@@ -458,12 +458,14 @@ SetupNG<float>			TASbi_N("TASbi N Delta", 0.0, true, SYNC_FROM_MASTER, PERSISTEN
 #endif	
 
 #ifdef VENTUS3
-SetupNG<mpud::float_axes_t>	accl_bias("ACCL_BIAS", load_float_axes_t(1.0816,0.0694,-0.4516) ); // updated for second hardware XCVario-4575
-SetupNG<mpud::float_axes_t>	accl_gain("ACCL_GAIN", load_float_axes_t(0.9739,1.0002,0.9923) );
+//SetupNG<mpud::float_axes_t>	accl_bias("ACCL_BIAS", load_float_axes_t(1.0816,0.0694,-0.4516) ); // updated for second hardware XCVario-4575
+SetupNG<mpud::float_axes_t>	accl_bias("ACCL_BIAS", load_float_axes_t(1.211,0.092,-0.465) ); // updated for second hardware XCVario-4575 @ 55°C
+//SetupNG<mpud::float_axes_t>	accl_gain("ACCL_GAIN", load_float_axes_t(0.9739,1.0002,0.9923) );
+SetupNG<mpud::float_axes_t>	accl_gain("ACCL_GAIN", load_float_axes_t(0.976,1.000,0.9905) ); // updated for second hardware XCVario-4575 @ 55°C
 SetupNG<float>			tilt("XCV_TILT", -0.063);
 SetupNG<float>			sway("XCV_SWAY", 0.024);
 SetupNG<float>			distCG("DIST_CG_XCVARIO", 1.4);
-SetupNG<float>          mpu_temperature("MPUTEMP", 50.0, true, SYNC_FROM_MASTER, PERSISTENT, chg_mpu_target );    // 
+SetupNG<float>          mpu_temperature("MPUTEMP", 55.0, true, SYNC_FROM_MASTER, PERSISTENT, chg_mpu_target );    // 
 SetupNG<float>			ALTbi_N("ALTbi N", 7.0, true, SYNC_FROM_MASTER, PERSISTENT, change_ALTbiN );
 SetupNG<float>			TASbi_N("TASbi N Delta", 0.0, true, SYNC_FROM_MASTER, PERSISTENT, change_TASbiN );
 #endif

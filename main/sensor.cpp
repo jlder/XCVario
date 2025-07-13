@@ -723,6 +723,8 @@ LowPassFilter BiasAoB;
 
 // declare AB filter for total energy Vztotbi
 AlphaBeta Vztotbi;
+// declare LP filter to pre filter Vztotbi before AB
+LowPassFilter VztotbiLP;
 
 
 // declare SetGet class to reduce read write conflicts between tasks
@@ -1284,7 +1286,8 @@ static void processIMU(void *pvParameters)
 	Mahonykp = kp_Mahony.get(); // get last kp value from NV memory
 	MagdwickBeta = Beta_Magdwick.get(); // get last ki value from NV memory
 	ALTbiN = ALTbi_N.get(); // get last N for ALTbi A/B filter from NV memory
-	VztotbiN = TASbi_N.get(); // get last N delta between ALTbi and TASbi from NV memory
+	VztotbiN = Vztotbi_N.get(); // get last N for Vztotbi AB filter rom NV memory
+	
 	
 	SENDataReady = false;
 	SEN50DataReady = false;
@@ -1771,6 +1774,7 @@ static void processIMU(void *pvParameters)
 							localGravity /((accelMaxx-accelMinx)/2), localGravity /((accelMaxy-accelMiny)/2), localGravity/((accelMaxz-accelMinz)/2) );					
 					}
 					Router::sendXCV(str);
+					Router::routeXCV();					
 				}	
 			} else {
 				// if moving ( TAS > 15 m/s )
@@ -2467,10 +2471,12 @@ void readSensors(void *pvParameters){
 			#define VztotbiOutliers 10.0 // 10 m/s maximum variation sample to sample
 			#define VztotbiPrimMin -50.0
 			#define VztotbiPrimMax 50.0
-			Vztotbi.ABinit( VztotbiN, Vztotbidt, VztotbiOutliers, 0.0, 0.0, VztotbiPrimMin, VztotbiPrimMax );			
+			Vztotbi.ABinit( VztotbiN, Vztotbidt, VztotbiOutliers, 0.0, 0.0, VztotbiPrimMin, VztotbiPrimMax );
+			VztotbiLP.LPinit( VztotbiN/30, Vztotbidt );
 			VztotbiNChanged = false;
 		}
-		Vztotbi.ABupdate( dtStat, ALTbiEnergy.ABprim() + TASbiEnergy.ABprim() );
+		VztotbiLP.LPupdate( ALTbiEnergy.ABprim() + TASbiEnergy.ABprim() );
+		Vztotbi.ABupdate( dtStat, VztotbiLP.LowPass1() );
 
 		// long term average filter
 		AverageTotalEnergy.LPupdate( Vztotbi.ABfilt() );		
