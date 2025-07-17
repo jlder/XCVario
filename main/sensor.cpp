@@ -2461,7 +2461,7 @@ void readSensors(void *pvParameters){
 			#define ALTbiTASbiEnergyPrimMin -50.0
 			#define ALTbiTASbiEnergyPrimMax 50.0
 			ALTbiEnergy.ABinit(  ALTbiN,  ALTbiTASbiEnergdt, ALTbiTASbiEnergyOutliers, 0.0, 0.0, ALTbiTASbiEnergyPrimMin, ALTbiTASbiEnergyPrimMax );
-			TASbiEnergy.ABinit(  TASbiN,  ALTbiTASbiEnergdt, ALTbiTASbiEnergyOutliers, 0.0, 0.0, ALTbiTASbiEnergyPrimMin, ALTbiTASbiEnergyPrimMax );
+			TASbiEnergy.ABinit(  ALTbiN + TASbiN,  ALTbiTASbiEnergdt, ALTbiTASbiEnergyOutliers, 0.0, 0.0, ALTbiTASbiEnergyPrimMin, ALTbiTASbiEnergyPrimMax );
 			NALTbiTASbiChanged = false;
 		}
 		ALTbiEnergy.ABupdate( dtStat, ALTbi );
@@ -2473,8 +2473,8 @@ void readSensors(void *pvParameters){
 			#define VztotbiPrimMin -50.0
 			#define VztotbiPrimMax 50.0
 			Vztotbi.ABinit( VztotbiN, Vztotbidt, VztotbiOutliers, 0.0, 0.0, VztotbiPrimMin, VztotbiPrimMax );
-			ALTbiLP.LPinit( ALTbiN/10, Vztotbidt );
-			TASbiLP.LPinit( TASbiN/10, Vztotbidt );			
+			ALTbiLP.LPinit( VztotbiN / 20, Vztotbidt );
+			TASbiLP.LPinit( VztotbiN / 20, Vztotbidt );			
 			VztotbiNChanged = false;
 		}
 		ALTbiLP.LPupdate( ALTbiEnergy.ABprim() );

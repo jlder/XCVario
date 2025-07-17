@@ -467,7 +467,7 @@ SetupNG<float>			sway("XCV_SWAY", 0.024);
 SetupNG<float>			distCG("DIST_CG_XCVARIO", 1.4);
 SetupNG<float>          mpu_temperature("MPUTEMP", 55.0, true, SYNC_FROM_MASTER, PERSISTENT, chg_mpu_target );    // 
 SetupNG<float>			ALTbi_N("ALTbi N", 7.0, true, SYNC_FROM_MASTER, PERSISTENT, change_ALTbiN );
-SetupNG<float>			TASbi_N("TASbi N Delta", 10.0, true, SYNC_FROM_MASTER, PERSISTENT, change_TASbiN );
+SetupNG<float>			TASbi_N("TASbi N Delta", 3.0, true, SYNC_FROM_MASTER, PERSISTENT, change_TASbiN );
 #endif
 
 SetupNG<mpud::float_axes_t>	gyro_bias("GYRO_BIAS", load_float_axes_t( 0.0, 0.0, 0.0) );

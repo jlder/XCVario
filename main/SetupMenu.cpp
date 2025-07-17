@@ -2081,12 +2081,12 @@ void SetupMenu::flighttest_menu_create( MenuEntry *top ){
 	BetaMagdwick->setPrecision(4);
 	top->addEntry( BetaMagdwick );
 	
-	SetupMenuValFloat * NALTbi = new SetupMenuValFloat( "ALTbi N", "unit",	5.0, 25.0, 1.0, ALTbi_N_adj, true, &ALTbi_N );
+	SetupMenuValFloat * NALTbi = new SetupMenuValFloat( "ALTbi N", "unit",	5.0, 15.0, 1.0, ALTbi_N_adj, true, &ALTbi_N );
 	NALTbi->setHelp(PROGMEM"ALTbi A/B filter N");
 	NALTbi->setPrecision(3);
 	top->addEntry( NALTbi );	
 	
-	SetupMenuValFloat * NTASbi = new SetupMenuValFloat( "TASbi N Delta", "unit", 0.0, 10.0, 1.0, TASbi_N_adj, true, &TASbi_N );
+	SetupMenuValFloat * NTASbi = new SetupMenuValFloat( "TASbi N Delta", "unit", 0.0, 20.0, 1.0, TASbi_N_adj, true, &TASbi_N );
 	NTASbi->setHelp(PROGMEM"TASbi filter N Delta");
 	NTASbi->setPrecision(3);
 	top->addEntry( NTASbi );	
