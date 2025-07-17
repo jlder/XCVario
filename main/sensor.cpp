@@ -403,7 +403,7 @@ float fcVelbi_w_1;
 float fcVelbi_w_2;
 
 float ALTbiN = 7.0;
-float TASbiN = 0.0;
+float TASbiN = 10.0;
 float VztotbiN = 10.0;
 bool NALTbiTASbiChanged = true;
 bool VztotbiNChanged = true;
@@ -723,8 +723,8 @@ LowPassFilter BiasAoB;
 
 // declare AB filter for total energy Vztotbi
 AlphaBeta Vztotbi;
-// declare LP filter to pre filter Vztotbi before AB
-LowPassFilter VztotbiLP;
+// declare LP filter to pre filter d(ALTbi)/dt and d(TASbi)/dt before Vztotbi AB 
+LowPassFilter ALTbiLP, TASbiLP;
 
 
 // declare SetGet class to reduce read write conflicts between tasks
@@ -1286,6 +1286,7 @@ static void processIMU(void *pvParameters)
 	Mahonykp = kp_Mahony.get(); // get last kp value from NV memory
 	MagdwickBeta = Beta_Magdwick.get(); // get last ki value from NV memory
 	ALTbiN = ALTbi_N.get(); // get last N for ALTbi A/B filter from NV memory
+	TASbiN = TASbi_N.get(); // get last N for ALTbi A/B filter from NV memory	
 	VztotbiN = Vztotbi_N.get(); // get last N for Vztotbi AB filter rom NV memory
 	
 	
@@ -1596,7 +1597,7 @@ static void processIMU(void *pvParameters)
 				#define VelbiLow_v 1.0
 				fcVelbi_v_1 = ( VelbiLow_v / ( VelbiLow_v + dtGyr ));
 				fcVelbi_v_2 = ( 1.0 - fcVelbi_v_1 );
-				#define VelbiLow_w 1.0
+				#define VelbiLow_w 0.5
 				fcVelbi_w_1 = ( VelbiLow_w / ( VelbiLow_w + dtGyr ));
 				fcVelbi_w_2 = ( 1.0 - fcVelbi_w_1 );				
 				
@@ -1841,7 +1842,7 @@ static void processIMU(void *pvParameters)
 			Vztotbi_N (Vztotbi AB filter N value),
 			MagdwickBeta in tenthousandth of unit,
 			ALTbiN ALTbi N A/B filter in tenth of unit,
-			VztotbiN delta between ALTbi and TASbi N in tenth of unit,
+			TASbiN TASbi N A/B filter in tenth of unit,
 			Bias_AoB in mrad				
 		*/	
 		/* 
@@ -1907,7 +1908,7 @@ static void processIMU(void *pvParameters)
 						(int32_t)(NewGroundGyroBias.x*100000.0), (int32_t)(NewGroundGyroBias.y*100000.0), (int32_t)(NewGroundGyroBias.z*100000.0),				
 						(int32_t)(BiasQuatGx*100000.0), (int32_t)(BiasQuatGy*100000.0), (int32_t)(BiasQuatGz*100000.0),
 						(int32_t)(XCVTemp*10.0), (int32_t) (PeriodVelbi*10),
-						(int32_t)(VztotbiN*10),(int32_t)(MagdwickBeta*10000), (int32_t)(ALTbiN*10), (int32_t)(VztotbiN),
+						(int32_t)(VztotbiN*10),(int32_t)(MagdwickBeta*10000), (int32_t)(ALTbiN*10), (int32_t)(TASbiN*10),
 						(int32_t)(Bias_AoB*1000)					
 					);
 					xSemaphoreTake( BTMutex, 2/portTICK_PERIOD_MS );				
@@ -1978,7 +1979,7 @@ static void processIMU(void *pvParameters)
 					(int32_t)(NewGroundGyroBias.x*100000.0), (int32_t)(NewGroundGyroBias.y*100000.0), (int32_t)(NewGroundGyroBias.z*100000.0),				
 					(int32_t)(BiasQuatGx*100000.0), (int32_t)(BiasQuatGy*100000.0), (int32_t)(BiasQuatGz*100000.0),
 					(int32_t)(XCVTemp*10.0), (int32_t) (PeriodVelbi*10),
-					(int32_t)(VztotbiN*10),(int32_t)(MagdwickBeta*10000), (int32_t)(ALTbiN*10), (int32_t)(VztotbiN),
+					(int32_t)(VztotbiN*10),(int32_t)(MagdwickBeta*10000), (int32_t)(ALTbiN*10), (int32_t)(TASbiN*10),
 					(int32_t)(Bias_AoB*1000)					
 				);
 				xSemaphoreTake( BTMutex, 2/portTICK_PERIOD_MS );				
@@ -2445,7 +2446,7 @@ void readSensors(void *pvParameters){
 
 		// baro inertial altitude
 		// ALTbi is computed using a complementary filter with baro altitude and baro inertial vertical speed in earth frame
-		#define PeriodAltbi 1.0 // period in second for baro/inertial altitude. Baro/inertial velocity improves baro sensor response
+		#define PeriodAltbi 0.5 // period in second for baro/inertial altitude. Baro/inertial velocity improves baro sensor response
 		#define fcAltbi1 ( PeriodAltbi / ( PeriodAltbi + PERIOD10HZ ))
 		#define fcAltbi2 ( 1.0 - fcAltbi1 )		
 		ALTbi = fcAltbi1 * ( ALTbi - Vzbi * dtStat ) + fcAltbi2	* ALT.ABfilt();
@@ -2460,7 +2461,7 @@ void readSensors(void *pvParameters){
 			#define ALTbiTASbiEnergyPrimMin -50.0
 			#define ALTbiTASbiEnergyPrimMax 50.0
 			ALTbiEnergy.ABinit(  ALTbiN,  ALTbiTASbiEnergdt, ALTbiTASbiEnergyOutliers, 0.0, 0.0, ALTbiTASbiEnergyPrimMin, ALTbiTASbiEnergyPrimMax );
-			TASbiEnergy.ABinit(  ALTbiN,  ALTbiTASbiEnergdt, ALTbiTASbiEnergyOutliers, 0.0, 0.0, ALTbiTASbiEnergyPrimMin, ALTbiTASbiEnergyPrimMax );
+			TASbiEnergy.ABinit(  TASbiN,  ALTbiTASbiEnergdt, ALTbiTASbiEnergyOutliers, 0.0, 0.0, ALTbiTASbiEnergyPrimMin, ALTbiTASbiEnergyPrimMax );
 			NALTbiTASbiChanged = false;
 		}
 		ALTbiEnergy.ABupdate( dtStat, ALTbi );
@@ -2472,11 +2473,13 @@ void readSensors(void *pvParameters){
 			#define VztotbiPrimMin -50.0
 			#define VztotbiPrimMax 50.0
 			Vztotbi.ABinit( VztotbiN, Vztotbidt, VztotbiOutliers, 0.0, 0.0, VztotbiPrimMin, VztotbiPrimMax );
-			VztotbiLP.LPinit( VztotbiN/30, Vztotbidt );
+			ALTbiLP.LPinit( ALTbiN/10, Vztotbidt );
+			TASbiLP.LPinit( TASbiN/10, Vztotbidt );			
 			VztotbiNChanged = false;
 		}
-		VztotbiLP.LPupdate( ALTbiEnergy.ABprim() + TASbiEnergy.ABprim() );
-		Vztotbi.ABupdate( dtStat, VztotbiLP.LowPass1() );
+		ALTbiLP.LPupdate( ALTbiEnergy.ABprim() );
+		TASbiLP.LPupdate( TASbiEnergy.ABprim() );
+		Vztotbi.ABupdate( dtStat, ALTbiLP.LowPass1() + TASbiLP.LowPass1() );
 
 		// long term average filter
 		AverageTotalEnergy.LPupdate( Vztotbi.ABfilt() );		
