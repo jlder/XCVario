@@ -2063,7 +2063,7 @@ void SetupMenu::flighttest_menu_create( MenuEntry *top ){
 
 	SetupMenuValFloat * NVztotbi = new SetupMenuValFloat( "Vztotbi N", "unit", 5, 50, 5, VztotbiN_adj, true, &Vztotbi_N );
 	NVztotbi->setHelp(PROGMEM"Vztotbi AB filter N unit");
-	NVztotbi->setPrecision(3);
+	NVztotbi->setPrecision(1);
 	top->addEntry( NVztotbi );
 	
 	SetupMenuValFloat * velbiperiod = new SetupMenuValFloat( "Baro Inert Vel period", "S",	4.0, 20.0, 1.0, bifilt_adj, true, &velbi_period );
@@ -2073,7 +2073,7 @@ void SetupMenu::flighttest_menu_create( MenuEntry *top ){
 	
 	SetupMenuValFloat * kpMahony = new SetupMenuValFloat( "Kp Mahony", "unit",	0.0, 5.0, 0.1, kp_adj, true, &kp_Mahony );
 	kpMahony->setHelp(PROGMEM"Kp value");
-	kpMahony->setPrecision(3);
+	kpMahony->setPrecision(2);
 	top->addEntry( kpMahony );
 	
 	SetupMenuValFloat * BetaMagdwick = new SetupMenuValFloat( "Beta Magdwick", "unit",	0.0, 0.033, 0.0001, beta_adj, true, &Beta_Magdwick );
@@ -2083,13 +2083,13 @@ void SetupMenu::flighttest_menu_create( MenuEntry *top ){
 	
 	SetupMenuValFloat * NALTbi = new SetupMenuValFloat( "ALTbi N", "unit",	5.0, 15.0, 1.0, ALTbi_N_adj, true, &ALTbi_N );
 	NALTbi->setHelp(PROGMEM"ALTbi A/B filter N");
-	NALTbi->setPrecision(3);
+	NALTbi->setPrecision(2);
 	top->addEntry( NALTbi );	
 	
-	SetupMenuValFloat * NTASbi = new SetupMenuValFloat( "TASbi N Delta", "unit", 0.0, 20.0, 1.0, TASbi_N_adj, true, &TASbi_N );
+	SetupMenuValFloat * NTASbi = new SetupMenuValFloat( "TASbi N Delta", "unit", 0.0, 5.0, 0.5, TASbi_N_adj, true, &TASbi_N );
 	NTASbi->setHelp(PROGMEM"TASbi filter N Delta");
-	NTASbi->setPrecision(3);
-	top->addEntry( NTASbi );	
+	NTASbi->setPrecision(2);
+	top->addEntry( NTASbi );			
 }
 
 void SetupMenu::setup_create_root(MenuEntry *top ){

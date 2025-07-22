@@ -475,8 +475,8 @@ SetupNG<mpud::float_axes_t>	gyro_gain("GYRO_GAIN", load_float_axes_t( 0.0, 0.0, 
 
 SetupNG<float>			gravity("LOCAL_GRAVITY", 9.804);
 
-SetupNG<float> 			Vztotbi_N( "Vztotbi AB filter",10, true, SYNC_FROM_MASTER, PERSISTENT, change_VztotbiN );
+SetupNG<float> 			Vztotbi_N( "Vztotbi AB filter",15, true, SYNC_FROM_MASTER, PERSISTENT, change_VztotbiN );
 SetupNG<float>			te_opt( "TE OPTION",1.0, true, SYNC_FROM_MASTER, PERSISTENT, change_teopt );
 SetupNG<float> 			velbi_period( "VELBI_PERIOD",8.0, true, SYNC_FROM_MASTER, PERSISTENT, change_bifilt );
 SetupNG<float>			kp_Mahony("KP Mahony", 0.0, true, SYNC_FROM_MASTER, PERSISTENT, change_kpMahony );
-SetupNG<float>			Beta_Magdwick("Beta Magdwick", 0.0007, true, SYNC_FROM_MASTER, PERSISTENT, change_BetaMagdwick );
+SetupNG<float>			Beta_Magdwick("Beta Magdwick", 0.0006, true, SYNC_FROM_MASTER, PERSISTENT, change_BetaMagdwick );
