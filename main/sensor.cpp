@@ -1788,81 +1788,87 @@ static void processIMU(void *pvParameters)
 		}
 		
 		/*
-			// Sent at 40Hz when IMUstream selected
+			// $I sentence, sent at 40Hz. 7 ccommas in complete sentence. Beside $I only valid characters are in ",-0123456789"
 			$I,
-			MPU (gyro) time in milli second,
-			Acceleration in BODY X-Axis in tenth milli m/s²,
-			Acceleration in BODY Y-Axis in tenth milli m/s²,
-			Acceleration in BODU Z-Axis in tenth milli m/s²,				
-			Rotation BODY X-Axis in hundredth of milli rad/s,
-			Rotation BODY Y-Axis in hundredth of milli rad/s,
-			Rotation BODY Z-Axis in hundredth of milli rad/s,
+			gyroTime MPU time divide by 1000 to get seconds,
+			accelISUNEDBODY.x in BODY X-Axis divide by 10000 to get m/s²,
+			accelISUNEDBODY.y in BODY Y-Axis divide by 10000 to get m/s²,
+			accelISUNEDBODY.z in BODU Z-Axis divide by 10000 to get m/s²,				
+			gyroISUNEDBODY.x in BODY X-Axis divide by 100000 to get rad/s,
+			gyroISUNEDBODY.y in Y-Axis divide by 100000 to get rad/s,
+			gyroISUNEDBODY.z in Z-Axis divide by 100000 to get rad/s
 			<CR><LF>	
 		*/
-		/* Sensor data
+		/* 
+			// $S1 sentence, sensor data at 10 Hz. 22 commas in complete sentence. Beside $S1 only valid characters are in ",-0123456789"
 			$S1,			
-			static time in milli second,
-			static pressure in Pa,
-			TE pressure in Pa,
-			Dynamic pressure in tenth of Pa,
-			GNSS time in milli second,
-			GNSS speed x or north in centimeters/s,
-			GNSS speed y or east in centimeters/s,
-			GNSS speed z or down in centimeters/s,
-			Pitch in milli rad,
-			Roll in milli rad,
-			Yaw in milli rad,
-			Vzbaro in cm/s,
-			AoA angle in mrad,
-			AoB  angle in mrad,
-			Ubi in cm/s,
-			Vbi in cm/s,
-			Wbi in cm/s,
-			Vzbi in cm/s,			
-			TotalEnergy in cm/s,
-			CurrentBeta in tenthousand of unit,
-			NAccel in ten of unit,
-			DynPeriodVelbi in thousands of second
+			statTime time divide by 1000 to get seconds,
+			PSraw static pressure in Pa,
+			teP TE pressure in Pa,
+			DPraw Dynamic differential pressure divide by 10 to get Pa,
+			GNSStime divide by 1000 to get seconds,
+			GNSSspeedx or north divide by 100 to get m/s,
+			GNSSspeedy or east divide by 100 to get m/s,
+			GNSSspeedz or down divide by 100 to get m/s,
+			Pitch divide by 1000 to get rad,
+			Roll divide by 1000 to get rad,
+			Yaw divide by 1000 to get rad,
+			Vzbaro divide by 100 to get m/s,
+			AoA angle divide by 1000 to get rad,
+			AoB  angle divide by 1000 to get rad,
+			Ubi divide by 100 to get m/s,
+			Vbi divide by 100 to get m/s,
+			Wbi divide by 100 to get m/s,
+			Vzbi divide by 100 to get m/s,			
+			Vztotbi divide by 100 to get m/s,
+			CurrentBeta divide by 10000 to get value,
+			NAccel divide by 10 to get value,
+			DynPeriodVelbi divide by 1000 to get second
 			<CR><LF>		
 		*/
-		/* 
+
+		/*  
+			// $S2 vario data, at 0.2 Hz. 17 commas in complete sentence. Beside $S2 only valid characters are in ",-0123456789"
 			$S2,
-			Outside Air Temperature in tenth of °C,
-			MPU temperature in tenth °C,
-			GNSS fix 0 to 6   3=3D   4= 3D diff  5= RTK Float  6 = RTK integer
-			GNSS number of satelites used  or  RTK ratio * 10 
-			New Ground Gyro bias z in hundredth of milli rad/s,
-			New Ground Gyro bias y in hundredth of milli rad/s,
-			New Ground Gyro bias x in hundredth of milli rad/s,			
-			IMU Gyro bias x in hundredth of milli rad/s,
-			IMU Gyro bias y in hundredth of milli rad/s,
-			IMU Gyro bias z in hundredth of milli rad/s,
-			XCVtemp (temperature inside vario) in tenth of °C,
-			PeriodVelbi (Baro Inertial period in tenth of seconds),
-			Vztotbi_N (Vztotbi AB filter N value),
-			MagdwickBeta in tenthousandth of unit,
-			ALTbiN ALTbi N A/B filter in tenth of unit,
-			TASbiN TASbi N A/B filter in tenth of unit,
-			Bias_AoB in mrad				
-		*/	
+			OAT Outside Air Temperature divide by 10 to get °C,
+			MPUtempcel temperature divide by 10 to get °C,
+			GNSSfix 0 to 6   3=3D   4= 3D diff  5= RTK Float  6 = RTK integer,
+			GNSSnumSV number of satelites used  or  (RTK ratio divide by 10 to get value), 
+			NewGroundGyroBias.x New MPU Ground Gyro bias x divide by 100000 to get rad/s,
+			NewGroundGyroBias.y New Ground Gyro bias y divide by 100000 to get rad/s,
+			NewGroundGyroBias.z New Ground Gyro bias z divide by 100000 to get rad/s,			
+			BiasQuatGx Gyro BODY bias x divide by 100000 to get rad/s,
+			BiasQuatGy Gyro BODY bias y divide by 100000 to get rad/s,
+			BiasQuatGz Gyro BODY bias z divide by 100000 to get rad/s,
+			XCVtemp (temperature inside vario) divide by 10 to get °C,
+			PeriodVelbi Baro Inertial period divide by 10 to get seconds),
+			VztotbiN Vztotbi N A/B filter divide by 10 to get value,
+			MagdwickBeta divide by ten to get value,
+			ALTbiN ALTbi N A/B filter divide by 10 to get value,
+			TASbiN TASbi N A/B filter divide by 10 to get value,
+			Bias_AoB divide by 1000 to get rad				
+		*/
+		
 		/* 
+			// $S3 Vario data sentence, at 10 Hz. 15 commas in complete sentence. Beside $S3 only valid characters are in ",-0123456789"
 			$S3,
-			UiPrim in hundred of m/s²,
-			ViPrim,
-			Wiprim,
-			UbiPrim in hundred of m/s²,
-			VbiPrim,
-			WbiPrim,
-			RTKNproj in thousandths of meter;
-			RTKEproj in thousandths of meter;
-			RTKDproj in thousandths of meter;
-			RTKheading in tenth of degre;
-			ALTbi in cm,
-			DHeading in mrad,
-			PSerr.ABfilt() in tenth Pa
-			PseudoHeadingPrim in hundredth of milli rad/s,
-			Event			
-		*/		
+			UiPrim divide by 100 to get m/s²,
+			ViPrim divide by 100 to get m/s²,
+			Wiprim divide by 100 to get m/s²,
+			UbiPrim divide by 100 to get m/s²,
+			VbiPrim divide by 100 to get m/s²,
+			WbiPrim divide by 100 to get m/s²,
+			RTKNproj divide by 1000 to get m,
+			RTKEproj divide by 1000 to get m,
+			RTKDproj divide by 1000 to get m,
+			RTKheading divide by 10 to get degre,
+			ALTbi divide by 100 to get cm,
+			DHeading divide by 1000 to get rad,
+			PSerr.ABfilt() in tenth Pa,
+			PseudoHeadingPrim divide by 100000 to get rad/s,
+			Event event counter direct value			
+		*/	
+		
 		if ( IMUstream ) {
 			if ( !SENDataReady && !SEN50DataReady ) {			
 				// Send $I
